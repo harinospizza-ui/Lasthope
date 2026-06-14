@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function validOrder() {
+      return request.resource.data.id is string
+        && request.resource.data.items is list
+        && request.resource.data.total is number
+        && request.resource.data.orderType is string
+        && request.resource.data.receivedAt is string
+        && request.resource.data.status in ['new', 'preparing', 'ready', 'out_for_delivery', 'done', 'cancelled'];
+    }
+
+    function validCustomer() {
+      return request.resource.data.id is string
+        && request.resource.data.name is string
+        && request.resource.data.phone is string
+        && request.resource.data.createdAt is string;
+    }
+
+    match /orders/{orderId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.id == orderId && validOrder();
+    }
+
+    match /customers/{customerId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.id == customerId && validCustomer();
+    }
+  }
+}

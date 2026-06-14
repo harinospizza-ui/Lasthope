@@ -1,0 +1,68 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { config } from '../config.js';
+import { CustomerProfile, FullOrderPayload, OrderStatus } from '../types.js';
+import { OrderStore, newestOrdersFirst } from './store.js';
+
+const dataRoot = path.resolve(config.fileStore.rootPath);
+const ordersFile = path.join(dataRoot, 'orders.json');
+const customersFile = path.join(dataRoot, 'customers.json');
+
+const readJson = async <T,>(filePath: string, fallback: T): Promise<T> => {
+  try {
+    return JSON.parse(await readFile(filePath, 'utf8')) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJson = async (filePath: string, value: unknown): Promise<void> => {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify(value, null, 2), 'utf8');
+};
+
+export const getStoredOrders = async (): Promise<FullOrderPayload[]> => {
+  const orders = await readJson<FullOrderPayload[]>(ordersFile, []);
+  return newestOrdersFirst(orders);
+};
+
+export const saveStoredOrder = async (order: FullOrderPayload): Promise<void> => {
+  const orders = (await getStoredOrders()).filter((existing) => existing.id !== order.id);
+  await writeJson(ordersFile, [order, ...orders]);
+};
+
+export const updateStoredOrderStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
+  await writeJson(
+    ordersFile,
+    (await getStoredOrders()).map((order) => (order.id === orderId ? { ...order, status } : order)),
+  );
+};
+
+export const getStoredCustomers = async (): Promise<CustomerProfile[]> =>
+  readJson<CustomerProfile[]>(customersFile, []);
+
+export const saveStoredCustomer = async (profile: CustomerProfile): Promise<void> => {
+  const customers = (await getStoredCustomers()).filter((customer) => customer.id !== profile.id);
+  await writeJson(customersFile, [profile, ...customers]);
+};
+
+export const verifyStoredCustomer = async (customerId: string): Promise<CustomerProfile | null> => {
+  let updatedCustomer: CustomerProfile | null = null;
+  const customers = (await getStoredCustomers()).map((customer) => {
+    if (customer.id !== customerId) return customer;
+    updatedCustomer = { ...customer, verified: true };
+    return updatedCustomer;
+  });
+  await writeJson(customersFile, customers);
+  return updatedCustomer;
+};
+
+export const jsonStore: OrderStore = {
+  name: 'json',
+  getOrders: getStoredOrders,
+  saveOrder: saveStoredOrder,
+  updateOrderStatus: updateStoredOrderStatus,
+  getCustomers: getStoredCustomers,
+  saveCustomer: saveStoredCustomer,
+  verifyCustomer: verifyStoredCustomer,
+};

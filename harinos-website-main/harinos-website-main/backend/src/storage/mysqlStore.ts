@@ -1,0 +1,162 @@
+import mysql from 'mysql2/promise';
+import { config } from '../config.js';
+import { CustomerProfile, FullOrderPayload, OrderStatus } from '../types.js';
+import { OrderStore, newestOrdersFirst } from './store.js';
+
+let pool: mysql.Pool | null = null;
+let schemaReady: Promise<void> | null = null;
+
+const getPool = (): mysql.Pool => {
+  if (!pool) {
+    pool = mysql.createPool({
+      host: config.mysql.host,
+      port: config.mysql.port,
+      user: config.mysql.user,
+      password: config.mysql.password,
+      database: config.mysql.database,
+      waitForConnections: true,
+      connectionLimit: 10,
+    });
+  }
+
+  return pool;
+};
+
+const ensureSchema = async (): Promise<void> => {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      await getPool().execute(`
+        CREATE TABLE IF NOT EXISTS orders (
+          id VARCHAR(64) PRIMARY KEY,
+          payload JSON NOT NULL,
+          status VARCHAR(32) NOT NULL,
+          received_at DATETIME NOT NULL,
+          outlet_id VARCHAR(128) NULL,
+          customer_phone VARCHAR(32) NULL,
+          total DECIMAL(10,2) NOT NULL DEFAULT 0,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+
+      await getPool().execute(`
+        CREATE TABLE IF NOT EXISTS customers (
+          id VARCHAR(128) PRIMARY KEY,
+          payload JSON NOT NULL,
+          phone VARCHAR(32) NOT NULL,
+          email VARCHAR(255) NULL,
+          verified BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at DATETIME NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+    })();
+  }
+
+  await schemaReady;
+};
+
+const toMysqlDate = (value: string | undefined): string => {
+  const date = value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date().toISOString().slice(0, 19).replace('T', ' ') : date.toISOString().slice(0, 19).replace('T', ' ');
+};
+
+const parseJsonColumn = <T,>(value: unknown): T => {
+  if (typeof value === 'string') return JSON.parse(value) as T;
+  return value as T;
+};
+
+export const mysqlStore: OrderStore = {
+  name: 'mysql',
+
+  async getOrders() {
+    await ensureSchema();
+    const [rows] = await getPool().query<mysql.RowDataPacket[]>('SELECT payload FROM orders ORDER BY received_at DESC');
+    return newestOrdersFirst(rows.map((row) => parseJsonColumn<FullOrderPayload>(row.payload)));
+  },
+
+  async saveOrder(order) {
+    await ensureSchema();
+    const status: OrderStatus = order.status ?? 'new';
+    const nextOrder: FullOrderPayload = {
+      ...order,
+      receivedAt: order.receivedAt ?? new Date().toISOString(),
+      status,
+    };
+
+    await getPool().execute(
+      `
+        INSERT INTO orders (id, payload, status, received_at, outlet_id, customer_phone, total)
+        VALUES (?, CAST(? AS JSON), ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          payload = VALUES(payload),
+          status = VALUES(status),
+          received_at = VALUES(received_at),
+          outlet_id = VALUES(outlet_id),
+          customer_phone = VALUES(customer_phone),
+          total = VALUES(total)
+      `,
+      [
+        nextOrder.id,
+        JSON.stringify(nextOrder),
+        status,
+        toMysqlDate(nextOrder.receivedAt ?? nextOrder.date),
+        nextOrder.outletId ?? null,
+        nextOrder.customerPhone ?? null,
+        nextOrder.total ?? 0,
+      ],
+    );
+  },
+
+  async updateOrderStatus(orderId, status) {
+    await ensureSchema();
+    const [rows] = await getPool().execute<mysql.RowDataPacket[]>('SELECT payload FROM orders WHERE id = ?', [orderId]);
+    if (!rows.length) return;
+    const order = { ...parseJsonColumn<FullOrderPayload>(rows[0].payload), status };
+    await getPool().execute('UPDATE orders SET payload = CAST(? AS JSON), status = ? WHERE id = ?', [
+      JSON.stringify(order),
+      status,
+      orderId,
+    ]);
+  },
+
+  async getCustomers() {
+    await ensureSchema();
+    const [rows] = await getPool().query<mysql.RowDataPacket[]>('SELECT payload FROM customers ORDER BY created_at DESC');
+    return rows.map((row) => parseJsonColumn<CustomerProfile>(row.payload));
+  },
+
+  async saveCustomer(profile) {
+    await ensureSchema();
+    await getPool().execute(
+      `
+        INSERT INTO customers (id, payload, phone, email, verified, created_at)
+        VALUES (?, CAST(? AS JSON), ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          payload = VALUES(payload),
+          phone = VALUES(phone),
+          email = VALUES(email),
+          verified = VALUES(verified)
+      `,
+      [
+        profile.id,
+        JSON.stringify(profile),
+        profile.phone,
+        profile.email ?? null,
+        Boolean(profile.verified),
+        toMysqlDate(profile.createdAt),
+      ],
+    );
+  },
+
+  async verifyCustomer(customerId) {
+    await ensureSchema();
+    const [rows] = await getPool().execute<mysql.RowDataPacket[]>('SELECT payload FROM customers WHERE id = ?', [customerId]);
+    if (!rows.length) return null;
+    const customer: CustomerProfile = { ...parseJsonColumn<CustomerProfile>(rows[0].payload), verified: true };
+    await getPool().execute('UPDATE customers SET payload = CAST(? AS JSON), verified = TRUE WHERE id = ?', [
+      JSON.stringify(customer),
+      customerId,
+    ]);
+    return customer;
+  },
+};

@@ -11,6 +11,7 @@ import {
   verifyServerCustomer,
 } from '../services/orderApi';
 import { StorageService } from '../services/storage';
+import { notifyStaffNewOrder, notifyCustomerStatusChange, requestNotificationPermission } from '../services/notificationService';
 import { AdminSession, CustomerProfile, Order, OrderStatus } from '../types';
 
 interface AdminPanelProps {
@@ -141,8 +142,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   }, [refresh, session]);
 
   const visibleOrders = useMemo(() => {
-    if (!session || session.role === 'admin') return orders;
-    return session.outletId ? orders.filter((order) => order.outletId === session.outletId) : orders;
+    let filtered = orders;
+    if (session && session.role !== 'admin') {
+      filtered = session.outletId ? orders.filter((order) => order.outletId === session.outletId) : orders;
+    }
+    // Sort by date/time (newest first)
+    return [...filtered].sort((a, b) => new Date(b.receivedAt ?? b.date).getTime() - new Date(a.receivedAt ?? a.date).getTime());
   }, [orders, session]);
 
   const pendingOrders = visibleOrders.filter((order) => !['done', 'cancelled'].includes(order.status ?? 'new'));
@@ -168,7 +173,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   };
 
   const setStatus = (order: Order, status: OrderStatus) => {
-    void updateServerOrderStatus(order.id, status).finally(refresh);
+    void updateServerOrderStatus(order.id, status).then(() => {
+      // Send notification to customer
+      if (status !== 'new') {
+        void notifyCustomerStatusChange(order, status);
+      }
+      refresh();
+    });
   };
 
   const verifyCustomer = (customer: CustomerProfile) => {
@@ -286,6 +297,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                     <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${statusClass(order.status)}`}>{statusLabel(order.status)}</span>
                   </div>
                   <div className="mt-1 text-xs text-slate-500">{order.outletName} - {order.orderType}</div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    📅 {new Date(order.receivedAt ?? order.date).toLocaleDateString()} {new Date(order.receivedAt ?? order.date).toLocaleTimeString()}
+                  </div>
+                  {order.customerLocation && (
+                    <div className="mt-1 text-xs text-slate-400">
+                      📍 {order.distanceKm ? `${order.distanceKm.toFixed(1)} km away` : 'Location set'}
+                    </div>
+                  )}
                 </div>
                 <div className="text-2xl font-black text-red-400">Rs {Math.round(order.total)}</div>
               </div>
@@ -297,6 +316,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                 <button onClick={() => setStatus(order, 'preparing')} className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-bold">Preparing</button>
                 <button onClick={() => setStatus(order, order.orderType === 'delivery' ? 'out_for_delivery' : 'ready')} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold">Ready/Out</button>
                 <button onClick={() => setStatus(order, 'done')} className="rounded-xl bg-green-700 px-3 py-2 text-xs font-bold">Done</button>
+                <button onClick={() => setStatus(order, 'cancelled')} className="rounded-xl bg-red-700 px-3 py-2 text-xs font-bold">Cancel</button>
                 {(session.role === 'admin' || session.role === 'manager') && <button onClick={() => printOrder(order)} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold">Print Full Size</button>}
                 {order.customerPhone && <a href={`https://wa.me/${normalizePhoneForWhatsApp(order.customerPhone)}`} target="_blank" rel="noreferrer" className="rounded-xl bg-green-700 px-3 py-2 text-xs font-bold">WhatsApp Customer</a>}
               </div>

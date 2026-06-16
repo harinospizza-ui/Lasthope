@@ -18,7 +18,7 @@ import { StorageService } from './services/storage';
 import { NotificationService } from './services/notification';
 import { getServerOrders, saveCustomerToServer, saveFullOrderToServer, subscribeServerOrder } from './services/orderApi';
 import { copyTextToClipboard, getNotificationPermission } from './services/browserSupport';
-import { useFCMNotifications } from './hooks/useFCMNotifications';
+import { notifyStaffNewOrder, requestNotificationPermission } from './services/notificationService';
 import {
   buildPricedCart,
   getAutomaticOfferBonusItems,
@@ -80,20 +80,10 @@ const App: React.FC = () => {
   const [nearestOutletMatch, setNearestOutletMatch] = useState<OutletMatch | null>(null);
   const [isResolvingOutletMatch, setIsResolvingOutletMatch] = useState(false);
 
-  // Initialize Firebase Cloud Messaging for notifications
-  const fcmNotifications = useFCMNotifications({
-    userId: customerProfile?.id || adminSession?.username,
-    role: adminSession ? adminSession.role : 'customer',
-    outletId: adminSession?.outletId || undefined,
-    onMessage: (payload: any) => {
-      // Custom handler for incoming FCM messages
-      const { notification: { title, body } = {} } = payload;
-      if (title && body) {
-        setNotification(body);
-        setTimeout(() => setNotification(null), 5000);
-      }
-    },
-  });
+  // Request notification permission on app load
+  useEffect(() => {
+    void requestNotificationPermission();
+  }, []);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const applyAppScreen = useCallback((screen: AppScreen) => {
@@ -717,6 +707,7 @@ const App: React.FC = () => {
       outletPhone: outlet.phone,
       outletAddress: outlet.address,
       customerLocationUrl: locationString,
+      customerLocation: resolvedLocation || undefined,
       distanceKm,
       customerName: customerProfile?.name,
       customerPhone: customerProfile?.phone,
@@ -727,6 +718,8 @@ const App: React.FC = () => {
 
     try {
       await saveFullOrderToServer(newOrder);
+      // Notify staff/admin about new order
+      void notifyStaffNewOrder(newOrder, outlet.id);
     } catch (error) {
       console.error('Central Firestore order sync failed:', error);
       StorageService.queuePendingOrderSync(newOrder);
@@ -736,7 +729,6 @@ const App: React.FC = () => {
     StorageService.saveOrder(newOrder);
     setPastOrders((currentOrders) => [newOrder, ...currentOrders].slice(0, 3));
     setLatestOrder(newOrder);
-    NotificationService.simulateOrderStatus(orderId, orderType === 'delivery' ? 'delivery' : 'takeaway');
     setShowOrderSuccess(true);
     replaceAppScreen('success');
     setCart([]);

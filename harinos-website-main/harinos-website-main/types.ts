@@ -98,6 +98,22 @@ export interface Order {
   receivedAt?: string;
   status?: OrderStatus;
   statusUpdatedAt?: string;
+  customerLocation?: CustomerLocation;
+  estimatedTime?: string;
+}
+
+export interface Notification {
+  id: string;
+  orderId: string;
+  userId: string;
+  userType: 'admin' | 'manager' | 'staff' | 'customer';
+  title: string;
+  message: string;
+  status: OrderStatus;
+  timestamp: string;
+  read: boolean;
+  customerName?: string;
+  customerPhone?: string;
 }
 
 export type OrderType = 'takeaway' | 'delivery' | 'dinein';

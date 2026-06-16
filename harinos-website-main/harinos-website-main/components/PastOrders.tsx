@@ -33,7 +33,12 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
                     <span className="text-xs font-black uppercase tracking-widest text-red-600">Order ID:</span>
                     <span className="font-mono text-slate-900 font-bold">{order.id}</span>
                   </div>
-                  <p className="text-slate-400 text-sm font-medium">{order.date}</p>
+                  <p className="text-slate-400 text-sm font-medium">
+                    📅 {new Date(order.receivedAt ?? order.date).toLocaleDateString()} {new Date(order.receivedAt ?? order.date).toLocaleTimeString()}
+                  </p>
+                  {order.distanceKm && (
+                    <p className="text-slate-400 text-sm font-medium">📍 {order.distanceKm.toFixed(1)} km away</p>
+                  )}
                   {order.outletName && (
                     <p className="mt-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                       Routed to {order.outletName}

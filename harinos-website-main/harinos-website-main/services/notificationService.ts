@@ -1,6 +1,6 @@
 import { getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { getFirebaseApp } from './firebaseClient';
-import { Notification, Order, OrderStatus } from '../types';
+import type { Notification, Order, OrderStatus } from '../types';
 
 const NOTIFICATIONS_COLLECTION = 'notifications';
 

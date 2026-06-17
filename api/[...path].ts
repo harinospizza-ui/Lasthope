@@ -341,8 +341,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET' && path === '/customers') {
-      const snapshot = await db.collection('customers').orderBy('createdAt', 'desc').limit(500).get();
-      res.json({ success: true, customers: snapshot.docs.map((doc) => doc.data()) });
+      const snapshot = await db.collection('customers').limit(500).get();
+      const list = snapshot.docs.map((doc) => doc.data() as CustomerProfile);
+      list.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+      res.json({ success: true, customers: list });
       return;
     }
 

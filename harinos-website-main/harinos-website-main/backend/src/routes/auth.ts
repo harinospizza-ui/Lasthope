@@ -14,10 +14,13 @@ const ensureStaffSeeded = async () => {
   try {
     const store = getOrderStore();
     const existing = await store.getStaffUsers();
-    if (existing.length === 0) {
-      console.log('Seeding default staff users...');
-      for (const user of DEFAULT_STAFF) {
-        await store.saveStaffUser(user);
+    
+    // Seed any of the default staff users that are missing from the database
+    for (const defaultUser of DEFAULT_STAFF) {
+      const found = existing.find(u => u.username === defaultUser.username);
+      if (!found) {
+        console.log(`Seeding missing staff user: ${defaultUser.username}`);
+        await store.saveStaffUser(defaultUser);
       }
     }
   } catch (error) {
@@ -36,7 +39,9 @@ router.post('/login', async (req, res, next) => {
     await ensureStaffSeeded();
 
     const staffUsers = await getOrderStore().getStaffUsers();
-    const user = staffUsers.find((u) => u.username === username && u.password === password);
+    const allowedUsernames = ['Admin_Harinos', 'Manager_Harinos', 'Staff_Harinos'];
+    const filteredStaff = staffUsers.filter((u) => allowedUsernames.includes(u.username));
+    const user = filteredStaff.find((u) => u.username === username && u.password === password);
 
     if (!user) {
       res.status(401).json({ success: false, message: 'Invalid username or password.' });
@@ -69,17 +74,24 @@ router.post('/change-password', async (req, res, next) => {
       return;
     }
 
+    const allowedUsernames = ['Admin_Harinos', 'Manager_Harinos', 'Staff_Harinos'];
+    if (!allowedUsernames.includes(username) || !allowedUsernames.includes(requesterUsername)) {
+      res.status(403).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+
     const store = getOrderStore();
     const staff = await store.getStaffUsers();
+    const filteredStaff = staff.filter((u) => allowedUsernames.includes(u.username));
 
     // Verify requester is an admin with the correct password
-    const requester = staff.find((u) => u.username === requesterUsername && u.password === requesterPassword);
+    const requester = filteredStaff.find((u) => u.username === requesterUsername && u.password === requesterPassword);
     if (!requester || requester.role !== 'admin') {
       res.status(403).json({ success: false, message: 'Unauthorized. Only the admin can change passwords.' });
       return;
     }
 
-    const user = staff.find((u) => u.username === username);
+    const user = filteredStaff.find((u) => u.username === username);
     if (!user) {
       res.status(404).json({ success: false, message: 'Staff user not found.' });
       return;

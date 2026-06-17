@@ -44,8 +44,14 @@ export const updateStoredOrderStatus = async (orderId: string, status: OrderStat
   );
 };
 
-export const getStoredCustomers = async (): Promise<CustomerProfile[]> =>
-  readJson<CustomerProfile[]>(customersFile, []);
+export const getStoredCustomers = async (): Promise<CustomerProfile[]> => {
+  const list = await readJson<CustomerProfile[]>(customersFile, []);
+  return list.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+};
 
 export const saveStoredCustomer = async (profile: CustomerProfile): Promise<void> => {
   const customers = (await getStoredCustomers()).filter((customer) => customer.id !== profile.id);

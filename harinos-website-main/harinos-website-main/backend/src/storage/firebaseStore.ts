@@ -72,10 +72,15 @@ export const firebaseStore: OrderStore = {
 
   async getCustomers() {
     const snapshot = await withTimeout(
-      getFirestore().collection('customers').orderBy('createdAt', 'desc').get(),
+      getFirestore().collection('customers').get(),
       'Fetching customers from Firebase',
     );
-    return snapshot.docs.map((doc) => doc.data() as CustomerProfile);
+    const list = snapshot.docs.map((doc) => doc.data() as CustomerProfile);
+    return list.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
   },
 
   async saveCustomer(profile) {

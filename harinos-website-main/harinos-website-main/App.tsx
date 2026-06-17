@@ -209,6 +209,7 @@ const App: React.FC = () => {
   const [topUpAmount, setTopUpAmount] = useState('');
   const [inputReferralCode, setInputReferralCode] = useState('');
   const [inputOtp, setInputOtp] = useState('');
+  const [isWalletPaymentOpen, setIsWalletPaymentOpen] = useState(false);
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
 
@@ -1425,6 +1426,47 @@ const App: React.FC = () => {
         outletName={selectedOutlet?.name}
         outletPhone={selectedOutlet?.phone}
       />
+
+      <PaymentModal
+        isOpen={isWalletPaymentOpen}
+        onClose={() => setIsWalletPaymentOpen(false)}
+        total={parseFloat(topUpAmount) || 0}
+        onPaymentComplete={async () => {
+          const amount = parseFloat(topUpAmount);
+          if (isNaN(amount) || amount <= 0) return;
+          
+          if (!customerProfile) return;
+
+          // Log transaction as pending
+          const tx: WalletTransaction = {
+            id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            customerId: customerProfile.id,
+            customerName: customerProfile.name,
+            customerPhone: customerProfile.phone,
+            amount: amount,
+            type: 'topup',
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          };
+          
+          try {
+            await saveWalletTransactionToServer(tx);
+            setIsWalletPaymentOpen(false);
+            setIsWalletModalOpen(false);
+            setTopUpAmount('');
+            
+            showNotification({
+              title: 'Top-up Request Submitted',
+              message: `Your top-up of Rs ${amount.toFixed(2)} is pending. Your wallet will be updated within 24h.`,
+              type: 'info'
+            });
+            alert(`Your top-up request of Rs ${amount.toFixed(2)} is submitted successfully. Your wallet will be updated within 24h.`);
+          } catch (err) {
+            console.error('Wallet top-up failed:', err);
+            alert('Wallet top-up failed. Please try again.');
+          }
+        }}
+      />
       <a
         href={CUSTOMER_CARE_WHATSAPP_URL}
         target="_blank"
@@ -1756,40 +1798,13 @@ const App: React.FC = () => {
 
               <button
                 type="button"
-                onClick={async () => {
+                onClick={() => {
                   const amount = parseFloat(topUpAmount);
                   if (isNaN(amount) || amount <= 0) {
                     alert('Please enter a valid amount.');
                     return;
                   }
-                  
-                  const updatedProfile = {
-                    ...customerProfile,
-                    walletBalance: (customerProfile.walletBalance ?? 0) + amount,
-                  };
-                  
-                  // Log transaction
-                  const tx: WalletTransaction = {
-                    id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                    customerId: customerProfile.id,
-                    customerName: customerProfile.name,
-                    customerPhone: customerProfile.phone,
-                    amount: amount,
-                    type: 'topup',
-                    status: 'completed',
-                    createdAt: new Date().toISOString()
-                  };
-                  
-                  try {
-                    await saveWalletTransactionToServer(tx);
-                    saveCustomerProfile(updatedProfile);
-                    setTopUpAmount('');
-                    setIsWalletModalOpen(false);
-                    // Celebration pop-up is automatically triggered in the polling effect as balance increases!
-                  } catch (err) {
-                    console.error('Wallet top-up failed:', err);
-                    alert('Wallet top-up failed. Please try again.');
-                  }
+                  setIsWalletPaymentOpen(true);
                 }}
                 className="w-full bg-red-650 bg-red-600 hover:bg-red-500 text-white py-3.5 rounded-2xl text-[10px] font-bold uppercase tracking-[0.2em] shadow-lg shadow-red-200 transition-premium active:scale-95 text-center block mt-2 font-black"
               >

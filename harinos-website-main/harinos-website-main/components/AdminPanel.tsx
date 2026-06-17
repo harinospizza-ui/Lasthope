@@ -122,9 +122,7 @@ const printOrder = (order: Order) => {
 };
 
 const combineCustomers = (remoteCustomers: CustomerProfile[]): CustomerProfile[] => {
-  const localCustomer = StorageService.getCustomerProfile();
-  const allCustomers = localCustomer ? [localCustomer, ...remoteCustomers] : remoteCustomers;
-  return allCustomers.filter(
+  return remoteCustomers.filter(
     (customer, index, list) => list.findIndex((item) => item.id === customer.id) === index,
   );
 };

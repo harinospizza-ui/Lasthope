@@ -130,19 +130,28 @@ export const saveCustomerToServer = async (profile: CustomerProfile): Promise<vo
   await saveCustomerViaApi(profile);
 };
 
+const sortCustomers = (customers: CustomerProfile[]): CustomerProfile[] => {
+  return [...customers].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+};
+
 export const getServerCustomers = async (): Promise<CustomerProfile[]> => {
   if (isFirebaseClientConfigured()) {
     const snapshot = await getDocs(
-      query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), orderBy('createdAt', 'desc'), limit(500)),
+      query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), limit(500)),
     );
-    return snapshot.docs.map((customerDoc) => customerDoc.data() as CustomerProfile);
+    const list = snapshot.docs.map((customerDoc) => customerDoc.data() as CustomerProfile);
+    return sortCustomers(list);
   }
 
   if (!getApiBase()) return [];
   const response = await fetch(`${getApiBase()}/customers`, { cache: 'no-store' });
   if (!response.ok) throw new Error(`Customer fetch failed with status ${response.status}.`);
   const data = (await response.json()) as { customers?: CustomerProfile[] };
-  return data.customers ?? [];
+  return sortCustomers(data.customers ?? []);
 };
 
 export const verifyServerCustomer = async (customerId: string): Promise<CustomerProfile | null> => {
@@ -202,8 +211,11 @@ export const subscribeServerCustomers = (
   if (!isFirebaseClientConfigured()) return null;
 
   return onSnapshot(
-    query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), orderBy('createdAt', 'desc'), limit(500)),
-    (snapshot) => onCustomers(snapshot.docs.map((customerDoc) => customerDoc.data() as CustomerProfile)),
+    query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), limit(500)),
+    (snapshot) => {
+      const list = snapshot.docs.map((customerDoc) => customerDoc.data() as CustomerProfile);
+      onCustomers(sortCustomers(list));
+    },
     (error) => onError(error),
   );
 };

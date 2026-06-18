@@ -131,6 +131,7 @@ export interface AdminSession {
   outletId: string | null;
   loginTime: string;
   lastActivityTime: string;
+  token?: string;
 }
 
 export interface CustomerProfile {

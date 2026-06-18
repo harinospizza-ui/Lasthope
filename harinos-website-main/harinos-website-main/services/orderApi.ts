@@ -25,8 +25,28 @@ import { StorageService } from './storage';
 
 const API_BASE_URL = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
 
+const originalFetch = window.fetch;
+const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const response = await originalFetch(input, init);
+  if (response.status === 401) {
+    console.warn('Unauthorized API request (401). Clearing session and dispatching logout event.');
+    StorageService.clearAdminSession();
+    window.dispatchEvent(new CustomEvent('harinos-unauthorized'));
+  }
+  return response;
+};
+
 const getApiBase = (): string | null => API_BASE_URL || null;
 export const isOrderApiConfigured = (): boolean => isFirebaseClientConfigured() || Boolean(getApiBase());
+
+const getAuthHeaders = (): Record<string, string> => {
+  const session = StorageService.getAdminSession();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (session && session.token) {
+    headers['Authorization'] = `Bearer ${session.token}`;
+  }
+  return headers;
+};
 
 const sortOrders = (orders: Order[]): Order[] =>
   [...orders].sort((a, b) => new Date(b.receivedAt ?? b.date).getTime() - new Date(a.receivedAt ?? a.date).getTime());
@@ -35,7 +55,7 @@ const saveFullOrderViaApi = async (order: Order): Promise<void> => {
   if (!getApiBase()) throw new Error('Central API is not configured.');
   const response = await fetch(`${getApiBase()}/orders/full`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(order),
   });
   if (!response.ok) throw new Error(`Order sync failed with status ${response.status}.`);
@@ -43,7 +63,10 @@ const saveFullOrderViaApi = async (order: Order): Promise<void> => {
 
 const getOrdersViaApi = async (): Promise<Order[]> => {
   if (!getApiBase()) return [];
-  const response = await fetch(`${getApiBase()}/orders`, { cache: 'no-store' });
+  const response = await fetch(`${getApiBase()}/orders`, {
+    headers: getAuthHeaders(),
+    cache: 'no-store'
+  });
   if (!response.ok) throw new Error(`Order fetch failed with status ${response.status}.`);
   const data = (await response.json()) as { orders?: Order[] };
   return data.orders ?? [];
@@ -53,7 +76,7 @@ const updateOrderStatusViaApi = async (orderId: string, status: OrderStatus): Pr
   if (!getApiBase()) throw new Error('Central API is not configured.');
   const response = await fetch(`${getApiBase()}/orders/${encodeURIComponent(orderId)}/status`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ status }),
   });
   if (!response.ok) throw new Error(`Status update failed with status ${response.status}.`);
@@ -63,7 +86,7 @@ const saveCustomerViaApi = async (profile: CustomerProfile): Promise<void> => {
   if (!getApiBase()) throw new Error('Central API is not configured.');
   const response = await fetch(`${getApiBase()}/customers`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(profile),
   });
   if (!response.ok) throw new Error(`Customer sync failed with status ${response.status}.`);
@@ -325,40 +348,26 @@ export const subscribeServerOrder = (
   );
 };
 
-// Authentication
 export const authenticateAdminViaApi = async (username: string, password: string): Promise<any> => {
   const apiBase = getApiBase();
   if (apiBase) {
-    try {
-      const response = await fetch(`${apiBase}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return data.user;
-      }
-    } catch (e) {
-      console.warn('API auth failed, checking offline credentials', e);
+    const response = await fetch(`${apiBase}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        ...data.user,
+        token: data.token
+      };
+    } else {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.message || 'Invalid credentials.');
     }
   }
-
-  // Offline credentials validation fallback
-  const DEFAULT_STAFF = [
-    { role: 'admin', username: 'Admin_Harinos', password: 'Harinos_Admin', outletId: null },
-    { role: 'manager', username: 'Manager_Harinos', password: 'Harinos_Manager', outletId: null },
-    { role: 'staff', username: 'Staff_Harinos', password: 'Harinos_Staff', outletId: null },
-  ];
-  const found = DEFAULT_STAFF.find((u) => u.username === username && u.password === password);
-  if (found) {
-    return {
-      role: found.role,
-      username: found.username,
-      outletId: found.outletId,
-    };
-  }
-  throw new Error('Invalid credentials.');
+  throw new Error('API is not configured. Admin authentication unavailable offline.');
 };
 
 // Dynamic Menu Items
@@ -663,24 +672,18 @@ export const subscribeServerOffers = (
 
 export const changeStaffPassword = async (
   username: string,
-  newPassword: string,
-  requesterUsername?: string,
-  requesterPassword?: string
+  newPassword: string
 ): Promise<void> => {
   const apiBase = getApiBase();
   if (apiBase) {
-    try {
-      const response = await fetch(`${apiBase}/auth/change-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, newPassword, requesterUsername, requesterPassword }),
-      });
-      if (response.ok) return;
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.message || 'Password update failed.');
-    } catch (e) {
-      console.warn('API change password failed, running local only', e);
-    }
+    const response = await fetch(`${apiBase}/auth/change-password`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ username, newPassword }),
+    });
+    if (response.ok) return;
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || 'Password update failed.');
   }
 };
 
@@ -701,7 +704,10 @@ export const getServerWalletTransactions = async (): Promise<WalletTransaction[]
   try {
     const apiBase = getApiBase();
     if (!apiBase) return StorageService.getAdminTransactions();
-    const response = await fetch(`${apiBase}/wallet/transactions`, { cache: 'no-store' });
+    const response = await fetch(`${apiBase}/wallet/transactions`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store'
+    });
     if (!response.ok) throw new Error(`Transactions fetch failed with status ${response.status}.`);
     const data = (await response.json()) as { transactions?: WalletTransaction[] };
     const list = data.transactions ?? [];
@@ -731,7 +737,7 @@ export const saveWalletTransactionToServer = async (transaction: WalletTransacti
     if (!apiBase) return;
     const response = await fetch(`${apiBase}/wallet/transactions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(transaction),
     });
     if (!response.ok) throw new Error(`Transaction save failed with status ${response.status}.`);

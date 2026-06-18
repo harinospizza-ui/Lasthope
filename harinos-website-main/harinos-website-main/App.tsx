@@ -46,6 +46,7 @@ import InstallPopup from './components/InstallPopup';
 import ServiceModeModal from './components/ServiceModeModal';
 import CustomerLoginModal from './components/CustomerLoginModal';
 import AdminPanel from './components/AdminPanel';
+import { WalletModal } from './components/WalletModal';
 import { useSwipeDismiss } from './hooks/useSwipeDismiss';
 
 interface InAppNotification {
@@ -448,6 +449,24 @@ const App: React.FC = () => {
       window.removeEventListener('online', retryPendingOrders);
     };
   }, [configLoaded]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setAdminSession(null);
+      setIsAdminPanelOpen(false);
+      const newNotif: InAppNotification = {
+        id: Math.random().toString(),
+        title: 'Session Expired',
+        message: 'Your staff session has expired. Please log in again.',
+        type: 'warning'
+      };
+      setInAppNotifications(prev => [newNotif, ...prev]);
+    };
+    window.addEventListener('harinos-unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('harinos-unauthorized', handleUnauthorized);
+    };
+  }, []);
 
   const activeOrder = useMemo(() => {
     return pastOrders.find((order) => order.status !== 'done' && order.status !== 'cancelled');
@@ -1505,487 +1524,21 @@ const App: React.FC = () => {
         </svg>
       </a>
 
-      {/* Customer Wallet Modal */}
       {isWalletModalOpen && customerProfile && (
-        <div className="fixed inset-0 z-[150] flex items-end justify-center p-0 sm:items-center sm:p-4">
-          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xl" onClick={() => setIsWalletModalOpen(false)} />
-          <div className="relative w-full max-w-sm rounded-t-[2.5rem] bg-white p-6 text-slate-900 shadow-2xl sm:rounded-[3rem] animate-slide-up max-h-[90vh] overflow-y-auto hide-scrollbar">
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
-
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Harino's Customer Profile</span>
-                <h3 className="text-2xl font-display font-bold text-slate-900">Profile & Wallet</h3>
-              </div>
-              <button
-                onClick={() => setIsWalletModalOpen(false)}
-                className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-550 font-bold hover:text-red-500"
-              >
-                &times;
-              </button>
-            </div>
-
-            {/* Profile Picture Upload Section */}
-            <div className="flex flex-col items-center mb-6">
-              <div className="relative group">
-                <div className="w-24 h-24 rounded-full border-4 border-slate-100 shadow-xl overflow-hidden bg-slate-50 flex items-center justify-center">
-                  {customerProfile.avatar ? (
-                    <img src={customerProfile.avatar} className="w-full h-full object-cover" alt="Profile" />
-                  ) : (
-                    <span className="text-4xl">👤</span>
-                  )}
-                </div>
-                <label className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center cursor-pointer shadow-lg hover:bg-red-650 transition-colors">
-                  <span className="text-xs">📷</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (uploadEvent) => {
-                          const base64 = uploadEvent.target?.result as string;
-                          const updated = { ...customerProfile, avatar: base64 };
-                          saveCustomerProfile(updated);
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-
-              {/* Referral Code directly under profile picture */}
-              {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && customerProfile.referralCode && (
-                <div className="mt-3 text-xs font-black uppercase tracking-widest bg-red-100 text-red-700 px-3 py-1 rounded-full border border-red-200/50 animate-pulse">
-                  Referral Code: {customerProfile.referralCode}
-                </div>
-              )}
-
-              <div className="mt-3 flex items-center gap-1.5">
-                <span className="font-display font-black text-xl text-slate-900">{customerProfile.name}</span>
-                {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
-                  <span className="inline-flex items-center justify-center bg-blue-500 text-white rounded-full w-4.5 h-4.5 text-[9px] font-black" title="Verified Customer">✓</span>
-                )}
-              </div>
-              <span className="text-xs text-slate-500 font-bold">📞 {customerProfile.phone}</span>
-            </div>
-
-            <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-3xl p-5 mb-4 text-center shadow-inner">
-              <div className="text-[10px] font-black uppercase tracking-widest text-orange-800 mb-1">Wallet Balance</div>
-              <span className="text-3xl font-display font-black text-orange-950">Rs {(customerProfile.walletBalance ?? 0).toFixed(2)}</span>
-              <div className="mt-2 text-[9px] font-black uppercase tracking-[0.2em] text-orange-850">
-                Reward Points: {customerProfile.rewardPoints ?? 0} pts (Rs {((customerProfile.rewardPoints ?? 0) * 0.1).toFixed(2)})
-              </div>
-            </div>
-
-            {/* OTP Verification Section */}
-            {!(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
-              <div className="mb-6 p-4 border border-orange-100 bg-orange-50/30 rounded-2xl">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-550 mb-2">
-                  Verify Your Account
-                </label>
-                <p className="text-[11px] text-slate-600 mb-3 font-medium">
-                  Enter the 6-digit OTP shared by the Admin/Manager (via WhatsApp or SMS) to verify your profile.
-                </p>
-                <div className="relative flex items-center border border-slate-200 rounded-xl focus-within:border-red-500 bg-white p-1">
-                  <input
-                    type="text"
-                    placeholder="Enter 6-digit OTP"
-                    value={inputOtp}
-                    onChange={(e) => setInputOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="w-full pl-3 pr-24 py-2 text-sm font-bold tracking-widest outline-none bg-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const otpVal = inputOtp.trim();
-                      if (otpVal.length !== 6) {
-                        showNotification({
-                          title: 'Invalid OTP',
-                          message: 'Please enter a 6-digit number.',
-                          type: 'warning'
-                        });
-                        return;
-                      }
-
-                      try {
-                        // Fetch fresh data from server to check the OTP
-                        const remoteCustomers = await getServerCustomers();
-                        const freshProfile = remoteCustomers.find((c) => c.id === customerProfile.id);
-
-                        if (!freshProfile) {
-                          showNotification({
-                            title: 'Error',
-                            message: 'Could not retrieve your profile from the server.',
-                            type: 'error'
-                          });
-                          return;
-                        }
-
-                        if (!freshProfile.otp) {
-                          showNotification({
-                            title: 'Verification Pending',
-                            message: 'No OTP has been generated for your account yet. Please ask the Admin/Manager to send you an OTP.',
-                            type: 'warning'
-                          });
-                          return;
-                        }
-
-                        if (freshProfile.otp === otpVal) {
-                          // OTP matches! Let's verify using the existing backend verification routine verifyServerCustomer!
-                          const result = await verifyServerCustomer(customerProfile.id);
-                          if (result) {
-                            StorageService.markCustomerVerified(customerProfile.id);
-
-                            // Merge locally
-                            const updatedLocalProfile = {
-                              ...customerProfile,
-                              verified: true,
-                              referralCode: result.referralCode,
-                              otp: undefined
-                            };
-                            StorageService.saveCustomerProfile(updatedLocalProfile);
-                            setCustomerProfile(updatedLocalProfile);
-
-                            showNotification({
-                              title: 'Account Verified!',
-                              message: `Your profile is verified. Your referral code is ${result.referralCode ?? ''}`,
-                              type: 'success'
-                            });
-
-                            setInputOtp('');
-                          } else {
-                            throw new Error('Verification returned no customer data.');
-                          }
-                        } else {
-                          showNotification({
-                            title: 'Verification Failed',
-                            message: 'The OTP you entered is incorrect. Please try again.',
-                            type: 'error'
-                          });
-                        }
-                      } catch (err: any) {
-                        console.error('OTP verification error:', err);
-                        showNotification({
-                          title: 'Verification Failed',
-                          message: err.message || 'Failed to verify OTP. Please try again.',
-                          type: 'error'
-                        });
-                      }
-                    }}
-                    className="absolute right-1 top-1 bottom-1 px-4 bg-red-655 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-red-200/50"
-                  >
-                    Verify
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Referral Code Entry Section */}
-            {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && !customerProfile.referralApplied && (customerProfile.referralAttempts ?? 0) < 3 && (
-              <div className="mb-6 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                  Have a Referral Code? (Attempts remaining: {3 - (customerProfile.referralAttempts ?? 0)})
-                </label>
-                <div className="relative flex items-center border border-slate-200 rounded-xl focus-within:border-red-500 bg-white p-1">
-                  <input
-                    type="text"
-                    placeholder="Enter 5-digit code"
-                    value={inputReferralCode}
-                    onChange={(e) => setInputReferralCode(e.target.value.toUpperCase().slice(0, 5))}
-                    className="w-full pl-3 pr-20 py-2 text-sm font-bold uppercase tracking-wider outline-none bg-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const code = inputReferralCode.trim().toUpperCase();
-                      if (!code) {
-                        alert('Please enter a referral code.');
-                        return;
-                      }
-
-                      if (code === customerProfile.referralCode) {
-                        alert('You cannot use your own referral code.');
-                        return;
-                      }
-
-                      try {
-                        const allCustomers = await getServerCustomers();
-                        const referrer = allCustomers.find(
-                          (c) => c.referralCode === code && (c.verified === true || String(c.verified) === 'true')
-                        );
-
-                        if (referrer) {
-                          // Reward referrer (A) with 100 points
-                          const updatedReferrer = {
-                            ...referrer,
-                            rewardPoints: (referrer.rewardPoints ?? 0) + 100
-                          };
-
-                          // Create reward transaction for A
-                          const tx: WalletTransaction = {
-                            id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                            customerId: referrer.id,
-                            customerName: referrer.name,
-                            customerPhone: referrer.phone,
-                            amount: 10, // 100 points = Rs 10
-                            type: 'reward',
-                            status: 'completed',
-                            createdAt: new Date().toISOString()
-                          };
-
-                          await saveWalletTransactionToServer(tx);
-                          await saveCustomerToServer(updatedReferrer);
-
-                          // Mark B as referral completed
-                          const updatedSelf = {
-                            ...customerProfile,
-                            referralApplied: true,
-                            referredBy: code
-                          };
-                          saveCustomerProfile(updatedSelf);
-                          setInputReferralCode('');
-                          showNotification({
-                            title: 'Referral Applied',
-                            message: 'Referral code applied! 100 reward points (Rs 10 value) have been sent to your referrer.',
-                            type: 'success'
-                          });
-                        } else {
-                          // Referrer not found
-                          const attempts = (customerProfile.referralAttempts ?? 0) + 1;
-                          const maxAttemptsReached = attempts >= 3;
-                          const updatedSelf = {
-                            ...customerProfile,
-                            referralAttempts: attempts,
-                            referralApplied: maxAttemptsReached ? true : undefined
-                          };
-                          saveCustomerProfile(updatedSelf);
-                          if (maxAttemptsReached) {
-                            showNotification({
-                              title: 'Attempts Exhausted',
-                              message: 'Invalid code. You have exhausted your 3 referral attempts.',
-                              type: 'error'
-                            });
-                          } else {
-                            showNotification({
-                              title: 'Invalid Code',
-                              message: `Invalid referral code. Attempts remaining: ${3 - attempts}`,
-                              type: 'warning'
-                            });
-                          }
-                        }
-                      } catch (err) {
-                        console.error('Referral code apply failed:', err);
-                        showNotification({
-                          title: 'Error',
-                          message: 'An error occurred. Please try again.',
-                          type: 'error'
-                        });
-                      }
-                    }}
-                    className="absolute right-1 top-1 bottom-1 px-4 bg-red-650 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-red-200/50"
-                  >
-                    Apply
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Add Money Form */}
-            <div className="space-y-4">
-              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Top-up Wallet</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rs</span>
-                <input
-                  type="number"
-                  placeholder="Enter amount"
-                  value={topUpAmount}
-                  onChange={(e) => setTopUpAmount(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500/20"
-                />
-              </div>
-
-              {/* Presets */}
-              <div className="grid grid-cols-4 gap-2">
-                {['100', '200', '500', '1000'].map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => setTopUpAmount(amt)}
-                    className="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-[10px] font-bold text-slate-700 hover:border-red-500 hover:bg-red-50 active:scale-95 transition-all"
-                  >
-                    +Rs {amt}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const amount = parseFloat(topUpAmount);
-                  if (isNaN(amount) || amount <= 0) {
-                    alert('Please enter a valid amount.');
-                    return;
-                  }
-                  setIsWalletPaymentOpen(true);
-                }}
-                className="w-full bg-red-650 bg-red-600 hover:bg-red-500 text-white py-3.5 rounded-2xl text-[10px] font-bold uppercase tracking-[0.2em] shadow-lg shadow-red-200 transition-premium active:scale-95 text-center block mt-2 font-black"
-              >
-                Proceed to Payment
-              </button>
-            </div>
-
-            {/* Share options dropdown/grid */}
-            <div className="mt-6 pt-5 border-t border-slate-100">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 text-center">Share & Earn 100 Pts</div>
-
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  className="flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 px-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-700 transition-all active:scale-95 cursor-pointer"
-                >
-                  <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 100 6 3 3 0 000-6z" />
-                  </svg>
-                  <span>Share App</span>
-                </button>
-                <a
-                  href="https://wa.me/917818958571?text=Hello%20Harinos%20Support,%20I%20need%20help%20with%20my%20wallet/order."
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 px-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-700 transition-all active:scale-95 text-center font-bold"
-                >
-                  <span>💬</span> Need Help
-                </a>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                {/* WhatsApp */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const isVerified = customerProfile && (customerProfile.verified === true || String(customerProfile.verified) === 'true');
-                    const shareText = isVerified && customerProfile.referralCode
-                      ? `Hey! Order from Harino's Pizza and use my referral code ${customerProfile.referralCode} to get reward points: https://harinos.store`
-                      : `Check out Harino's Pizza at https://harinos.store`;
-                    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
-                    window.open(url, '_blank');
-                  }}
-                  className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:border-red-200 hover:bg-red-50/20 active:scale-95 transition-all text-center cursor-pointer shadow-sm"
-                >
-                  <svg className="w-6 h-6 text-[#25D366] mb-1.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.457L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.858.002-2.634-1.025-5.11-2.893-6.98-1.869-1.868-4.35-2.897-6.98-2.898-5.44 0-9.866 4.425-9.87 9.863-.001 1.638.428 3.236 1.243 4.646L1.879 22.148l4.768-1.251zM18.06 14.9c-.33-.164-1.95-.96-2.25-1.07-.3-.11-.52-.164-.74.164-.22.33-.85 1.07-1.04 1.28-.19.22-.385.247-.715.082-1.815-.91-2.91-1.485-4.08-3.485-.31-.53.31-.49.89-1.64.09-.19.045-.355-.022-.52-.067-.164-.6-.145-1.05-1.07-.22-.45-.48-.39-.655-.4-.165-.01-.355-.01-.545-.01-.19 0-.5.07-.76.355-.26.285-1 1-1 2.44 0 1.44 1.05 2.84 1.2 3.03.15.19 2.07 3.16 5 4.39 2.45 1.03 2.95.83 3.48.78.53-.05 1.7-.69 1.94-1.365.24-.67.24-1.24.17-1.365-.07-.12-.27-.19-.6-.355z" />
-                  </svg>
-                  <span className="text-[9px] font-bold tracking-tight text-slate-700">WhatsApp</span>
-                </button>
-
-                {/* Telegram */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const isVerified = customerProfile && (customerProfile.verified === true || String(customerProfile.verified) === 'true');
-                    const shareText = isVerified && customerProfile.referralCode
-                      ? `Hey! Order from Harino's Pizza and use my referral code ${customerProfile.referralCode} to get reward points!`
-                      : `Check out Harino's Pizza!`;
-                    const url = `https://t.me/share/url?url=https://harinos.store&text=${encodeURIComponent(shareText)}`;
-                    window.open(url, '_blank');
-                  }}
-                  className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:border-red-200 hover:bg-red-50/20 active:scale-95 transition-all text-center cursor-pointer shadow-sm"
-                >
-                  <svg className="w-6 h-6 text-[#0088cc] mb-1.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M11.944 0C5.344 0 0 5.344 0 12s5.344 12 11.944 12c6.6 0 11.944-5.344 11.944-12S18.544 0 11.944 0zM17.5 8.16l-1.93 9.09c-.14.65-.53.81-1.08.5l-2.95-2.17-1.42 1.37c-.16.16-.29.29-.59.29l.21-3.01 5.48-4.95c.24-.22-.05-.34-.37-.13l-6.78 4.27-2.92-.91c-.63-.2-.64-.63.13-.93l11.39-4.39c.53-.19.99.13.81 1.04z" />
-                  </svg>
-                  <span className="text-[9px] font-bold tracking-tight text-slate-700">Telegram</span>
-                </button>
-
-                {/* X / Twitter */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const isVerified = customerProfile && (customerProfile.verified === true || String(customerProfile.verified) === 'true');
-                    const shareText = isVerified && customerProfile.referralCode
-                      ? `Hey! Order from Harino's Pizza and use my referral code ${customerProfile.referralCode} to get reward points: https://harinos.store`
-                      : `Check out Harino's Pizza: https://harinos.store`;
-                    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`;
-                    window.open(url, '_blank');
-                  }}
-                  className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:border-red-200 hover:bg-red-50/20 active:scale-95 transition-all text-center cursor-pointer shadow-sm"
-                >
-                  <svg className="w-6 h-6 text-black mb-1.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                  <span className="text-[9px] font-bold tracking-tight text-slate-700">Twitter/X</span>
-                </button>
-
-                {/* Instagram */}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const isVerified = customerProfile && (customerProfile.verified === true || String(customerProfile.verified) === 'true');
-                    const shareText = isVerified && customerProfile.referralCode
-                      ? `Hey! Order from Harino's Pizza and use my referral code ${customerProfile.referralCode} to get reward points: https://harinos.store`
-                      : `Check out Harino's Pizza at https://harinos.store`;
-                    const didCopy = await copyTextToClipboard(shareText);
-                    if (didCopy) {
-                      showNotification({ title: 'Copied Message', message: 'Referral message copied to clipboard. Redirecting to Instagram.', type: 'success' });
-                    }
-                    window.open('https://www.instagram.com', '_blank');
-                  }}
-                  className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:border-red-200 hover:bg-red-50/20 active:scale-95 transition-all text-center cursor-pointer shadow-sm"
-                >
-                  <svg className="w-6 h-6 text-[#E1306C] mb-1.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
-                  </svg>
-                  <span className="text-[9px] font-bold tracking-tight text-slate-700">Instagram</span>
-                </button>
-
-                {/* Facebook */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const isVerified = customerProfile && (customerProfile.verified === true || String(customerProfile.verified) === 'true');
-                    const shareText = isVerified && customerProfile.referralCode
-                      ? `Hey! Order from Harino's Pizza and use my referral code ${customerProfile.referralCode} to get reward points!`
-                      : `Check out Harino's Pizza!`;
-                    const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent('https://harinos.store')}&quote=${encodeURIComponent(shareText)}`;
-                    window.open(url, '_blank');
-                  }}
-                  className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:border-red-200 hover:bg-red-50/20 active:scale-95 transition-all text-center cursor-pointer shadow-sm"
-                >
-                  <svg className="w-6 h-6 text-[#1877F2] mb-1.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                  </svg>
-                  <span className="text-[9px] font-bold tracking-tight text-slate-700">Facebook</span>
-                </button>
-
-                {/* Copy Link */}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const isVerified = customerProfile && (customerProfile.verified === true || String(customerProfile.verified) === 'true');
-                    const shareText = isVerified && customerProfile.referralCode
-                      ? `Hey! Order from Harino's Pizza and use my referral code ${customerProfile.referralCode} to get reward points: https://harinos.store`
-                      : `Check out Harino's Pizza at https://harinos.store`;
-                    const didCopy = await copyTextToClipboard(shareText);
-                    if (didCopy) {
-                      showNotification({ title: 'Link Copied', message: 'Referral message copied to clipboard.', type: 'success' });
-                    }
-                  }}
-                  className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:border-red-200 hover:bg-red-50/20 active:scale-95 transition-all text-center cursor-pointer shadow-sm"
-                >
-                  <svg className="w-6 h-6 text-slate-500 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                  </svg>
-                  <span className="text-[9px] font-bold tracking-tight text-slate-700">Copy Link</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <WalletModal
+          isOpen={isWalletModalOpen}
+          onClose={() => setIsWalletModalOpen(false)}
+          customerProfile={customerProfile}
+          onProfileChange={(updated) => {
+            setCustomerProfile(updated);
+            StorageService.saveCustomerProfile(updated);
+          }}
+          showNotification={showNotification}
+          onProceedToPayment={(amount) => {
+            setTopUpAmount(String(amount));
+            setIsWalletPaymentOpen(true);
+          }}
+        />
       )}
 
       {/* Celebration Popup (Joy confetti overlay) */}

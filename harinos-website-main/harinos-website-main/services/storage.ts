@@ -31,6 +31,20 @@ const writeJson = (key: string, value: unknown): void => {
   safeStorage.setItem(window.localStorage, key, JSON.stringify(value));
 };
 
+const readSessionJson = <T,>(key: string, fallback: T): T => {
+  const saved = safeStorage.getItem(window.sessionStorage, key);
+  if (!saved) return fallback;
+  try {
+    return JSON.parse(saved) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeSessionJson = (key: string, value: unknown): void => {
+  safeStorage.setItem(window.sessionStorage, key, JSON.stringify(value));
+};
+
 export const StorageService = {
   getPastOrders: (): Order[] => {
     const saved = safeStorage.getItem(window.localStorage, KEYS.ORDERS);
@@ -56,10 +70,10 @@ export const StorageService = {
       StorageService.getPendingOrderSyncQueue().filter((order) => order.id !== orderId),
     );
   },
-  saveAdminSession: (session: AdminSession): void => writeJson(KEYS.ADMIN_SESSION, session),
-  getAdminSession: (): AdminSession | null => readJson<AdminSession | null>(KEYS.ADMIN_SESSION, null),
+  saveAdminSession: (session: AdminSession): void => writeSessionJson(KEYS.ADMIN_SESSION, session),
+  getAdminSession: (): AdminSession | null => readSessionJson<AdminSession | null>(KEYS.ADMIN_SESSION, null),
   clearAdminSession: (): void => {
-    safeStorage.removeItem(window.localStorage, KEYS.ADMIN_SESSION);
+    safeStorage.removeItem(window.sessionStorage, KEYS.ADMIN_SESSION);
   },
   updateSessionActivity: (): void => {
     const session = StorageService.getAdminSession();

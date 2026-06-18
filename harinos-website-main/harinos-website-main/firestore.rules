@@ -2,51 +2,85 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function validOrder() {
-      return request.resource.data.id is string
-        && request.resource.data.items is list
-        && request.resource.data.total is number
-        && request.resource.data.orderType is string
-        && request.resource.data.receivedAt is string
-        && request.resource.data.status in ['new', 'preparing', 'ready', 'out_for_delivery', 'done', 'cancelled'];
+    // Helper function to check if the request is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    function validCustomer() {
-      return request.resource.data.id is string
-        && request.resource.data.name is string
-        && request.resource.data.phone is string
-        && request.resource.data.createdAt is string;
+    // Helper to check if user has a specific role claim in their auth token
+    function hasRole(role) {
+      return isAuthenticated() && request.auth.token.role == role;
     }
 
+    // Orders Collection Rules
     match /orders/{orderId} {
-      allow read: if true;
-      allow create, update: if request.resource.data.id == orderId && validOrder();
+      // Allow read if the caller is the owning customer (matching phone or email) or an authenticated staff/manager/admin
+      allow read: if (isAuthenticated() && (
+        request.auth.token.phone == resource.data.customerPhone ||
+        request.auth.token.email == resource.data.customerEmail ||
+        request.auth.token.role in ['admin', 'manager', 'staff']
+      )) || (!isAuthenticated() && false); // Force all writes/reads to be authenticated or done via secure serverless API
+      
+      // Allow creation for matching customer or authenticated staff/manager/admin
+      allow create, update: if (isAuthenticated() && (
+        request.auth.token.phone == request.resource.data.customerPhone ||
+        request.auth.token.role in ['admin', 'manager']
+      )) || (!isAuthenticated() && false); // Secure serverless API bypasses this rule
+      
+      // Delete is strictly blocked for client SDK. Admin/Manager must use serverless API (Admin SDK)
+      allow delete: if false;
     }
 
+    // Customers Collection Rules
     match /customers/{customerId} {
-      allow read: if true;
-      allow create, update: if request.resource.data.id == customerId && validCustomer();
+      // Customers can read/write their own profile only
+      allow read, write: if isAuthenticated() && (
+        request.auth.uid == customerId ||
+        request.auth.token.role in ['admin', 'manager']
+      );
+      allow delete: if false;
     }
 
+    // Wallet Transactions Rules
     match /wallet_transactions/{transactionId} {
-      allow read: if true;
-      allow create, update: if request.resource.data.id == transactionId;
+      // Only the owning customer or managers/admins can read transactions. No client writes allowed.
+      allow read: if isAuthenticated() && (
+        request.auth.token.phone == resource.data.customerPhone ||
+        request.auth.token.role in ['admin', 'manager']
+      );
+      allow write, delete: if false; // All modifications must go through secure serverless API
     }
 
+    // Menu Items Rules
     match /menu_items/{itemId} {
-      allow read, write: if true;
+      allow read: if true; // Public read-only
+      allow write: if isAuthenticated() && request.auth.token.role in ['admin', 'manager'];
+      allow delete: if isAuthenticated() && request.auth.token.role == 'admin';
     }
 
+    // Outlets Rules
     match /outlets/{outletId} {
-      allow read, write: if true;
+      allow read: if true; // Public read-only
+      allow write: if isAuthenticated() && request.auth.token.role in ['admin', 'manager'];
+      allow delete: if isAuthenticated() && request.auth.token.role == 'admin';
     }
 
+    // Offers Rules
     match /offers/{offerId} {
-      allow read, write: if true;
+      allow read: if true; // Public read-only
+      allow write: if isAuthenticated() && request.auth.token.role in ['admin', 'manager'];
+      allow delete: if isAuthenticated() && request.auth.token.role == 'admin';
     }
 
+    // Staff Users Rules
     match /staff_users/{username} {
-      allow read, write: if true;
+      // Completely block all client SDK operations. Must go through the secure Vercel API only.
+      allow read, write, delete: if false;
+    }
+
+    // Security Logs Rules
+    match /security_logs/{logId} {
+      allow read, write, delete: if false; // Only accessible via serverless backend
     }
   }
 }

@@ -2,6 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import admin from 'firebase-admin';
 import fs from 'fs';
 import path from 'path';
+import { hashPassword, verifyPassword, generateToken, verifyToken } from './cryptoUtils';
+
+const getJWTSecret = (): string => {
+  return process.env.JWT_SECRET || 'dev-harinos-pizza-secret-key-32-chars-minimum';
+};
 
 type OrderStatus = 'new' | 'preparing' | 'ready' | 'out_for_delivery' | 'done' | 'cancelled';
 
@@ -472,6 +477,37 @@ const getPath = (req: VercelRequest): string => {
   return url.pathname.replace(/^\/api\/?/, '/');
 };
 
+const logSecurityEvent = async (action: string, username: string, details: string, ip?: string) => {
+  const logEntry = {
+    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: new Date().toISOString(),
+    action,
+    username,
+    details,
+    ip: ip || 'unknown'
+  };
+  try {
+    const db = getFirestore();
+    if (db) {
+      await db.collection('security_logs').doc(logEntry.id).set(logEntry);
+    } else {
+      const localDb = loadLocalDb();
+      if (!localDb.security_logs) localDb.security_logs = [];
+      localDb.security_logs.push(logEntry);
+      saveLocalDb(localDb);
+    }
+  } catch (err) {
+    console.error('Failed to log security event:', err);
+  }
+};
+
+const authenticateRequest = (req: VercelRequest): any => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7);
+  return verifyToken(token, getJWTSecret());
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
@@ -517,23 +553,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
+      const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '';
+
+      const handleUserAuth = async (user: any, updatePasswordCallback: (hashed: string) => Promise<void>) => {
+        if (!verifyPassword(password, user.password)) {
+          await logSecurityEvent('FAILED_LOGIN', username, 'Invalid password attempt', clientIp);
+          res.status(401).json({ success: false, message: 'Invalid username or password.' });
+          return;
+        }
+
+        // Auto hash password if stored as plaintext
+        if (!user.password.startsWith('pbkdf2$')) {
+          const hashed = hashPassword(password);
+          await updatePasswordCallback(hashed);
+          user.password = hashed;
+          await logSecurityEvent('PASSWORD_UPGRADED_TO_HASH', username, 'Migrated plaintext password to pbkdf2 hash', clientIp);
+        }
+
+        const token = generateToken({ username: user.username, role: user.role, outletId: user.outletId }, getJWTSecret());
+        await logSecurityEvent('SUCCESSFUL_LOGIN', username, `Role: ${user.role}`, clientIp);
+        res.json({
+          success: true,
+          token,
+          user: { role: user.role, username: user.username, outletId: user.outletId },
+        });
+      };
+
       if (isUsingRestDb) {
         try {
           let users = await restGetCollection('staff_users');
           if (users.length === 0) {
             for (const user of DEFAULT_STAFF) {
-              await restSetDocument('staff_users', user.username, user);
+              const hashedUser = { ...user, password: hashPassword(user.password) };
+              await restSetDocument('staff_users', user.username, hashedUser);
             }
-            users = [...DEFAULT_STAFF];
+            users = await restGetCollection('staff_users');
           }
           const user = users.find((u: any) => u.username === username);
-          if (!user || user.password !== password) {
+          if (!user) {
+            await logSecurityEvent('FAILED_LOGIN', username, 'Non-existent user attempt', clientIp);
             res.status(401).json({ success: false, message: 'Invalid username or password.' });
             return;
           }
-          res.json({
-            success: true,
-            user: { role: user.role, username: user.username, outletId: user.outletId },
+          await handleUserAuth(user, async (hashed) => {
+            user.password = hashed;
+            await restSetDocument('staff_users', username, user);
           });
           return;
         } catch (err) {
@@ -546,17 +610,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isUsingMemoryDb) {
         const localDb = loadLocalDb();
         const user = localDb.staff_users.find((u: any) => u.username === username);
-        if (!user || user.password !== password) {
+        if (!user) {
+          await logSecurityEvent('FAILED_LOGIN', username, 'Non-existent user attempt', clientIp);
           res.status(401).json({ success: false, message: 'Invalid username or password.' });
           return;
         }
-        res.json({
-          success: true,
-          user: {
-            role: user.role,
-            username: user.username,
-            outletId: user.outletId,
-          },
+        await handleUserAuth(user, async (hashed) => {
+          const idx = localDb.staff_users.findIndex((u: any) => u.username === username);
+          localDb.staff_users[idx].password = hashed;
+          saveLocalDb(localDb);
         });
         return;
       }
@@ -566,29 +628,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       if (snapshot.empty) {
         for (const user of DEFAULT_STAFF) {
-          await staffRef.doc(user.username).set(user);
+          const hashedUser = { ...user, password: hashPassword(user.password) };
+          await staffRef.doc(user.username).set(hashedUser);
         }
       }
       
       const userDoc = await staffRef.doc(username).get();
       if (!userDoc.exists) {
+        await logSecurityEvent('FAILED_LOGIN', username, 'Non-existent user attempt', clientIp);
         res.status(401).json({ success: false, message: 'Invalid username or password.' });
         return;
       }
       
       const user = userDoc.data() as AdminUser;
-      if (user.password !== password) {
-        res.status(401).json({ success: false, message: 'Invalid username or password.' });
-        return;
-      }
-      
-      res.json({
-        success: true,
-        user: {
-          role: user.role,
-          username: user.username,
-          outletId: user.outletId,
-        },
+      await handleUserAuth(user, async (hashed) => {
+        await staffRef.doc(username).update({ password: hashed });
       });
       return;
     }
@@ -600,6 +654,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
+      const caller = authenticateRequest(req);
+      if (!caller || (caller.role !== 'admin' && caller.username !== username)) {
+        await logSecurityEvent('UNAUTHORIZED_PASSWORD_CHANGE_ATTEMPT', caller?.username || 'anonymous', `Target: ${username}`);
+        res.status(403).json({ success: false, message: 'Forbidden. Authorization required.' });
+        return;
+      }
+
+      const hashed = hashPassword(newPassword);
+
       if (isUsingRestDb) {
         try {
           const user = await restGetDocument('staff_users', username);
@@ -607,8 +670,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.status(404).json({ success: false, message: 'Staff user not found.' });
             return;
           }
-          user.password = newPassword;
+          user.password = hashed;
           await restSetDocument('staff_users', username, user);
+          await logSecurityEvent('PASSWORD_CHANGED', caller.username, `Target: ${username}`);
           res.json({ success: true, message: 'Password updated successfully.' });
           return;
         } catch (err) {
@@ -625,8 +689,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(404).json({ success: false, message: 'Staff user not found.' });
           return;
         }
-        localDb.staff_users[userIdx].password = newPassword;
+        localDb.staff_users[userIdx].password = hashed;
         saveLocalDb(localDb);
+        await logSecurityEvent('PASSWORD_CHANGED', caller.username, `Target: ${username}`);
         res.json({ success: true, message: 'Password updated successfully.' });
         return;
       }
@@ -638,7 +703,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(404).json({ success: false, message: 'Staff user not found.' });
         return;
       }
-      await docRef.set({ password: newPassword }, { merge: true });
+      await docRef.set({ password: hashed }, { merge: true });
+      await logSecurityEvent('PASSWORD_CHANGED', caller.username, `Target: ${username}`);
       res.json({ success: true, message: 'Password updated successfully.' });
       return;
     }
@@ -737,6 +803,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET' && path === '/wallet/transactions') {
+      const caller = authenticateRequest(req);
+      if (!caller) {
+        res.status(401).json({ success: false, message: 'Unauthorized.' });
+        return;
+      }
+      if (caller.role !== 'admin' && caller.role !== 'manager') {
+        res.status(403).json({ success: false, message: 'Forbidden.' });
+        return;
+      }
+
       if (isUsingRestDb) {
         try {
           const txs = await restGetCollection('wallet_transactions');
@@ -767,6 +843,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST' && path === '/wallet/transactions') {
+      const caller = authenticateRequest(req);
+      if (!caller) {
+        res.status(401).json({ success: false, message: 'Unauthorized.' });
+        return;
+      }
+      if (caller.role !== 'admin' && caller.role !== 'manager') {
+        res.status(403).json({ success: false, message: 'Forbidden.' });
+        return;
+      }
+
       const transaction = req.body as WalletTransaction;
 
       if (isUsingRestDb) {
@@ -983,10 +1069,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET' && path === '/orders') {
+      const caller = authenticateRequest(req);
+      if (!caller) {
+        res.status(401).json({ success: false, message: 'Unauthorized.' });
+        return;
+      }
+
+      const filterOrdersByRole = (ordersList: any[]) => {
+        let result = ordersList;
+        if (caller.role === 'staff') {
+          result = result.filter(o => !o.isDeleted && (caller.outletId ? o.outletId === caller.outletId : true));
+        } else if (caller.role === 'manager') {
+          result = result.filter(o => !o.isDeleted);
+        }
+        // Admin can see everything including soft deleted
+        return result;
+      };
+
       if (isUsingRestDb) {
         try {
           const orders = await restGetCollection('orders');
-          const sorted = orders.sort(
+          const filtered = filterOrdersByRole(orders);
+          const sorted = filtered.sort(
             (a: any, b: any) => new Date(b.receivedAt ?? b.date).getTime() - new Date(a.receivedAt ?? a.date).getTime()
           );
           res.json({ success: true, orders: sorted });
@@ -1000,7 +1104,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (isUsingMemoryDb) {
         const localDb = loadLocalDb();
-        const sorted = [...localDb.orders].sort(
+        const filtered = filterOrdersByRole(localDb.orders);
+        const sorted = [...filtered].sort(
           (a: any, b: any) => new Date(b.receivedAt ?? b.date).getTime() - new Date(a.receivedAt ?? a.date).getTime()
         );
         res.json({ success: true, orders: sorted });
@@ -1008,7 +1113,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const snapshot = await db!.collection('orders').orderBy('receivedAt', 'desc').limit(500).get();
-      res.json({ success: true, orders: snapshot.docs.map((doc) => doc.data()) });
+      const rawOrders = snapshot.docs.map((doc) => doc.data());
+      const filtered = filterOrdersByRole(rawOrders);
+      res.json({ success: true, orders: filtered });
       return;
     }
 
@@ -1054,20 +1161,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const statusMatch = path.match(/^\/orders\/([^/]+)\/status$/);
     if (req.method === 'PATCH' && statusMatch) {
-      const status = (req.body as { status?: OrderStatus }).status;
+      const caller = authenticateRequest(req);
+      if (!caller) {
+        res.status(401).json({ success: false, message: 'Unauthorized.' });
+        return;
+      }
+
+      const { status, reason } = req.body as { status?: OrderStatus; reason?: string };
       if (!status) {
         res.status(400).json({ success: false, message: 'Missing status.' });
         return;
       }
+      if (status === 'cancelled' && !reason) {
+        res.status(400).json({ success: false, message: 'Cancellation reason is required.' });
+        return;
+      }
+
       const orderId = decodeURIComponent(statusMatch[1]);
+
+      const processOrderStatusUpdate = (order: any) => {
+        const previousStatus = order.status || 'new';
+        order.status = status;
+        order.statusUpdatedAt = new Date().toISOString();
+        order.updatedBy = caller.username;
+        if (status === 'cancelled') {
+          order.cancelledBy = caller.username;
+          order.cancellationReason = reason;
+        }
+        if (!order.auditTrail) order.auditTrail = [];
+        order.auditTrail.push({
+          timestamp: new Date().toISOString(),
+          updatedBy: caller.username,
+          action: `Status changed from ${previousStatus} to ${status}`,
+          previousStatus,
+          newStatus: status,
+          reason: reason || ''
+        });
+        return order;
+      };
 
       if (isUsingRestDb) {
         try {
           const order = await restGetDocument('orders', orderId);
           if (order) {
-            order.status = status;
-            order.statusUpdatedAt = new Date().toISOString();
-            await restSetDocument('orders', orderId, order);
+            const updated = processOrderStatusUpdate(order);
+            await restSetDocument('orders', orderId, updated);
+            if (status === 'cancelled') {
+              await logSecurityEvent('ORDER_CANCELLED', caller.username, `Order: ${orderId}, Reason: ${reason}`);
+            }
             res.json({ success: true });
             return;
           }
@@ -1084,9 +1225,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const localDb = loadLocalDb();
         const idx = localDb.orders.findIndex((o: any) => o.id === orderId);
         if (idx >= 0) {
-          localDb.orders[idx].status = status;
-          localDb.orders[idx].statusUpdatedAt = new Date().toISOString();
+          const updated = processOrderStatusUpdate(localDb.orders[idx]);
+          localDb.orders[idx] = updated;
           saveLocalDb(localDb);
+          if (status === 'cancelled') {
+            await logSecurityEvent('ORDER_CANCELLED', caller.username, `Order: ${orderId}, Reason: ${reason}`);
+          }
           res.json({ success: true });
           return;
         }
@@ -1094,14 +1238,95 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      await db!.collection('orders').doc(orderId).set(
-        {
-          status,
-          statusUpdatedAt: new Date().toISOString(),
-        },
-        { merge: true },
-      );
+      const orderRef = db!.collection('orders').doc(orderId);
+      const snap = await orderRef.get();
+      if (!snap.exists) {
+        res.status(404).json({ success: false, message: 'Order not found.' });
+        return;
+      }
+      const order = snap.data();
+      const updated = processOrderStatusUpdate(order);
+      await orderRef.set(updated, { merge: true });
+      if (status === 'cancelled') {
+        await logSecurityEvent('ORDER_CANCELLED', caller.username, `Order: ${orderId}, Reason: ${reason}`);
+      }
       res.json({ success: true });
+      return;
+    }
+
+    const orderIdMatch = path.match(/^\/orders\/([^/]+)$/);
+    if (req.method === 'DELETE' && orderIdMatch) {
+      const caller = authenticateRequest(req);
+      if (!caller) {
+        res.status(401).json({ success: false, message: 'Unauthorized.' });
+        return;
+      }
+
+      if (caller.role !== 'admin' && caller.role !== 'manager') {
+        res.status(403).json({ success: false, message: 'Forbidden. Admin or Manager role required to delete.' });
+        return;
+      }
+
+      const orderId = decodeURIComponent(orderIdMatch[1]);
+
+      const processOrderSoftDelete = (order: any) => {
+        order.isDeleted = true;
+        order.deletedBy = caller.username;
+        order.deletedAt = new Date().toISOString();
+        if (!order.auditTrail) order.auditTrail = [];
+        order.auditTrail.push({
+          timestamp: new Date().toISOString(),
+          updatedBy: caller.username,
+          action: 'Order soft deleted'
+        });
+        return order;
+      };
+
+      if (isUsingRestDb) {
+        try {
+          const order = await restGetDocument('orders', orderId);
+          if (order) {
+            const updated = processOrderSoftDelete(order);
+            await restSetDocument('orders', orderId, updated);
+            await logSecurityEvent('ORDER_DELETED', caller.username, `Soft deleted order: ${orderId}`);
+            res.json({ success: true, message: 'Order deleted successfully.' });
+            return;
+          }
+          res.status(404).json({ success: false, message: 'Order not found.' });
+          return;
+        } catch (err) {
+          console.warn('REST delete order failed, falling back:', err);
+          isUsingRestDb = false;
+          isUsingMemoryDb = true;
+        }
+      }
+
+      if (isUsingMemoryDb) {
+        const localDb = loadLocalDb();
+        const idx = localDb.orders.findIndex((o: any) => o.id === orderId);
+        if (idx >= 0) {
+          const updated = processOrderSoftDelete(localDb.orders[idx]);
+          localDb.orders[idx] = updated;
+          saveLocalDb(localDb);
+          await logSecurityEvent('ORDER_DELETED', caller.username, `Soft deleted order: ${orderId}`);
+          res.json({ success: true, message: 'Order deleted successfully.' });
+          return;
+        }
+        res.status(404).json({ success: false, message: 'Order not found.' });
+        return;
+      }
+
+      const orderRef = db!.collection('orders').doc(orderId);
+      const snap = await orderRef.get();
+      if (!snap.exists) {
+        res.status(404).json({ success: false, message: 'Order not found.' });
+        return;
+      }
+      const order = snap.data();
+      const updated = processOrderSoftDelete(order);
+      await orderRef.set(updated, { merge: true });
+      await logSecurityEvent('ORDER_DELETED', caller.username, `Soft deleted order: ${orderId}`);
+      res.json({ success: true, message: 'Order deleted successfully.' });
       return;
     }
 

@@ -44,4 +44,4 @@ export const getFirebaseApp = (): FirebaseApp => {
   return initializeApp(cfg);
 };
 
-export const db = () => getFirestore(getFirebaseApp(), 'harinoss');
+export const db = () => getFirestore(getFirebaseApp());

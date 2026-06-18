@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import admin from 'firebase-admin';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 import path from 'path';
 
@@ -328,7 +329,7 @@ const saveLocalDb = (data: any) => {
 };
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'harinos-12902';
-const REST_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+const REST_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/harinoss/documents`;
 
 let isUsingRestDb = false;
 
@@ -451,7 +452,7 @@ const getFirestore = (): admin.firestore.Firestore | null => {
         projectId: process.env.FIREBASE_PROJECT_ID || 'harinos-12902',
       });
     }
-    return admin.firestore();
+    return getAdminFirestore(admin.app(), 'harinoss');
   } catch (error) {
     console.warn('Firebase admin initialization failed, falling back to REST/local DB:', error);
     isUsingRestDb = true;

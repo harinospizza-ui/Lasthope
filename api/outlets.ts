@@ -1,0 +1,92 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import admin from 'firebase-admin';
+
+const parseServiceAccount = (): admin.ServiceAccount => {
+  const encoded = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (encoded) {
+    return JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')) as admin.ServiceAccount;
+  }
+  if (raw) {
+    return JSON.parse(raw) as admin.ServiceAccount;
+  }
+  throw new Error('Missing FIREBASE_SERVICE_ACCOUNT_BASE64.');
+};
+
+const getFirestore = (): admin.firestore.Firestore => {
+  if (!admin.apps.length) {
+    const serviceAccount = parseServiceAccount();
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId: process.env.FIREBASE_PROJECT_ID || 'harinos-12902',
+    });
+  }
+  return admin.firestore();
+};
+
+const DEFAULT_OUTLETS = [
+  {
+    id: 'outlet-1',
+    enabled: true,
+    name: "Harino's Main Outlet",
+    phone: '+917818958571',
+    latitude: 28.011897,
+    longitude: 77.675534,
+    deliveryRadiusKm: 7,
+    freeDeliveryRadiusKm: 3,
+    freeDeliveryMinimumOrder: 150,
+    minimumOrderIncrementPerKm: 100,
+    deliveryChargePerKm: 15,
+  },
+];
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
+  try {
+    const db = getFirestore();
+
+    if (req.method === 'GET') {
+      const snapshot = await db.collection('outlets').get();
+      if (snapshot.empty) {
+        const batch = db.batch();
+        for (const outlet of DEFAULT_OUTLETS) {
+          const docRef = db.collection('outlets').doc(outlet.id);
+          batch.set(docRef, outlet);
+        }
+        await batch.commit();
+        const seededSnapshot = await db.collection('outlets').get();
+        res.json({ success: true, outlets: seededSnapshot.docs.map((doc) => doc.data()) });
+        return;
+      }
+      res.json({ success: true, outlets: snapshot.docs.map((doc) => doc.data()) });
+      return;
+    }
+
+    if (req.method === 'POST') {
+      const outlet = req.body as any;
+      if (!outlet.id || !outlet.name) {
+        res.status(400).json({ success: false, message: 'Invalid outlet payload.' });
+        return;
+      }
+      await db.collection('outlets').doc(outlet.id).set(outlet, { merge: true });
+      res.json({ success: true });
+      return;
+    }
+
+    res.status(405).json({ success: false, message: 'Method not allowed' });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Internal server error.',
+    });
+  }
+}

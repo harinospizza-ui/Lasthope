@@ -330,6 +330,266 @@ const getFirestore = (): admin.firestore.Firestore => {
   return admin.firestore();
 };
 
+
+type NotificationRole = 'admin' | 'manager' | 'staff' | 'customer';
+type NotificationEventType = 'NEW_ORDER' | 'PREPARING' | 'READY' | 'OUT_FOR_DELIVERY' | 'DONE' | 'CANCELLED';
+
+const buildNotificationMessage = (
+  eventType: NotificationEventType,
+  orderId: string,
+  additionalData?: Record<string, string>,
+) => {
+  const baseData = {
+    orderId,
+    eventType,
+    timestamp: new Date().toISOString(),
+    ...additionalData,
+  };
+
+  switch (eventType) {
+    case 'NEW_ORDER':
+      return {
+        notification: {
+          title: '🍕 New Order Received',
+          body: `Order #${orderId.split('-')[2] || orderId.slice(-5)} is waiting to be prepared`,
+        },
+        data: baseData,
+      };
+    case 'PREPARING':
+      return {
+        notification: {
+          title: 'Order Confirmed',
+          body: `Your order #${orderId.split('-')[2] || orderId.slice(-5)} is being prepared`,
+        },
+        data: baseData,
+      };
+    case 'READY':
+      return {
+        notification: {
+          title: '✨ Order Ready',
+          body: `Your order #${orderId.split('-')[2] || orderId.slice(-5)} is ready for pickup`,
+        },
+        data: baseData,
+      };
+    case 'OUT_FOR_DELIVERY':
+      return {
+        notification: {
+          title: '📍 On the Way',
+          body: `Your order #${orderId.split('-')[2] || orderId.slice(-5)} is out for delivery`,
+        },
+        data: baseData,
+      };
+    case 'DONE':
+      return {
+        notification: {
+          title: '✅ Order Completed',
+          body: `Your order #${orderId.split('-')[2] || orderId.slice(-5)} has been completed. Thank you!`,
+        },
+        data: baseData,
+      };
+    case 'CANCELLED':
+      return {
+        notification: {
+          title: '❌ Order Cancelled',
+          body: `Your order #${orderId.split('-')[2] || orderId.slice(-5)} has been cancelled`,
+        },
+        data: baseData,
+      };
+    default:
+      return {
+        notification: {
+          title: 'Order Update',
+          body: `Update for order #${orderId.split('-')[2] || orderId.slice(-5)}`,
+        },
+        data: baseData,
+      };
+  }
+};
+
+const logNotificationEvent = async (
+  eventType: NotificationEventType,
+  orderId: string,
+  role: NotificationRole,
+  outletId: string | undefined,
+  sent: number,
+  failed: number,
+) => {
+  try {
+    const db = getFirestore();
+    await db.collection('notification_log').add({
+      eventType,
+      orderId,
+      role,
+      outletId: outletId || 'all',
+      sent,
+      failed,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn('Warning: Failed to log notification event', error);
+  }
+};
+
+const sendNotificationToRole = async (
+  eventType: NotificationEventType,
+  orderId: string,
+  role: NotificationRole,
+  outletId?: string,
+  additionalData?: Record<string, string>,
+) => {
+  try {
+    const db = getFirestore();
+    const messaging = admin.messaging();
+
+    let query: admin.firestore.Query = db
+      .collection('notification_tokens')
+      .where('role', '==', role)
+      .where('isActive', '==', true);
+
+    if (outletId) {
+      query = query.where('outletId', '==', outletId);
+    }
+
+    const tokensSnapshot = await query.get();
+    const tokens = tokensSnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }) as any);
+
+    if (tokens.length === 0) {
+      return { sent: 0, failed: 0 };
+    }
+
+    const message = buildNotificationMessage(eventType, orderId, additionalData);
+    let sent = 0;
+    let failed = 0;
+
+    for (const token of tokens) {
+      try {
+        await messaging.send({
+          token: token.fcmToken,
+          ...message,
+        });
+        sent++;
+      } catch (error) {
+        failed++;
+        const errorMsg = error instanceof Error ? error.message : '';
+        if (
+          errorMsg.includes('unregistered') ||
+          errorMsg.includes('invalid') ||
+          errorMsg.includes('not-registered')
+        ) {
+          if (token.id) {
+            await db.collection('notification_tokens').doc(token.id).update({ isActive: false });
+          }
+        }
+      }
+    }
+
+    await logNotificationEvent(eventType, orderId, role, outletId, sent, failed);
+    return { sent, failed };
+  } catch (error) {
+    console.error('Error sending notifications:', error);
+    return { sent: 0, failed: 0 };
+  }
+};
+
+const sendNotificationToCustomer = async (
+  eventType: NotificationEventType,
+  orderId: string,
+  customerId: string,
+  additionalData?: Record<string, string>,
+) => {
+  try {
+    const db = getFirestore();
+    const messaging = admin.messaging();
+
+    const tokensSnapshot = await db
+      .collection('notification_tokens')
+      .where('userId', '==', customerId)
+      .where('role', '==', 'customer')
+      .where('isActive', '==', true)
+      .get();
+
+    const tokens = tokensSnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }) as any);
+
+    if (tokens.length === 0) {
+      return { sent: 0, failed: 0 };
+    }
+
+    const message = buildNotificationMessage(eventType, orderId, additionalData);
+    let sent = 0;
+    let failed = 0;
+
+    for (const token of tokens) {
+      try {
+        await messaging.send({
+          token: token.fcmToken,
+          ...message,
+        });
+        sent++;
+      } catch (error) {
+        failed++;
+        const errorMsg = error instanceof Error ? error.message : '';
+        if (
+          errorMsg.includes('unregistered') ||
+          errorMsg.includes('invalid') ||
+          errorMsg.includes('not-registered')
+        ) {
+          if (token.id) {
+            await db.collection('notification_tokens').doc(token.id).update({ isActive: false });
+          }
+        }
+      }
+    }
+
+    return { sent, failed };
+  } catch (error) {
+    console.error('Error sending customer notification:', error);
+    return { sent: 0, failed: 0 };
+  }
+};
+
+const sendNewOrderNotifications = async (order: any) => {
+  try {
+    const db = getFirestore();
+    const items = order.items || [];
+    const itemSummary = items.slice(0, 2).map((it: any) => `${it.quantity || 1}x ${it.name}`).join(', ');
+    const additional = items.length > 2 ? ` +${items.length - 2} more` : '';
+    const itemText = `${itemSummary}${additional}`;
+
+    // Get active/pending order counts from Firestore
+    const activeOrdersSnap = await db.collection('orders')
+      .where('status', 'in', ['new', 'preparing', 'ready', 'out_for_delivery'])
+      .get();
+    
+    const activeOrders = activeOrdersSnap.docs.map(doc => doc.data());
+    const adminPendingCount = activeOrders.length;
+    const outletPendingCount = order.outletId ? activeOrders.filter(o => o.outletId === order.outletId).length : adminPendingCount;
+
+    // Send notifications to admins, managers, and staff
+    await sendNotificationToRole('NEW_ORDER', order.id, 'admin', undefined, {
+      itemSummary: itemText,
+      orderType: order.orderType || 'takeaway',
+      total: String(Math.round(order.total || 0)),
+      pendingCount: String(adminPendingCount),
+    });
+
+    if (order.outletId) {
+      await sendNotificationToRole('NEW_ORDER', order.id, 'manager', order.outletId, {
+        itemSummary: itemText,
+        orderType: order.orderType || 'takeaway',
+        pendingCount: String(outletPendingCount),
+      });
+
+      await sendNotificationToRole('NEW_ORDER', order.id, 'staff', order.outletId, {
+        itemSummary: itemText,
+        orderType: order.orderType || 'takeaway',
+        pendingCount: String(outletPendingCount),
+      });
+    }
+  } catch (err) {
+    console.error('Error sending new order notifications:', err);
+  }
+};
+
 const sendError = (res: VercelResponse, error: unknown) => {
   console.error(error);
   res.status(500).json({
@@ -354,14 +614,7 @@ const logSecurityEvent = async (action: string, username: string, details: strin
   };
   try {
     const db = getFirestore();
-    if (db) {
-      await db.collection('security_logs').doc(logEntry.id).set(logEntry);
-    } else {
-      const localDb = loadLocalDb();
-      if (!localDb.security_logs) localDb.security_logs = [];
-      localDb.security_logs.push(logEntry);
-      saveLocalDb(localDb);
-    }
+    await db.collection('security_logs').doc(logEntry.id).set(logEntry);
   } catch (err) {
     console.error('Failed to log security event:', err);
   }
@@ -447,7 +700,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       
 
-      const staffRef = db.collection('staff_users');
+      const staffRef = db.collection('users');
       const snapshot = await staffRef.get();
       
       if (snapshot.empty) {
@@ -489,7 +742,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       
 
-      const staffRef = db.collection('staff_users');
+      const staffRef = db.collection('users');
       const docRef = staffRef.doc(username);
       const docSnap = await docRef.get();
       if (!docSnap.exists) {
@@ -502,10 +755,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET' && path === '/menu-items') {
-
-
+        if (req.method === 'GET' && path === '/menu-items') {
       const snapshot = await db.collection('menu_items').get();
+      if (snapshot.empty) {
+        const batch = db.batch();
+        for (const item of DEFAULT_MENU_ITEMS) {
+          const docRef = db.collection('menu_items').doc(item.id);
+          batch.set(docRef, item);
+        }
+        await batch.commit();
+        const seededSnapshot = await db.collection('menu_items').get();
+        res.json({ success: true, menuItems: seededSnapshot.docs.map((doc) => doc.data()) });
+        return;
+      }
       res.json({ success: true, menuItems: snapshot.docs.map((doc) => doc.data()) });
       return;
     }
@@ -573,10 +835,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET' && path === '/outlets') {
-
-
+        if (req.method === 'GET' && path === '/outlets') {
       const snapshot = await db.collection('outlets').get();
+      if (snapshot.empty) {
+        const batch = db.batch();
+        for (const outlet of DEFAULT_OUTLETS) {
+          const docRef = db.collection('outlets').doc(outlet.id);
+          batch.set(docRef, outlet);
+        }
+        await batch.commit();
+        const seededSnapshot = await db.collection('outlets').get();
+        res.json({ success: true, outlets: seededSnapshot.docs.map((doc) => doc.data()) });
+        return;
+      }
       res.json({ success: true, outlets: snapshot.docs.map((doc) => doc.data()) });
       return;
     }
@@ -606,10 +877,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET' && path === '/offers') {
-
-
+        if (req.method === 'GET' && path === '/offers') {
       const snapshot = await db.collection('offers').get();
+      if (snapshot.empty) {
+        const batch = db.batch();
+        for (const offer of DEFAULT_OFFERS) {
+          const docRef = db.collection('offers').doc(offer.id);
+          batch.set(docRef, offer);
+        }
+        await batch.commit();
+        const seededSnapshot = await db.collection('offers').get();
+        res.json({ success: true, offers: seededSnapshot.docs.map((doc) => doc.data()) });
+        return;
+      }
       res.json({ success: true, offers: snapshot.docs.map((doc) => doc.data()) });
       return;
     }
@@ -646,10 +926,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      const filterOrdersByRole = (ordersList: any[]) => {
+            const filterOrdersByRole = (ordersList: any[]) => {
         let result = ordersList;
         if (caller.role === 'staff') {
           result = result.filter(o => !o.isDeleted && (caller.outletId ? o.outletId === caller.outletId : true));
+          // Strip financial info for staff callers
+          result = result.map(o => {
+            const sanitized = { ...o };
+            delete sanitized.total;
+            delete sanitized.deliveryFee;
+            delete sanitized.walletAmountRedeemed;
+            delete sanitized.rewardPointsRedeemed;
+            if (Array.isArray(sanitized.items)) {
+              sanitized.items = sanitized.items.map((it: any) => {
+                const cleanIt = { ...it };
+                delete cleanIt.price;
+                delete cleanIt.totalPrice;
+                return cleanIt;
+              });
+            }
+            return sanitized;
+          });
         } else if (caller.role === 'manager') {
           result = result.filter(o => !o.isDeleted);
         }
@@ -663,6 +960,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rawOrders = snapshot.docs.map((doc) => doc.data());
       const filtered = filterOrdersByRole(rawOrders);
       res.json({ success: true, orders: filtered });
+      return;
+    }
+
+        if (req.method === 'POST' && path === '/orders') {
+      const order = req.body as Partial<OrderPayload>;
+      if (!Array.isArray(order.items)) {
+        res.status(400).json({ success: false, message: 'Invalid order payload: items list is required.' });
+        return;
+      }
+
+      // Generate server-side order ID using a sequential number matching today's date
+      const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const todayFormatted = todayStr.replace(/-/g, ''); // YYYYMMDD
+      const startOfDay = new Date(todayStr + 'T00:00:00.000Z');
+
+      const snapshot = await db.collection('orders')
+        .where('receivedAt', '>=', startOfDay.toISOString())
+        .get();
+      const dailySeq = snapshot.size + 1;
+      const orderId = `HRN-${todayFormatted}-${dailySeq}`;
+
+      const nextOrder: OrderPayload = {
+        ...(order as OrderPayload),
+        id: orderId,
+        receivedAt: new Date().toISOString(),
+        date: new Date().toLocaleString(),
+        status: 'new',
+        auditTrail: [{
+          timestamp: new Date().toISOString(),
+          updatedBy: order.customerName ? String(order.customerName) : 'customer',
+          action: 'Order placed'
+        }]
+      };
+
+      await db.collection('orders').doc(orderId).set(nextOrder);
+      
+      // Send background new order FCM alerts to admin/manager/staff
+      void sendNewOrderNotifications(nextOrder).catch((err) => console.error('Error notifying new order:', err));
+
+      res.status(201).json({ success: true, order: nextOrder });
       return;
     }
 
@@ -699,16 +1036,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(404).json({ success: false, message: 'Order not found.' });
         return;
       }
-      const order = snap.data() as any;
+            const order = snap.data() as any;
       if (order.isDeleted) {
         res.status(404).json({ success: false, message: 'Order not found.' });
         return;
       }
+      
+      // Strip financial info for staff callers
+      const caller = authenticateRequest(req);
+      if (caller && caller.role === 'staff') {
+        delete order.total;
+        delete order.deliveryFee;
+        delete order.walletAmountRedeemed;
+        delete order.rewardPointsRedeemed;
+        if (Array.isArray(order.items)) {
+          order.items = order.items.map((it: any) => {
+            const cleanIt = { ...it };
+            delete cleanIt.price;
+            delete cleanIt.totalPrice;
+            return cleanIt;
+          });
+        }
+      }
+
       res.json({ success: true, order });
       return;
     }
 
-    if (req.method === 'PATCH' && statusMatch) {
+        if (req.method === 'PATCH' && statusMatch) {
       const caller = authenticateRequest(req);
       if (!caller) {
         res.status(401).json({ success: false, message: 'Unauthorized.' });
@@ -722,6 +1077,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (status === 'cancelled' && !reason) {
         res.status(400).json({ success: false, message: 'Cancellation reason is required.' });
+        return;
+      }
+      
+      // Staff cannot cancel orders
+      if (status === 'cancelled' && caller.role !== 'admin' && caller.role !== 'manager') {
+        res.status(403).json({ success: false, message: 'Forbidden. Staff cannot cancel orders.' });
         return;
       }
 
@@ -747,8 +1108,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
         return order;
       };
-
-      
 
       const orderRef = db.collection('orders').doc(orderId);
       const snap = await orderRef.get();
@@ -762,6 +1121,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (status === 'cancelled') {
         await logSecurityEvent('ORDER_CANCELLED', caller.username, `Order: ${orderId}, Reason: ${reason}`);
       }
+      
+      // Dispatch FCM notifications
+      const customerNotifiableStatuses = ['preparing', 'ready', 'out_for_delivery', 'done', 'cancelled'];
+      if (customerNotifiableStatuses.includes(status)) {
+        const customerId = updated.customerPhone || updated.customerEmail || updated.customerName;
+        const eventTypeMap = {
+          preparing: 'PREPARING',
+          ready: 'READY',
+          out_for_delivery: 'OUT_FOR_DELIVERY',
+          done: 'DONE',
+          cancelled: 'CANCELLED',
+        };
+        const eventType = eventTypeMap[status];
+        if (eventType && customerId) {
+          const addData = status === 'cancelled' ? { reason: reason || '' } : undefined;
+          void sendNotificationToCustomer(eventType, orderId, customerId, addData).catch((err) =>
+            console.error('Error sending customer status FCM:', err)
+          );
+        }
+      }
+
+      if (status === 'cancelled') {
+        void sendNotificationToRole('CANCELLED', orderId, 'admin', undefined, { reason: reason || '' }).catch((err) =>
+          console.error('Error notifying admin of cancellation:', err)
+        );
+        if (updated.outletId) {
+          void sendNotificationToRole('CANCELLED', orderId, 'manager', updated.outletId, { reason: reason || '' }).catch((err) =>
+            console.error('Error notifying manager of cancellation:', err)
+          );
+        }
+      }
+
       res.json({ success: true });
       return;
     }
@@ -807,6 +1198,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await orderRef.set(updated, { merge: true });
       await logSecurityEvent('ORDER_DELETED', caller.username, `Soft deleted order: ${orderId}`);
       res.json({ success: true, message: 'Order deleted successfully.' });
+      return;
+    }
+
+    
+    if (req.method === 'POST' && path === '/notifications/token') {
+      const payload = req.body as any;
+      if (!payload.fcmToken || !payload.role || !payload.userId || !payload.deviceInfo) {
+        res.status(400).json({
+          success: false,
+          message: 'Missing required fields: fcmToken, role, userId, deviceInfo',
+        });
+        return;
+      }
+
+      const validRoles = ['admin', 'manager', 'staff', 'customer'];
+      if (!validRoles.includes(payload.role)) {
+        res.status(400).json({
+          success: false,
+          message: `Invalid role. Must be one of: ${validRoles.join(', ')}`,
+        });
+        return;
+      }
+
+      const tokenHash = payload.fcmToken.substring(0, 16);
+      const docId = `${payload.userId}_${tokenHash}`;
+      const now = new Date().toISOString();
+
+      await db.collection('notification_tokens').doc(docId).set(
+        {
+          id: docId,
+          userId: payload.userId,
+          fcmToken: payload.fcmToken,
+          role: payload.role,
+          outletId: payload.outletId || null,
+          deviceType: 'browser',
+          deviceInfo: {
+            userAgent: payload.deviceInfo.userAgent || 'Unknown',
+            platform: payload.deviceInfo.platform || 'Web',
+          },
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+          lastUsedAt: now,
+        },
+        { merge: true }
+      );
+
+      res.status(201).json({
+        success: true,
+        message: 'Token registered successfully',
+        tokenId: docId,
+      });
       return;
     }
 

@@ -20,9 +20,11 @@ import {
   FIRESTORE_OUTLETS_COLLECTION,
   FIRESTORE_OFFERS_COLLECTION,
   FIRESTORE_WALLET_TRANSACTIONS_COLLECTION,
-  isFirebaseClientConfigured,
+  isFirebaseClientConfigured as originalIsFirebaseClientConfigured,
 } from './firebaseClient';
 import { StorageService } from './storage';
+
+const isFirebaseClientConfigured = () => false;
 
 const API_BASE_URL = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
 
@@ -96,26 +98,29 @@ const saveCustomerViaApi = async (profile: CustomerProfile): Promise<void> => {
   if (!response.ok) throw new Error(`Customer sync failed with status ${response.status}.`);
 };
 
-export const saveFullOrderToServer = async (order: Order): Promise<void> => {
-  const localOrders = StorageService.getAdminOrders().filter((o) => o.id !== order.id);
-  StorageService.saveAdminOrders([order, ...localOrders]);
+export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: string }): Promise<Order> => {
+  const apiBase = getApiBase();
+  if (!apiBase) throw new Error('Central API is not configured.');
 
-  const nextOrder: Order = {
-    ...order,
-    receivedAt: order.receivedAt ?? new Date().toISOString(),
-    status: order.status ?? 'new',
-  };
+  const response = await fetch(`${apiBase}/orders`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(order),
+  });
 
-  if (isFirebaseClientConfigured()) {
-    try {
-      await setDoc(doc(db(), FIRESTORE_ORDERS_COLLECTION, nextOrder.id), nextOrder, { merge: true });
-      return;
-    } catch (error) {
-      throw new Error('Firebase client failed to save order.');
-    }
+  if (!response.ok) {
+    throw new Error(`Order placement failed with status ${response.status}.`);
   }
 
-  await saveFullOrderViaApi(nextOrder);
+  const data = await response.json() as { success: boolean; order: Order };
+  if (!data.success || !data.order) {
+    throw new Error('Order placement failed: invalid response from server.');
+  }
+
+  const localOrders = StorageService.getAdminOrders().filter((o) => o.id !== data.order.id);
+  StorageService.saveAdminOrders([data.order, ...localOrders]);
+
+  return data.order;
 };
 
 export const getServerOrders = async (): Promise<Order[]> => {

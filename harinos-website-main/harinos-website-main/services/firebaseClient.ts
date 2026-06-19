@@ -23,7 +23,7 @@ export const FIRESTORE_NOTIFICATION_TOKENS_COLLECTION = 'notification_tokens';
 export const FIRESTORE_MENU_ITEMS_COLLECTION = 'menu_items';
 export const FIRESTORE_OUTLETS_COLLECTION = 'outlets';
 export const FIRESTORE_OFFERS_COLLECTION = 'offers';
-export const FIRESTORE_STAFF_USERS_COLLECTION = 'staff_users';
+export const FIRESTORE_STAFF_USERS_COLLECTION = 'users';
 export const FIRESTORE_WALLET_TRANSACTIONS_COLLECTION = 'wallet_transactions';
 
 export const isFirebaseClientConfigured = (): boolean => {

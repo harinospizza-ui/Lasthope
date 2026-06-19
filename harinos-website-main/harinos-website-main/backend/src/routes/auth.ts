@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { getOrderStore } from '../storage/index.js';
 import { AdminUser } from '../types.js';
+import { hashPassword, verifyPassword, generateToken } from '../services/cryptoUtils.js';
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-harinos-pizza-secret-key-32-chars-minimum';
 
 const DEFAULT_STAFF: AdminUser[] = [
   { role: 'admin', username: 'Admin_Harinos', password: 'Harinos_Admin', outletId: null },
@@ -20,7 +22,8 @@ const ensureStaffSeeded = async () => {
       const found = existing.find(u => u.username === defaultUser.username);
       if (!found) {
         console.log(`Seeding missing staff user: ${defaultUser.username}`);
-        await store.saveStaffUser(defaultUser);
+        const hashedUser = { ...defaultUser, password: hashPassword(defaultUser.password) };
+        await store.saveStaffUser(hashedUser);
       }
     }
   } catch (error) {
@@ -41,15 +44,25 @@ router.post('/login', async (req, res, next) => {
     const staffUsers = await getOrderStore().getStaffUsers();
     const allowedUsernames = ['Admin_Harinos', 'Manager_Harinos', 'Staff_Harinos'];
     const filteredStaff = staffUsers.filter((u) => allowedUsernames.includes(u.username));
-    const user = filteredStaff.find((u) => u.username === username && u.password === password);
+    const user = filteredStaff.find((u) => u.username === username);
 
-    if (!user) {
+    if (!user || !verifyPassword(password, user.password)) {
       res.status(401).json({ success: false, message: 'Invalid username or password.' });
       return;
     }
 
+    // Auto hash password if stored as plaintext
+    if (!user.password.startsWith('pbkdf2$')) {
+      const hashed = hashPassword(password);
+      user.password = hashed;
+      await getOrderStore().saveStaffUser(user);
+    }
+
+    const token = generateToken({ username: user.username, role: user.role, outletId: user.outletId }, JWT_SECRET);
+
     res.json({
       success: true,
+      token,
       user: {
         role: user.role,
         username: user.username,
@@ -85,8 +98,8 @@ router.post('/change-password', async (req, res, next) => {
     const filteredStaff = staff.filter((u) => allowedUsernames.includes(u.username));
 
     // Verify requester is an admin with the correct password
-    const requester = filteredStaff.find((u) => u.username === requesterUsername && u.password === requesterPassword);
-    if (!requester || requester.role !== 'admin') {
+    const requester = filteredStaff.find((u) => u.username === requesterUsername);
+    if (!requester || !verifyPassword(requesterPassword, requester.password) || requester.role !== 'admin') {
       res.status(403).json({ success: false, message: 'Unauthorized. Only the admin can change passwords.' });
       return;
     }
@@ -97,7 +110,7 @@ router.post('/change-password', async (req, res, next) => {
       return;
     }
 
-    user.password = newPassword;
+    user.password = hashPassword(newPassword);
     await store.saveStaffUser(user);
 
     res.json({ success: true, message: 'Password updated successfully.' });

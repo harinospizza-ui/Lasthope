@@ -149,11 +149,13 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                             🕒 {new Date(order.receivedAt ?? order.date).toLocaleDateString()} {new Date(order.receivedAt ?? order.date).toLocaleTimeString()}
                           </div>
                         </div>
-                        <div className="text-xl font-black text-red-400">Rs {Math.round(order.total)}</div>
+                        {session.role !== 'staff' && typeof order.total === 'number' && (
+                          <div className="text-xl font-black text-red-400">Rs {Math.round(order.total)}</div>
+                        )}
                       </div>
 
                       {/* Wallet adjustments logs */}
-                      {(order.walletAmountRedeemed || order.rewardPointsRedeemed) ? (
+                      {session.role !== 'staff' && (order.walletAmountRedeemed || order.rewardPointsRedeemed) ? (
                         <div className="mt-2 text-xs font-semibold text-green-400 space-x-3">
                           {order.walletAmountRedeemed ? <span>👛 Wallet Redeem: -Rs {order.walletAmountRedeemed}</span> : null}
                           {order.rewardPointsRedeemed ? <span>⭐ Points Redeem: -Rs {order.rewardPointsRedeemed}</span> : null}
@@ -232,7 +234,9 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                         <button onClick={() => onUpdateStatus(order, 'preparing')} className="rounded-xl bg-amber-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-amber-500 transition-premium">Preparing</button>
                         <button onClick={() => onUpdateStatus(order, order.orderType === 'delivery' ? 'out_for_delivery' : 'ready')} className="rounded-xl bg-blue-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-blue-500 transition-premium">Ready/Out</button>
                         <button onClick={() => onUpdateStatus(order, 'done')} className="rounded-xl bg-green-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-green-600 transition-premium">Done</button>
-                        <button onClick={() => handleCancelClick(order.id)} className="rounded-xl bg-red-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-red-650 transition-premium">Cancel</button>
+                        {session.role !== 'staff' && (
+                          <button onClick={() => handleCancelClick(order.id)} className="rounded-xl bg-red-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-red-650 transition-premium">Cancel</button>
+                        )}
                         <button onClick={() => onPrint(order)} className="rounded-xl border border-slate-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/10 transition-premium">Print</button>
                         {order.customerPhone && (
                           <a

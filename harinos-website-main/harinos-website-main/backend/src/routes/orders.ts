@@ -1,12 +1,41 @@
 import { Router } from 'express';
+import admin from 'firebase-admin';
+import { getFirebaseApp } from '../config.js';
 import { CustomerProfile, FullOrderPayload, OrderStatus, WalletTransaction } from '../types.js';
 import { getOrderStore } from '../storage/index.js';
+import { verifyToken } from '../services/cryptoUtils.js';
 import {
   sendNotificationToRole,
   sendNotificationToCustomer,
 } from '../services/fcmService.js';
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-harinos-pizza-secret-key-32-chars-minimum';
+
+const authenticateRequest = (req: any): any => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7);
+  return verifyToken(token, JWT_SECRET);
+};
+
+const logSecurityEvent = async (action: string, username: string, details: string, req?: any) => {
+  const clientIp = req ? (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || 'unknown') : 'unknown';
+  const logEntry = {
+    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: new Date().toISOString(),
+    action,
+    username,
+    details,
+    ip: clientIp
+  };
+  try {
+    const db = admin.firestore(getFirebaseApp());
+    await db.collection('security_logs').doc(logEntry.id).set(logEntry);
+  } catch (err) {
+    console.error('Failed to log security event:', err);
+  }
+};
 
 const getPendingOrdersCount = async (role: string, outletId?: string): Promise<number> => {
   try {
@@ -23,9 +52,74 @@ const getPendingOrdersCount = async (role: string, outletId?: string): Promise<n
   }
 };
 
-router.get('/orders', async (_req, res, next) => {
+router.get('/orders', async (req, res, next) => {
   try {
-    res.json({ success: true, orders: await getOrderStore().getOrders() });
+    const caller = authenticateRequest(req);
+    if (!caller) {
+      res.status(401).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+
+    const rawOrders = await getOrderStore().getOrders();
+    let result = rawOrders;
+
+    if (caller.role === 'staff') {
+      result = result.filter(o => !(o as any).isDeleted && (caller.outletId ? o.outletId === caller.outletId : true));
+      result = result.map(o => {
+        const sanitized = { ...o } as any;
+        delete sanitized.total;
+        delete sanitized.deliveryFee;
+        delete sanitized.walletAmountRedeemed;
+        delete sanitized.rewardPointsRedeemed;
+        if (Array.isArray(sanitized.items)) {
+          sanitized.items = sanitized.items.map((it: any) => {
+            const cleanIt = { ...it };
+            delete cleanIt.price;
+            delete cleanIt.totalPrice;
+            return cleanIt;
+          });
+        }
+        return sanitized;
+      });
+    } else if (caller.role === 'manager') {
+      result = result.filter(o => !(o as any).isDeleted);
+    }
+
+    res.json({ success: true, orders: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/orders/:orderId', async (req, res, next) => {
+  try {
+    const orderId = req.params.orderId;
+    const store = getOrderStore();
+    const orders = await store.getOrders();
+    const order = orders.find((o: any) => o.id === orderId) as any;
+
+    if (!order || order.isDeleted) {
+      res.status(404).json({ success: false, message: 'Order not found.' });
+      return;
+    }
+
+    const caller = authenticateRequest(req);
+    if (caller && caller.role === 'staff') {
+      delete order.total;
+      delete order.deliveryFee;
+      delete order.walletAmountRedeemed;
+      delete order.rewardPointsRedeemed;
+      if (Array.isArray(order.items)) {
+        order.items = order.items.map((it: any) => {
+          const cleanIt = { ...it };
+          delete cleanIt.price;
+          delete cleanIt.totalPrice;
+          return cleanIt;
+        });
+      }
+    }
+
+    res.json({ success: true, order });
   } catch (error) {
     next(error);
   }
@@ -91,26 +185,40 @@ router.post('/orders/full', async (req, res, next) => {
 router.post('/orders', async (req, res, next) => {
   try {
     const payload = req.body as {
-      orderId?: string;
       items?: unknown[];
       total?: number;
       orderType?: string;
       createdAt?: string;
       outlet?: { id?: string; name?: string; phone?: string; address?: string };
+      customerName?: string;
+      customerPhone?: string;
+      customerEmail?: string;
       [key: string]: unknown;
     };
 
-    if (!payload.orderId || !Array.isArray(payload.items)) {
-      res.status(400).json({ success: false, message: 'Invalid order payload.' });
+    if (!Array.isArray(payload.items)) {
+      res.status(400).json({ success: false, message: 'Invalid order payload: items list is required.' });
       return;
     }
 
-    await getOrderStore().saveOrder({
-      id: payload.orderId,
+    // Generate server-side order ID using a sequential number matching today's date
+    const store = getOrderStore();
+    const orders = await store.getOrders();
+    const todayStr = new Date().toLocaleDateString();
+    const todayOrdersCount = orders.filter(o => {
+      const oDate = new Date(o.receivedAt ?? o.date);
+      return oDate.toLocaleDateString() === todayStr;
+    }).length;
+    const dailySeq = todayOrdersCount + 1;
+    const todayFormatted = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const orderId = `HRN-${todayFormatted}-${dailySeq}`;
+
+    const newOrder: FullOrderPayload = {
+      id: orderId,
       items: payload.items,
       total: payload.total ?? 0,
-      date: payload.createdAt ?? new Date().toISOString(),
-      receivedAt: payload.createdAt ?? new Date().toISOString(),
+      date: new Date().toLocaleString(),
+      receivedAt: new Date().toISOString(),
       orderType: payload.orderType ?? 'takeaway',
       deliveryFee: payload.deliveryFee ?? 0,
       outletId: payload.outlet?.id,
@@ -119,10 +227,54 @@ router.post('/orders', async (req, res, next) => {
       outletAddress: payload.outlet?.address,
       customerLocationUrl: String(payload.location ?? ''),
       distanceKm: typeof payload.distanceKm === 'number' ? payload.distanceKm : null,
+      customerName: payload.customerName,
+      customerPhone: payload.customerPhone,
+      customerEmail: payload.customerEmail,
       status: 'new',
-    } as FullOrderPayload);
+      auditTrail: [{
+        timestamp: new Date().toISOString(),
+        updatedBy: payload.customerName ? String(payload.customerName) : 'customer',
+        action: 'Order placed'
+      }]
+    } as any;
 
-    res.status(201).json({ success: true, orderId: payload.orderId });
+    await store.saveOrder(newOrder);
+
+    // Send notifications to admins, managers, and staff
+    const itemSummary = newOrder.items
+      .slice(0, 2)
+      .map((item: any) => `${item.quantity || 1}x ${item.name || 'Item'}`)
+      .join(', ');
+    const additionalInfo = newOrder.items.length > 2 ? `+${newOrder.items.length - 2} more` : '';
+    const itemText = `${itemSummary}${additionalInfo ? ' ' + additionalInfo : ''}`;
+
+    const adminPendingCount = orders.filter(o => !['done', 'cancelled'].includes(o.status || 'new')).length + 1;
+    const staffPendingCount = newOrder.outletId
+      ? orders.filter(o => o.outletId === newOrder.outletId && !['done', 'cancelled'].includes(o.status || 'new')).length + 1
+      : adminPendingCount;
+
+    void sendNotificationToRole('NEW_ORDER', orderId, 'admin', undefined, {
+      itemSummary: itemText,
+      orderType: newOrder.orderType,
+      total: String(Math.round(newOrder.total)),
+      pendingCount: String(adminPendingCount),
+    }).catch((err) => console.error('Error notifying admins:', err));
+
+    if (newOrder.outletId) {
+      void sendNotificationToRole('NEW_ORDER', orderId, 'manager', newOrder.outletId, {
+        itemSummary: itemText,
+        orderType: newOrder.orderType,
+        pendingCount: String(staffPendingCount),
+      }).catch((err) => console.error('Error notifying managers:', err));
+
+      void sendNotificationToRole('NEW_ORDER', orderId, 'staff', newOrder.outletId, {
+        itemSummary: itemText,
+        orderType: newOrder.orderType,
+        pendingCount: String(staffPendingCount),
+      }).catch((err) => console.error('Error notifying staff:', err));
+    }
+
+    res.status(201).json({ success: true, order: newOrder });
   } catch (error) {
     next(error);
   }
@@ -130,26 +282,70 @@ router.post('/orders', async (req, res, next) => {
 
 router.patch('/orders/:orderId/status', async (req, res, next) => {
   try {
-    const status = (req.body as { status?: OrderStatus }).status;
+    const caller = authenticateRequest(req);
+    if (!caller) {
+      res.status(401).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+
+    const { status, reason } = req.body as { status?: OrderStatus; reason?: string };
     if (!status) {
       res.status(400).json({ success: false, message: 'Missing status.' });
       return;
     }
 
-    await getOrderStore().updateOrderStatus(req.params.orderId, status);
+    if (status === 'cancelled' && !reason) {
+      res.status(400).json({ success: false, message: 'Cancellation reason is required.' });
+      return;
+    }
+
+    if (status === 'cancelled' && caller.role !== 'admin' && caller.role !== 'manager') {
+      res.status(403).json({ success: false, message: 'Forbidden. Staff cannot cancel orders.' });
+      return;
+    }
+
+    const orderId = req.params.orderId;
+    const store = getOrderStore();
+    const orders = await store.getOrders();
+    const order = orders.find((o: any) => o.id === orderId) as any;
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found.' });
+      return;
+    }
+
+    const previousStatus = order.status || 'new';
+    const updatedOrder = {
+      ...order,
+      status,
+      statusUpdatedAt: new Date().toISOString(),
+      updatedBy: caller.username,
+      ...(status === 'cancelled' ? { cancelledBy: caller.username, cancellationReason: reason } : {}),
+      auditTrail: [
+        ...(order.auditTrail || []),
+        {
+          timestamp: new Date().toISOString(),
+          updatedBy: caller.username,
+          action: `Status changed from ${previousStatus} to ${status}`,
+          previousStatus,
+          newStatus: status,
+          reason: reason || ''
+        }
+      ]
+    };
+
+    await store.saveOrder(updatedOrder);
+
+    if (status === 'cancelled') {
+      await logSecurityEvent('ORDER_CANCELLED', caller.username, `Order: ${orderId}, Reason: ${reason}`, req);
+    }
 
     // Send customer notifications only for certain status changes
     const customerNotifiableStatuses: OrderStatus[] = ['preparing', 'ready', 'out_for_delivery', 'done', 'cancelled'];
     if (customerNotifiableStatuses.includes(status)) {
-      // Get order details to find customer
-      const orders = await getOrderStore().getOrders();
-      const order = orders.find((o) => (o as any).id === req.params.orderId);
+      if (updatedOrder.customerName) {
+        const customerId = updatedOrder.customerPhone || updatedOrder.customerEmail || updatedOrder.customerName;
 
-      if (order && (order as any).customerName) {
-        // Customer ID could be phone number or email
-        const customerId = (order as any).customerPhone || (order as any).customerEmail || (order as any).customerName;
-
-        // Map order status to notification event type
         const eventTypeMap: Record<OrderStatus, any> = {
           new: null,
           preparing: 'PREPARING',
@@ -161,14 +357,72 @@ router.patch('/orders/:orderId/status', async (req, res, next) => {
 
         const eventType = eventTypeMap[status];
         if (eventType && customerId) {
-          void sendNotificationToCustomer(eventType, req.params.orderId, customerId).catch((err) =>
+          const addData = status === 'cancelled' ? { reason: reason || '' } : undefined;
+          void sendNotificationToCustomer(eventType, orderId, customerId, addData).catch((err) =>
             console.error('Error notifying customer:', err),
           );
         }
       }
     }
 
+    if (status === 'cancelled') {
+      void sendNotificationToRole('CANCELLED', orderId, 'admin', undefined, { reason: reason || '' }).catch((err) =>
+        console.error('Error notifying admin of cancellation:', err)
+      );
+      if (updatedOrder.outletId) {
+        void sendNotificationToRole('CANCELLED', orderId, 'manager', updatedOrder.outletId, { reason: reason || '' }).catch((err) =>
+          console.error('Error notifying manager of cancellation:', err)
+        );
+      }
+    }
+
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/orders/:orderId', async (req, res, next) => {
+  try {
+    const caller = authenticateRequest(req);
+    if (!caller) {
+      res.status(401).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+
+    if (caller.role !== 'admin' && caller.role !== 'manager') {
+      res.status(403).json({ success: false, message: 'Forbidden. Admin or Manager role required to delete.' });
+      return;
+    }
+
+    const orderId = req.params.orderId;
+    const store = getOrderStore();
+    const orders = await store.getOrders();
+    const order = orders.find((o: any) => o.id === orderId) as any;
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found.' });
+      return;
+    }
+
+    const updatedOrder = {
+      ...order,
+      isDeleted: true,
+      deletedBy: caller.username,
+      deletedAt: new Date().toISOString(),
+      auditTrail: [
+        ...(order.auditTrail || []),
+        {
+          timestamp: new Date().toISOString(),
+          updatedBy: caller.username,
+          action: 'Order soft deleted'
+        }
+      ]
+    };
+
+    await store.saveOrder(updatedOrder);
+    await logSecurityEvent('ORDER_DELETED', caller.username, `Soft deleted order: ${orderId}`, req);
+    res.json({ success: true, message: 'Order deleted successfully.' });
   } catch (error) {
     next(error);
   }
@@ -215,8 +469,18 @@ router.patch('/customers/:customerId/verify', async (req, res, next) => {
   }
 });
 
-router.get('/wallet/transactions', async (_req, res, next) => {
+router.get('/wallet/transactions', async (req, res, next) => {
   try {
+    const caller = authenticateRequest(req);
+    if (!caller) {
+      res.status(401).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+    if (caller.role !== 'admin' && caller.role !== 'manager') {
+      res.status(403).json({ success: false, message: 'Forbidden.' });
+      return;
+    }
+
     const transactions = await getOrderStore().getWalletTransactions();
     res.json({ success: true, transactions });
   } catch (error) {
@@ -226,6 +490,16 @@ router.get('/wallet/transactions', async (_req, res, next) => {
 
 router.post('/wallet/transactions', async (req, res, next) => {
   try {
+    const caller = authenticateRequest(req);
+    if (!caller) {
+      res.status(401).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+    if (caller.role !== 'admin' && caller.role !== 'manager') {
+      res.status(403).json({ success: false, message: 'Forbidden.' });
+      return;
+    }
+
     const transaction = req.body as WalletTransaction;
     await getOrderStore().saveWalletTransaction(transaction);
     res.status(201).json({ success: true });

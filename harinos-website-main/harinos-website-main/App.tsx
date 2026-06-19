@@ -1024,27 +1024,11 @@ const App: React.FC = () => {
 
     const { customerLocation: resolvedLocation, outlet, distanceKm } = checkoutContext;
     const locationString = orderType === 'delivery' && resolvedLocation ? resolvedLocation.mapUrl : 'Not shared';
-    let dailySeq = 1;
-    try {
-      const allOrders = await getServerOrders();
-      const todayStr = new Date().toLocaleDateString();
-      const todayOrdersCount = allOrders.filter(o => {
-        const oDate = new Date(o.receivedAt ?? o.date);
-        return oDate.toLocaleDateString() === todayStr;
-      }).length;
-      dailySeq = todayOrdersCount + 1;
-    } catch (e) {
-      console.error('Failed to calculate daily order sequence:', e);
-      dailySeq = Math.floor(1 + Math.random() * 99);
-    }
-    const todayFormatted = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const orderId = `HRN-${todayFormatted}-${dailySeq}`;
+
     const orderItems: OrderItem[] = pricedCart.map((item) => ({ ...item }));
-    const newOrder: Order = {
-      id: orderId,
+    const orderPayload = {
       items: orderItems,
       total: grandTotal,
-      date: new Date().toLocaleString(),
       orderType,
       deliveryFee: finalDeliveryFee,
       outletId: outlet.id,
@@ -1057,8 +1041,6 @@ const App: React.FC = () => {
       customerName: customerProfile?.name,
       customerPhone: customerProfile?.phone,
       customerEmail: customerProfile?.email,
-      receivedAt: new Date().toISOString(),
-      status: 'new',
       walletAmountRedeemed: walletDiscount,
       rewardPointsRedeemed: pointsDiscount,
       rewardPointsEarned: Math.floor(subtotal / 10),
@@ -1124,19 +1106,20 @@ const App: React.FC = () => {
     setUseWallet(false);
     setUsePoints(false);
 
+    let placedOrder: Order;
     try {
-      await saveFullOrderToServer(newOrder);
+      placedOrder = await saveFullOrderToServer(orderPayload);
       // Notify staff/admin about new order
-      void notifyStaffNewOrder(newOrder, outlet.id);
+      void notifyStaffNewOrder(placedOrder, outlet.id);
     } catch (error) {
       console.error('Central Firestore order sync failed:', error);
       alert('Service temporarily unavailable. Please try again later.');
       return;
     }
 
-    StorageService.saveOrder(newOrder);
-    setPastOrders((currentOrders) => [newOrder, ...currentOrders].slice(0, 3));
-    setLatestOrder(newOrder);
+    StorageService.saveOrder(placedOrder);
+    setPastOrders((currentOrders) => [placedOrder, ...currentOrders].slice(0, 3));
+    setLatestOrder(placedOrder);
     setShowOrderSuccess(true);
     replaceAppScreen('success');
     setCart([]);

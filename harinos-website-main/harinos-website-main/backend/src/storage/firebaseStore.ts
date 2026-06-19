@@ -168,7 +168,7 @@ export const firebaseStore: OrderStore = {
 
   async getStaffUsers() {
     const snapshot = await withTimeout(
-      getFirestore().collection('staff_users').get(),
+      getFirestore().collection('users').get(),
       'Fetching staff users from Firebase',
     );
     return snapshot.docs.map((doc) => doc.data() as AdminUser);
@@ -176,7 +176,7 @@ export const firebaseStore: OrderStore = {
 
   async saveStaffUser(user) {
     await withTimeout(
-      getFirestore().collection('staff_users').doc(user.username).set(user, { merge: true }),
+      getFirestore().collection('users').doc(user.username).set(user, { merge: true }),
       'Saving staff user to Firebase',
     );
   },

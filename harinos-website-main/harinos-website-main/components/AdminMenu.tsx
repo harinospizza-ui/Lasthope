@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { MenuItem, Category, AdminSession, OutletConfig, OfferCard } from '../types';
-import { saveMenuItemToServer, saveOutletToServer, saveOfferToServer } from '../services/orderApi';
+import { MenuItem, Category, AdminSession, OutletConfig, OfferCard, Order } from '../types';
+import { saveMenuItemToServer, saveOutletToServer, saveOfferToServer, deleteOutletFromServer } from '../services/orderApi';
 
 interface AdminMenuProps {
   session: AdminSession;
@@ -9,6 +9,7 @@ interface AdminMenuProps {
   offers: OfferCard[];
   onRefresh: () => void;
   activeTab: 'menu' | 'outlets' | 'offers';
+  orders?: Order[];
 }
 
 export const AdminMenu: React.FC<AdminMenuProps> = ({
@@ -18,9 +19,41 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   offers,
   onRefresh,
   activeTab,
+  orders,
 }) => {
   // Menu Item Form State
   const [isAddingItem, setIsAddingItem] = useState(false);
+
+  // Outlet Form State
+  const [editingOutlet, setEditingOutlet] = useState<OutletConfig | null>(null);
+  const [isAddingOutlet, setIsAddingOutlet] = useState(false);
+  const [outletName, setOutletName] = useState('');
+  const [outletAddress, setOutletAddress] = useState('');
+  const [outletPhone, setOutletPhone] = useState('');
+  const [outletLat, setOutletLat] = useState('26.85');
+  const [outletLng, setOutletLng] = useState('75.80');
+  const [outletRadius, setOutletRadius] = useState('7');
+  const [outletFreeRadius, setOutletFreeRadius] = useState('3');
+  const [outletMinOrder, setOutletMinOrder] = useState('150');
+  const [outletIncrementPerKm, setOutletIncrementPerKm] = useState('0');
+  const [outletChargePerKm, setOutletChargePerKm] = useState('15');
+  const [outletManager, setOutletManager] = useState('');
+
+  const startEditOutlet = (outlet: OutletConfig) => {
+    setEditingOutlet(outlet);
+    setIsAddingOutlet(false);
+    setOutletName(outlet.name);
+    setOutletAddress(outlet.address || '');
+    setOutletPhone(outlet.phone);
+    setOutletLat(String(outlet.latitude));
+    setOutletLng(String(outlet.longitude));
+    setOutletRadius(String(outlet.deliveryRadiusKm));
+    setOutletFreeRadius(String(outlet.freeDeliveryRadiusKm));
+    setOutletMinOrder(String(outlet.freeDeliveryMinimumOrder));
+    setOutletIncrementPerKm(String(outlet.minimumOrderIncrementPerKm));
+    setOutletChargePerKm(String(outlet.deliveryChargePerKm));
+    setOutletManager(outlet.managerName || '');
+  };
   const [newItemId, setNewItemId] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
@@ -246,32 +279,293 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   if (activeTab === 'outlets') {
     return (
       <section className="relative mx-auto max-w-6xl p-4 animate-fade-in">
-        <h3 className="mb-4 font-display text-2xl font-bold">Outlets Configuration</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-display text-2xl font-bold">Outlets Configuration</h3>
+          {session.role === 'admin' && (
+            <button
+              onClick={() => {
+                setIsAddingOutlet(true);
+                setEditingOutlet(null);
+                setOutletName('');
+                setOutletAddress('');
+                setOutletPhone('');
+                setOutletLat('26.85');
+                setOutletLng('75.80');
+                setOutletRadius('7');
+                setOutletFreeRadius('3');
+                setOutletMinOrder('150');
+                setOutletIncrementPerKm('0');
+                setOutletChargePerKm('15');
+                setOutletManager('');
+              }}
+              className="rounded-xl bg-red-650 hover:bg-red-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+            >
+              ➕ Add Outlet
+            </button>
+          )}
+        </div>
+
+        {/* Add Outlet Form */}
+        {isAddingOutlet && (
+          <div className="mb-6 p-5 border border-white/10 bg-white/[0.04] rounded-3xl space-y-4 animate-slide-up">
+            <h4 className="text-lg font-display font-bold text-red-300">Create New Outlet</h4>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Outlet Name</label>
+                <input type="text" placeholder="e.g. Malviya Nagar" value={outletName} onChange={e => setOutletName(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
+                <input type="text" placeholder="e.g. 9829012345" value={outletPhone} onChange={e => setOutletPhone(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Manager Name</label>
+                <input type="text" placeholder="e.g. Rajesh Kumar" value={outletManager} onChange={e => setOutletManager(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Address</label>
+              <input type="text" placeholder="e.g. Plot 15, Sector 5, Malviya Nagar" value={outletAddress} onChange={e => setOutletAddress(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-5">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Latitude</label>
+                <input type="number" step="0.0001" value={outletLat} onChange={e => setOutletLat(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Longitude</label>
+                <input type="number" step="0.0001" value={outletLng} onChange={e => setOutletLng(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Del. Radius (km)</label>
+                <input type="number" value={outletRadius} onChange={e => setOutletRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Radius (km)</label>
+                <input type="number" value={outletFreeRadius} onChange={e => setOutletFreeRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Del. Min Order (Rs)</label>
+                <input type="number" value={outletMinOrder} onChange={e => setOutletMinOrder(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Delivery Charge Per Km (Rs)</label>
+                <input type="number" value={outletChargePerKm} onChange={e => setOutletChargePerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Min Order Increment Per Km (Rs)</label>
+                <input type="number" value={outletIncrementPerKm} onChange={e => setOutletIncrementPerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setIsAddingOutlet(false)}
+                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-white/5 text-slate-400 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!outletName.trim() || !outletPhone.trim()) {
+                    alert('Name and Phone are required.');
+                    return;
+                  }
+                  const newOutlet: OutletConfig = {
+                    id: `outlet_${Date.now()}`,
+                    enabled: true,
+                    name: outletName.trim(),
+                    address: outletAddress.trim() || undefined,
+                    phone: outletPhone.trim(),
+                    latitude: parseFloat(outletLat) || 26.85,
+                    longitude: parseFloat(outletLng) || 75.80,
+                    deliveryRadiusKm: parseFloat(outletRadius) || 7,
+                    freeDeliveryRadiusKm: parseFloat(outletFreeRadius) || 3,
+                    freeDeliveryMinimumOrder: parseFloat(outletMinOrder) || 150,
+                    minimumOrderIncrementPerKm: parseFloat(outletIncrementPerKm) || 0,
+                    deliveryChargePerKm: parseFloat(outletChargePerKm) || 15,
+                    managerName: outletManager.trim() || undefined,
+                  };
+                  try {
+                    await saveOutletToServer(newOutlet);
+                    alert('Outlet created successfully.');
+                    setIsAddingOutlet(false);
+                    onRefresh();
+                  } catch {
+                    alert('Failed to save outlet.');
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-green-700 hover:bg-green-600 text-white"
+              >
+                Create Outlet
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Outlet Form */}
+        {editingOutlet && (
+          <div className="mb-6 p-5 border border-white/10 bg-white/[0.04] rounded-3xl space-y-4 animate-slide-up">
+            <h4 className="text-lg font-display font-bold text-red-300">Edit Outlet: {editingOutlet.name}</h4>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Outlet Name</label>
+                <input type="text" value={outletName} onChange={e => setOutletName(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
+                <input type="text" value={outletPhone} onChange={e => setOutletPhone(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Manager Name</label>
+                <input type="text" value={outletManager} onChange={e => setOutletManager(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Address</label>
+              <input type="text" value={outletAddress} onChange={e => setOutletAddress(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-5">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Latitude</label>
+                <input type="number" step="0.0001" value={outletLat} onChange={e => setOutletLat(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Longitude</label>
+                <input type="number" step="0.0001" value={outletLng} onChange={e => setOutletLng(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Del. Radius (km)</label>
+                <input type="number" value={outletRadius} onChange={e => setOutletRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Radius (km)</label>
+                <input type="number" value={outletFreeRadius} onChange={e => setOutletFreeRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Del. Min Order (Rs)</label>
+                <input type="number" value={outletMinOrder} onChange={e => setOutletMinOrder(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Delivery Charge Per Km (Rs)</label>
+                <input type="number" value={outletChargePerKm} onChange={e => setOutletChargePerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Min Order Increment Per Km (Rs)</label>
+                <input type="number" value={outletIncrementPerKm} onChange={e => setOutletIncrementPerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setEditingOutlet(null)}
+                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-white/5 text-slate-400 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!outletName.trim() || !outletPhone.trim()) {
+                    alert('Name and Phone are required.');
+                    return;
+                  }
+                  const updated: OutletConfig = {
+                    ...editingOutlet,
+                    name: outletName.trim(),
+                    address: outletAddress.trim() || undefined,
+                    phone: outletPhone.trim(),
+                    latitude: parseFloat(outletLat) || 26.85,
+                    longitude: parseFloat(outletLng) || 75.80,
+                    deliveryRadiusKm: parseFloat(outletRadius) || 7,
+                    freeDeliveryRadiusKm: parseFloat(outletFreeRadius) || 3,
+                    freeDeliveryMinimumOrder: parseFloat(outletMinOrder) || 150,
+                    minimumOrderIncrementPerKm: parseFloat(outletIncrementPerKm) || 0,
+                    deliveryChargePerKm: parseFloat(outletChargePerKm) || 15,
+                    managerName: outletManager.trim() || undefined,
+                  };
+                  try {
+                    await saveOutletToServer(updated);
+                    alert('Outlet updated successfully.');
+                    setEditingOutlet(null);
+                    onRefresh();
+                  } catch {
+                    alert('Failed to update outlet.');
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-green-700 hover:bg-green-600 text-white"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-4 md:grid-cols-2">
           {outlets.map((outlet) => (
-            <div key={outlet.id} className={`rounded-3xl p-5 border border-white/10 shadow-2xl glass-card transition-premium ${!outlet.enabled ? 'opacity-40 grayscale-[20%]' : ''}`}>
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-lg font-display font-bold">{outlet.name}</span>
-                <button
-                  onClick={() => toggleOutletEnabled(outlet)}
-                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
-                    outlet.enabled ? 'bg-green-600/20 border border-green-500 text-green-300' : 'bg-red-600/20 border border-red-500 text-red-300'
-                  }`}
-                >
-                  {outlet.enabled ? 'Live' : 'Inactive'}
-                </button>
+            <div key={outlet.id} className={`rounded-3xl p-5 border border-white/10 shadow-2xl glass-card transition-premium flex flex-col justify-between ${!outlet.enabled ? 'opacity-40 grayscale-[20%]' : ''}`}>
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-lg font-display font-bold">{outlet.name}</span>
+                  <button
+                    onClick={() => toggleOutletEnabled(outlet)}
+                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
+                      outlet.enabled ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/45 animate-fade-in' : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/45 animate-fade-in'
+                    }`}
+                  >
+                    {outlet.enabled ? 'Live' : 'Inactive'}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 font-medium mb-3">📍 Address: {outlet.address || 'Not specified'}</p>
+                <div className="text-xs text-slate-350 space-y-1 font-semibold mb-4">
+                  <div>Phone: <span className="text-white font-bold">{outlet.phone}</span></div>
+                  {outlet.managerName && <div>Manager: <span className="text-white font-bold">{outlet.managerName}</span></div>}
+                  <div>Coords: <span className="text-white/80">{outlet.latitude}, {outlet.longitude}</span></div>
+                  <div>Radius: <span className="text-red-400 font-bold">{outlet.deliveryRadiusKm} Km</span> (Free under {outlet.freeDeliveryRadiusKm} Km)</div>
+                  <div>Min Order Free Delivery: <span className="text-green-400 font-bold">Rs {outlet.freeDeliveryMinimumOrder}</span></div>
+                  <div>Charges: <span className="text-orange-400 font-bold">Rs {outlet.deliveryChargePerKm}/km</span> (+ Rs {outlet.minimumOrderIncrementPerKm}/km min order step)</div>
+                </div>
               </div>
-              <p className="text-xs text-slate-400 font-medium mb-3">📍 Address: {outlet.address || 'Not specified'}</p>
-              <div className="text-xs text-slate-300 space-y-1 font-semibold">
-                <div>Radius: <span className="text-red-400 font-bold">{outlet.deliveryRadiusKm} Km</span></div>
-                <div>Min Order Free Delivery: <span className="text-green-400 font-bold">Rs {outlet.freeDeliveryMinimumOrder}</span></div>
-              </div>
+              {session.role === 'admin' && (
+                <div className="mt-2 pt-3 border-t border-white/10 flex gap-2">
+                  <button
+                    onClick={() => startEditOutlet(outlet)}
+                    className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (confirm(`Are you sure you want to DELETE the outlet "${outlet.name}"? This action cannot be undone.`)) {
+                        try {
+                          await deleteOutletFromServer(outlet.id);
+                          alert('Outlet deleted successfully.');
+                          onRefresh();
+                        } catch (err: any) {
+                          alert(err.message || 'Failed to delete outlet.');
+                        }
+                      }
+                    }}
+                    className="rounded-xl bg-red-850 hover:bg-red-700 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+                  >
+                    🗑️ Delete
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
       </section>
     );
   }
+
+  const sundayDhamakaCount = React.useMemo(() => {
+    if (!orders) return 0;
+    return orders.filter((order) =>
+      order.items.some((item) => item.appliedOfferId === 'offer-sunday-dhamaka' || item.sourceOfferId === 'offer-sunday-dhamaka')
+    ).length;
+  }, [orders]);
 
   if (activeTab === 'offers') {
     return (
@@ -285,7 +579,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                 <button
                   onClick={() => toggleOfferEnabled(offer)}
                   className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
-                    offer.enabled ? 'bg-green-600/20 border border-green-500 text-green-300' : 'bg-red-600/20 border border-red-500 text-red-300'
+                    offer.enabled ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/40' : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/40'
                   }`}
                 >
                   {offer.enabled ? 'Enabled' : 'Disabled'}
@@ -294,6 +588,11 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
               <p className="text-xs text-slate-400 font-medium mb-3">💬 Display: {offer.displayText}</p>
               <div className="text-xs text-slate-300 space-y-1 font-semibold">
                 <div>Condition: <span className="text-red-400 font-bold">{offer.condition}</span></div>
+                {offer.id === 'offer-sunday-dhamaka' && (
+                  <div className="mt-2 text-emerald-400 font-bold">
+                    🎉 Total Sunday Dhamaka Orders: {sundayDhamakaCount}
+                  </div>
+                )}
               </div>
             </div>
           ))}

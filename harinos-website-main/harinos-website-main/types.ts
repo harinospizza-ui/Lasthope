@@ -54,6 +54,7 @@ export interface OutletConfig {
   freeDeliveryMinimumOrder: number;
   minimumOrderIncrementPerKm: number;
   deliveryChargePerKm: number;
+  managerName?: string;
 }
 
 export interface CustomerLocation {
@@ -68,6 +69,7 @@ export interface CartItem extends MenuItem {
   basePrice: number;
   isOfferBonus?: boolean;
   sourceOfferId?: string;
+  originalPrice?: number;
 }
 
 export interface PricedCartItem extends CartItem {
@@ -161,6 +163,11 @@ export interface CustomerProfile {
   createdAt: string;
   walletBalance?: number;
   rewardPoints?: number;
+  referralCodeUsed?: boolean;
+  referralAttemptsRemaining?: number;
+  referralLocked?: boolean;
+  referralAppliedAt?: string;
+  status?: 'active' | 'blocked' | 'removed';
 }
 
 export interface WalletTransaction {

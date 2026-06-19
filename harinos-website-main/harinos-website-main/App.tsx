@@ -59,6 +59,16 @@ interface InAppNotification {
 const APP_HISTORY_NAMESPACE = 'harinos-ui';
 const CUSTOMER_CARE_WHATSAPP_URL = 'https://wa.me/917818958571';
 
+const SUNDAY_DHAMAKA_CARD: OfferCard = {
+  id: 'offer-sunday-dhamaka',
+  enabled: true,
+  image: '/images/hari.jpeg',
+  offerTitle: 'Sunday Dhamaka',
+  displayText: 'Buy any Large Pizza and get a matching Regular Pizza FREE!',
+  condition: 'Automatic buy 1 Large Pizza get 1 Regular free. Sunday only.',
+  notifyCustomers: true,
+};
+
 type AppScreen = 'menu' | 'orders' | 'category' | 'cart' | 'payment' | 'success';
 
 interface ResolvedOrderContext {
@@ -277,12 +287,14 @@ const App: React.FC = () => {
         }
 
         const offerList = await getServerOffers();
+        const hasSundayDhamaka = offerList.some(o => o.id === 'offer-sunday-dhamaka');
+        const finalOffers = hasSundayDhamaka ? offerList : [SUNDAY_DHAMAKA_CARD, ...offerList];
         if (offerList.length === 0) {
           console.log('Seeding database offers...');
-          await seedOffersToServer(OFFER_CARDS);
-          setOffers(OFFER_CARDS);
+          await seedOffersToServer(finalOffers);
+          setOffers(finalOffers);
         } else {
-          setOffers(offerList);
+          setOffers(finalOffers);
         }
       } catch (err) {
         console.error('Failed to load menu/outlets/offers:', err);
@@ -305,7 +317,11 @@ const App: React.FC = () => {
 
     unsubscribeOffers = subscribeServerOffers(
       (offers) => {
-        if (offers.length > 0) setOffers(offers);
+        if (offers.length > 0) {
+          const hasSundayDhamaka = offers.some(o => o.id === 'offer-sunday-dhamaka');
+          const finalOffers = hasSundayDhamaka ? offers : [SUNDAY_DHAMAKA_CARD, ...offers];
+          setOffers(finalOffers);
+        }
       },
       () => undefined
     );
@@ -499,6 +515,12 @@ const App: React.FC = () => {
         const customers = await getServerCustomers();
         const fresh = customers.find((c) => c.id === customerProfile.id);
         if (fresh && isMounted) {
+          if (fresh.status === 'blocked' || fresh.status === 'removed') {
+            alert('Your account has been deactivated or blocked by an administrator. You will be logged out.');
+            localStorage.removeItem('harinos_customer_profile');
+            setCustomerProfile(null);
+            return;
+          }
           const oldBalance = customerProfileRef.current?.walletBalance ?? 0;
           const newBalance = fresh.walletBalance ?? 0;
           if (newBalance > oldBalance) {

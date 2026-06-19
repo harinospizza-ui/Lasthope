@@ -360,6 +360,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const order = snap.data() as any;
       const previousStatus = order.status || 'new';
 
+      if (previousStatus === 'cancelled') {
+        res.status(400).json({ success: false, message: 'Cancelled orders cannot be modified.' });
+        return;
+      }
+
       const processOrderStatusUpdate = (orderData: any) => {
         orderData.status = status;
         orderData.statusUpdatedAt = new Date().toISOString();

@@ -1,4 +1,4 @@
-﻿
+
 import { MenuItem, Category, OfferCard, OutletConfig } from './types';
 
 // Edit only these outlet objects to route customers to the nearest outlet automatically.
@@ -406,28 +406,28 @@ export const MENU_ITEMS: MenuItem[] = [
     available: true,
     sizes: [{ label: 'Half', price: 60 }, { label: 'Full', price: 90 }]
   },
-  //{
-    //id: 'm5_v',
-    //name: "Veg Crunchy Momos",
-    //description: "Extra crispy breaded veg momos.",
-    //price: 70,
-    //category: Category.MOMOS_FRIES,
-    //image: "/images/crunchymomos.jpeg",
-    //vegetarian: true,
-    //available: true,
-    //sizes: [{ label: 'Half', price: 70 }, { label: 'Full', price: 100 }]
-  //},
-  //{
-    //id: 'm5_s',
-    //name: "Soya Crunchy Momos",
-    //description: "Breaded crunchy soya dumplings.",
-    //price: 60,
-    //category: Category.MOMOS_FRIES,
-    //image: "/images/crunchymomos.jpeg",
-    //vegetarian: true,
-    //available: true,
-    //sizes: [{ label: 'Half', price: 60 }, { label: 'Full', price: 90 }]
-  //},
+  {
+    id: 'm5_v',
+    name: "Veg Crunchy Momos",
+    description: "Extra crispy breaded veg momos.",
+    price: 70,
+    category: Category.MOMOS_FRIES,
+    image: "/images/crunchymomos.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Half', price: 70 }, { label: 'Full', price: 100 }]
+  },
+  {
+    id: 'm5_s',
+    name: "Soya Crunchy Momos",
+    description: "Breaded crunchy soya dumplings.",
+    price: 60,
+    category: Category.MOMOS_FRIES,
+    image: "/images/crunchymomos.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Half', price: 60 }, { label: 'Full', price: 90 }]
+  },
   {
     id: 'm6_v',
     name: "Veg Gravy Momos",
@@ -509,7 +509,7 @@ export const MENU_ITEMS: MenuItem[] = [
 
   // --- SIDE ORDERS & SNACKS ---
   { id: 's_cl', name: "Choco Lava Cake", description: "Molten chocolate center cake.", price: 60, category: Category.SIDES, image: "/images/chocolava.jpeg", vegetarian: true, available: true },
-  //{ id: 's_gb', name: "Garlic Bread", description: "Freshly baked garlic butter bread.", price: 80, category: Category.SIDES, image: "/images/garlicbread.jpeg", vegetarian: true, available: true },
+  { id: 's_gb', name: "Garlic Bread", description: "Freshly baked garlic butter bread.", price: 80, category: Category.SIDES, image: "/images/garlicbread.jpeg", vegetarian: true, available: true },
   { id: 's_sg', name: "Stuffed Garlic Bread", description: "Loaded with cheese, corn, and onion.", price: 120, category: Category.SIDES, image: "/images/stuffed.jpeg", vegetarian: true, available: true },
   {
     id: 's_zp',

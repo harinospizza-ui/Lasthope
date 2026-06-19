@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CustomerProfile, WalletTransaction, AdminSession } from '../types';
 import { StorageService } from '../services/storage';
-import { saveCustomerToServer, saveWalletTransactionToServer, getServerCustomers } from '../services/orderApi';
+import { saveCustomerToServer, saveWalletTransactionToServer, getServerCustomers, deleteCustomerFromServer } from '../services/orderApi';
 
 interface AdminWalletsProps {
   session: AdminSession;
@@ -19,6 +19,11 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
   onVerifyCustomer,
 }) => {
   const [walletSearchQuery, setWalletSearchQuery] = useState('');
+  const [editingCustomer, setEditingCustomer] = useState<CustomerProfile | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
 
   const normalizePhoneForWhatsApp = (phone: string): string => {
     const digits = phone.replace(/\D/g, '');
@@ -56,7 +61,208 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
       {/* Customer Verification Section */}
       <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 mb-6">
-        <h4 className="font-display font-bold text-lg mb-4 text-red-300">Customer Verification Management</h4>
+        <div className="flex justify-between items-center mb-4">
+          <h4 className="font-display font-bold text-lg text-red-300">Customer Management</h4>
+          {session.role === 'admin' && (
+            <button
+              onClick={() => {
+                setShowAddForm(true);
+                setEditingCustomer(null);
+                setNewName('');
+                setNewPhone('');
+                setNewEmail('');
+              }}
+              className="rounded-xl bg-red-650 hover:bg-red-655 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+            >
+              ➕ Add Customer
+            </button>
+          )}
+        </div>
+
+        {/* Add Customer Form */}
+        {showAddForm && (
+          <div className="mb-6 p-4 border border-white/10 bg-white/[0.04] rounded-2xl space-y-3">
+            <h5 className="text-sm font-bold text-red-300 uppercase tracking-wider">Create New Customer Profile</h5>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  placeholder="John Doe"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="9876543210"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="john@example.com"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowAddForm(false)}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-white/5 text-slate-400 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const nameVal = newName.trim();
+                  const phoneVal = newPhone.trim();
+                  const emailVal = newEmail.trim();
+                  if (!nameVal || !phoneVal) {
+                    alert('Name and Phone number are required.');
+                    return;
+                  }
+                  if (phoneVal.length !== 10) {
+                    alert('Phone number must be exactly 10 digits.');
+                    return;
+                  }
+
+                  try {
+                    const allCusts = await getServerCustomers();
+                    const cleanPhone = (p: string) => p.replace(/\D/g, '');
+                    const duplicate = allCusts.find((c) => cleanPhone(c.phone) === cleanPhone(phoneVal));
+                    if (duplicate) {
+                      alert(`A customer with phone number ${phoneVal} already exists.`);
+                      return;
+                    }
+
+                    const referralCode = Math.floor(65536 + Math.random() * 983039).toString(16).toUpperCase();
+                    const newCust: CustomerProfile = {
+                      id: `cust_${Date.now()}`,
+                      name: nameVal,
+                      phone: phoneVal,
+                      email: emailVal || undefined,
+                      loginMethod: 'phone',
+                      verified: true,
+                      referralCode,
+                      createdAt: new Date().toISOString(),
+                      walletBalance: 0,
+                      rewardPoints: 0,
+                      status: 'active',
+                      referralAttemptsRemaining: 3,
+                      referralCodeUsed: false,
+                      referralLocked: false,
+                    };
+                    await saveCustomerToServer(newCust);
+                    alert('Customer created successfully.');
+                    setShowAddForm(false);
+                    onRefresh();
+                  } catch (err: any) {
+                    alert(err.message || 'Failed to create customer.');
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-green-700 hover:bg-green-600 text-white"
+              >
+                Create Customer
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Customer Form */}
+        {editingCustomer && (
+          <div className="mb-6 p-4 border border-white/10 bg-white/[0.04] rounded-2xl space-y-3">
+            <h5 className="text-sm font-bold text-red-300 uppercase tracking-wider">Edit Customer Profile</h5>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setEditingCustomer(null)}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-white/5 text-slate-400 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const nameVal = newName.trim();
+                  const phoneVal = newPhone.trim();
+                  const emailVal = newEmail.trim();
+                  if (!nameVal || !phoneVal) {
+                    alert('Name and Phone number are required.');
+                    return;
+                  }
+                  if (phoneVal.length !== 10) {
+                    alert('Phone number must be exactly 10 digits.');
+                    return;
+                  }
+
+                  try {
+                    const allCusts = await getServerCustomers();
+                    const cleanPhone = (p: string) => p.replace(/\D/g, '');
+                    const duplicate = allCusts.find((c) => c.id !== editingCustomer.id && cleanPhone(c.phone) === cleanPhone(phoneVal));
+                    if (duplicate) {
+                      alert(`Another customer with phone number ${phoneVal} already exists.`);
+                      return;
+                    }
+
+                    const updated: CustomerProfile = {
+                      ...editingCustomer,
+                      name: nameVal,
+                      phone: phoneVal,
+                      email: emailVal || undefined,
+                    };
+                    await saveCustomerToServer(updated);
+                    alert('Customer updated successfully.');
+                    setEditingCustomer(null);
+                    onRefresh();
+                  } catch (err: any) {
+                    alert(err.message || 'Failed to update customer.');
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-green-700 hover:bg-green-600 text-white"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-3 md:grid-cols-2">
           {filteredCustomers.map((customer) => {
             const verified = StorageService.getVerifiedCustomers()[customer.id] || customer.verified;
@@ -74,35 +280,69 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                     <div className="text-[10px] text-red-400 mt-1 font-bold">Referral Code: {customer.referralCode}</div>
                   )}
                 </div>
-                {!verified && (
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={async () => {
-                        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-                        try {
-                          const updatedCustomer = { ...customer, otp };
-                          await saveCustomerToServer(updatedCustomer);
-                          alert(`OTP Generated: ${otp}`);
-                          const messageText = `Your Harino's verification OTP is ${otp}. Please enter this OTP in your Profile section to verify your account.`;
-                          const whatsappUrl = `https://wa.me/${normalizePhoneForWhatsApp(customer.phone)}?text=${encodeURIComponent(messageText)}`;
-                          window.open(whatsappUrl, '_blank');
-                          onRefresh();
-                        } catch (err) {
-                          alert('Failed to generate OTP.');
-                        }
-                      }}
-                      className="rounded-xl bg-green-700 hover:bg-green-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-premium active:scale-95 cursor-pointer"
-                    >
-                      Send OTP
-                    </button>
-                    <button
-                      onClick={() => onVerifyCustomer(customer)}
-                      className="rounded-xl bg-red-600 hover:bg-red-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-premium active:scale-95 cursor-pointer"
-                    >
-                      Verify Manually
-                    </button>
-                  </div>
-                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {!verified && (
+                    <>
+                      <button
+                        onClick={async () => {
+                          const otp = Math.floor(100000 + Math.random() * 900000).toString();
+                          try {
+                            const updatedCustomer = { ...customer, otp };
+                            await saveCustomerToServer(updatedCustomer);
+                            alert(`OTP Generated: ${otp}`);
+                            const messageText = `Your Harino's verification OTP is ${otp}. Please enter this OTP in your Profile section to verify your account.`;
+                            const whatsappUrl = `https://wa.me/${normalizePhoneForWhatsApp(customer.phone)}?text=${encodeURIComponent(messageText)}`;
+                            window.open(whatsappUrl, '_blank');
+                            onRefresh();
+                          } catch (err) {
+                            alert('Failed to generate OTP.');
+                          }
+                        }}
+                        className="rounded-xl bg-green-700 hover:bg-green-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-premium active:scale-95 cursor-pointer animate-fade-in"
+                      >
+                        Send OTP
+                      </button>
+                      <button
+                        onClick={() => onVerifyCustomer(customer)}
+                        className="rounded-xl bg-red-650 hover:bg-red-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-premium active:scale-95 cursor-pointer animate-fade-in"
+                      >
+                        Verify Manually
+                      </button>
+                    </>
+                  )}
+                  {session.role === 'admin' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEditingCustomer(customer);
+                          setShowAddForm(false);
+                          setNewName(customer.name);
+                          setNewPhone(customer.phone);
+                          setNewEmail(customer.email || '');
+                        }}
+                        className="rounded-xl bg-blue-600 hover:bg-blue-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-premium active:scale-95 cursor-pointer"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Are you sure you want to REMOVE ${customer.name}? This will permanently block their number.`)) {
+                            try {
+                              await deleteCustomerFromServer(customer.id);
+                              alert('Customer removed and number blocked.');
+                              onRefresh();
+                            } catch (err: any) {
+                              alert(err.message || 'Failed to delete customer.');
+                            }
+                          }
+                        }}
+                        className="rounded-xl bg-red-800 hover:bg-red-700 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-premium active:scale-95 cursor-pointer"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -124,7 +364,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                 <div className="text-[10px] text-slate-500 mt-1">Requested: {new Date(tx.createdAt).toLocaleString()}</div>
                 <div className="mt-1.5 text-xs font-black text-amber-300">Amount: Rs {tx.amount}</div>
               </div>
-              <div>
+              <div className="flex gap-2">
                 <button
                   onClick={async () => {
                     try {
@@ -144,9 +384,27 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                       alert(err.message || 'Failed to approve transaction.');
                     }
                   }}
-                  className="rounded-xl bg-green-700 hover:bg-green-600 text-white font-bold px-4 py-2 text-xs uppercase tracking-wider transition-premium active:scale-95"
+                  className="rounded-xl bg-green-700 hover:bg-green-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
                 >
                   Approve
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      if (!confirm(`Are you sure you want to REJECT this top-up request of Rs ${tx.amount} for ${tx.customerName}?`)) {
+                        return;
+                      }
+                      const updatedTx: WalletTransaction = { ...tx, status: 'failed' };
+                      await saveWalletTransactionToServer(updatedTx);
+                      alert(`Rejected top-up request of Rs ${tx.amount} for ${tx.customerName}`);
+                      onRefresh();
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to reject transaction.');
+                    }
+                  }}
+                  className="rounded-xl bg-red-650 hover:bg-red-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+                >
+                  Reject
                 </button>
               </div>
             </div>

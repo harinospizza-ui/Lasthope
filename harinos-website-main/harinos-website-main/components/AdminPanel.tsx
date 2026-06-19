@@ -382,6 +382,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
             offers={offers}
             onRefresh={refresh}
             activeTab={activeTab}
+            orders={orders}
           />
         )}
         {activeTab === 'dashboard' && session.role !== 'staff' && (

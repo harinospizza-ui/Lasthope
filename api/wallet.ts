@@ -48,17 +48,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const db = getFirestore();
-    const caller = authenticateRequest(req);
-    if (!caller) {
-      res.status(401).json({ success: false, message: 'Unauthorized.' });
-      return;
-    }
-    if (caller.role !== 'admin' && caller.role !== 'manager') {
-      res.status(403).json({ success: false, message: 'Forbidden.' });
-      return;
-    }
-
     if (req.method === 'GET') {
+      const caller = authenticateRequest(req);
+      if (!caller) {
+        res.status(401).json({ success: false, message: 'Unauthorized.' });
+        return;
+      }
+      if (caller.role !== 'admin' && caller.role !== 'manager') {
+        res.status(403).json({ success: false, message: 'Forbidden.' });
+        return;
+      }
       const snapshot = await db.collection('wallet_transactions').orderBy('createdAt', 'desc').get();
       res.json({ success: true, transactions: snapshot.docs.map((doc) => doc.data()) });
       return;

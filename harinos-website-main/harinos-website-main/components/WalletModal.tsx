@@ -232,81 +232,120 @@ export const WalletModal: React.FC<WalletModalProps> = ({
         )}
 
         {/* Referral Code Entry */}
-        {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && !customerProfile.referralApplied && (customerProfile.referralAttempts ?? 0) < 3 && (
+        {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
           <div className="mb-6 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl">
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-              Have a Referral Code? (Attempts remaining: {3 - (customerProfile.referralAttempts ?? 0)})
-            </label>
-            <div className="relative flex items-center border border-slate-200 rounded-xl focus-within:border-red-500 bg-white p-1">
-              <input
-                type="text"
-                placeholder="Enter 5-digit code"
-                value={inputReferralCode}
-                onChange={(e) => setInputReferralCode(e.target.value.toUpperCase().slice(0, 5))}
-                className="w-full pl-3 pr-20 py-2 text-sm font-bold uppercase tracking-wider outline-none bg-transparent"
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  const code = inputReferralCode.trim().toUpperCase();
-                  if (!code) return;
-                  if (code === customerProfile.referralCode) {
-                    alert('You cannot use your own referral code.');
-                    return;
-                  }
+            {(() => {
+              const attemptsRemaining = customerProfile.referralAttemptsRemaining !== undefined 
+                ? customerProfile.referralAttemptsRemaining 
+                : (3 - (customerProfile.referralAttempts ?? 0));
+              const isUsed = !!(customerProfile.referralCodeUsed || customerProfile.referralApplied);
+              const isLocked = !!(customerProfile.referralLocked || attemptsRemaining <= 0 || isUsed);
 
-                  try {
-                    const allCustomers = await getServerCustomers();
-                    const referrer = allCustomers.find((c) => c.referralCode === code && c.verified);
+              if (isUsed) {
+                return (
+                  <div className="text-xs font-bold text-green-650 text-green-600 text-center py-2">
+                    ✓ Referral code applied successfully.
+                  </div>
+                );
+              }
 
-                    if (referrer) {
-                      const updatedReferrer = { ...referrer, rewardPoints: (referrer.rewardPoints ?? 0) + 100 };
-                      const tx: WalletTransaction = {
-                        id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                        customerId: referrer.id,
-                        customerName: referrer.name,
-                        customerPhone: referrer.phone,
-                        amount: 10,
-                        type: 'reward',
-                        status: 'completed',
-                        createdAt: new Date().toISOString()
-                      };
-                      await saveWalletTransactionToServer(tx);
-                      await saveCustomerToServer(updatedReferrer);
+              if (isLocked || attemptsRemaining <= 0) {
+                return (
+                  <div className="text-xs font-bold text-red-500 text-center py-2">
+                    ✗ Referral code entry is permanently locked.
+                  </div>
+                );
+              }
 
-                      const updatedSelf = { ...customerProfile, referralApplied: true, referredBy: code };
-                      StorageService.saveCustomerProfile(updatedSelf);
-                      onProfileChange(updatedSelf);
-                      setInputReferralCode('');
-                      showNotification({
-                        title: 'Referral Applied',
-                        message: 'Referral code applied! Reward sent to referrer.',
-                        type: 'success'
-                      });
-                    } else {
-                      const attempts = (customerProfile.referralAttempts ?? 0) + 1;
-                      const updatedSelf = {
-                        ...customerProfile,
-                        referralAttempts: attempts,
-                        referralApplied: attempts >= 3 ? true : undefined
-                      };
-                      StorageService.saveCustomerProfile(updatedSelf);
-                      onProfileChange(updatedSelf);
-                      showNotification({
-                        title: 'Invalid Code',
-                        message: `Invalid referral code. Remaining attempts: ${3 - attempts}`,
-                        type: 'warning'
-                      });
-                    }
-                  } catch {
-                    showNotification({ title: 'Error', message: 'Failed to apply referral.', type: 'error' });
-                  }
-                }}
-                className="absolute right-1 top-1 bottom-1 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md"
-              >
-                Apply
-              </button>
-            </div>
+              return (
+                <>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Have a Referral Code? (Attempts remaining: {attemptsRemaining})
+                  </label>
+                  <div className="relative flex items-center border border-slate-200 rounded-xl focus-within:border-red-500 bg-white p-1">
+                    <input
+                      type="text"
+                      placeholder="Enter 5-digit code"
+                      value={inputReferralCode}
+                      onChange={(e) => setInputReferralCode(e.target.value.toUpperCase().slice(0, 5))}
+                      className="w-full pl-3 pr-20 py-2 text-sm font-bold uppercase tracking-wider outline-none bg-transparent text-slate-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const code = inputReferralCode.trim().toUpperCase();
+                        if (!code) return;
+                        if (code === customerProfile.referralCode) {
+                          alert('You cannot use your own referral code.');
+                          return;
+                        }
+
+                        try {
+                          const allCustomers = await getServerCustomers();
+                          const referrer = allCustomers.find((c) => c.referralCode === code && c.verified);
+
+                          if (referrer) {
+                            const updatedReferrer = { ...referrer, rewardPoints: (referrer.rewardPoints ?? 0) + 100 };
+                            const tx: WalletTransaction = {
+                              id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                              customerId: referrer.id,
+                              customerName: referrer.name,
+                              customerPhone: referrer.phone,
+                              amount: 10,
+                              type: 'reward',
+                              status: 'completed',
+                              createdAt: new Date().toISOString()
+                            };
+                            await saveWalletTransactionToServer(tx);
+                            await saveCustomerToServer(updatedReferrer);
+
+                            const updatedSelf: CustomerProfile = {
+                              ...customerProfile,
+                              referralApplied: true,
+                              referralCodeUsed: true,
+                              referralLocked: true,
+                              referredBy: code,
+                              referralAppliedAt: new Date().toISOString()
+                            };
+                            await saveCustomerToServer(updatedSelf);
+                            StorageService.saveCustomerProfile(updatedSelf);
+                            onProfileChange(updatedSelf);
+                            setInputReferralCode('');
+                            showNotification({
+                              title: 'Referral Applied',
+                              message: 'Referral code applied! Reward sent to referrer.',
+                              type: 'success'
+                            });
+                          } else {
+                            const nextAttemptsRemaining = attemptsRemaining - 1;
+                            const updatedSelf: CustomerProfile = {
+                              ...customerProfile,
+                              referralAttempts: (customerProfile.referralAttempts ?? 0) + 1,
+                              referralAttemptsRemaining: nextAttemptsRemaining,
+                              referralLocked: nextAttemptsRemaining <= 0,
+                              referralApplied: nextAttemptsRemaining <= 0 ? true : undefined
+                            };
+                            await saveCustomerToServer(updatedSelf);
+                            StorageService.saveCustomerProfile(updatedSelf);
+                            onProfileChange(updatedSelf);
+                            showNotification({
+                              title: 'Invalid Code',
+                              message: `Invalid referral code. Remaining attempts: ${nextAttemptsRemaining}`,
+                              type: 'warning'
+                            });
+                          }
+                        } catch (err: any) {
+                          showNotification({ title: 'Error', message: err.message || 'Failed to apply referral.', type: 'error' });
+                        }
+                      }}
+                      className="absolute right-1 top-1 bottom-1 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 

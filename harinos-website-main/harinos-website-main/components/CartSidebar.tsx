@@ -67,6 +67,14 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   const effectiveDeliveryFee = orderType === 'delivery' && deliveryFee > 0 ? deliveryFee : 0;
   const finalTotal = Math.max(0, total + effectiveDeliveryFee - walletDiscount - pointsDiscount);
   const includedGst = total - total / 1.05;
+  const totalSavings = items.reduce((sum, item) => {
+    if (item.isOfferBonus) {
+      return sum + (item.originalPrice ?? 0) * item.quantity;
+    } else {
+      const normalSavings = (item.basePrice - item.discountedPrice) * item.quantity;
+      return sum + normalSavings;
+    }
+  }, 0);
   const lastOrder = pastOrders.length > 0 ? pastOrders[0] : null;
   const outletForDisplay = orderType === 'delivery' ? nearestOutlet : selectedOutlet;
   const requiredMinimumOrder =
@@ -374,7 +382,14 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                               <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-700">
                                 Included with unlocked offer
                               </span>
-                              <span className="font-display text-sm font-bold text-emerald-700">Free</span>
+                              <div className="flex items-center gap-1.5">
+                                {item.originalPrice !== undefined && (
+                                  <span className="text-xs text-slate-400 line-through font-bold">
+                                    Rs {(item.originalPrice * item.quantity).toFixed(2)}
+                                  </span>
+                                )}
+                                <span className="font-display text-sm font-bold text-emerald-700">Free</span>
+                              </div>
                             </>
                           ) : (
                             <>
@@ -488,6 +503,12 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                   <div className="flex justify-between text-green-400 font-black">
                     <span>Points Applied</span>
                     <span>-Rs {pointsDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+                {totalSavings > 0 && (
+                  <div className="flex justify-between text-emerald-400 font-black">
+                    <span>Total Savings</span>
+                    <span>Rs {totalSavings.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="my-2 h-px border-t border-dashed border-white/20" />

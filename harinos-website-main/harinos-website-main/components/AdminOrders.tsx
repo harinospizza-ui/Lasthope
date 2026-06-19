@@ -231,12 +231,43 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-2">
-                        <button onClick={() => onUpdateStatus(order, 'preparing')} className="rounded-xl bg-amber-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-amber-500 transition-premium">Preparing</button>
-                        <button onClick={() => onUpdateStatus(order, order.orderType === 'delivery' ? 'out_for_delivery' : 'ready')} className="rounded-xl bg-blue-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-blue-500 transition-premium">Ready/Out</button>
-                        <button onClick={() => onUpdateStatus(order, 'done')} className="rounded-xl bg-green-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-green-600 transition-premium">Done</button>
-                        {session.role !== 'staff' && (
-                          <button onClick={() => handleCancelClick(order.id)} className="rounded-xl bg-red-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-red-650 transition-premium">Cancel</button>
-                        )}
+                        {(() => {
+                          const isCancelled = order.status === 'cancelled';
+                          return (
+                            <>
+                              <button
+                                onClick={() => onUpdateStatus(order, 'preparing')}
+                                disabled={isCancelled}
+                                className={`rounded-xl bg-amber-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium ${isCancelled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-amber-500'}`}
+                              >
+                                Preparing
+                              </button>
+                              <button
+                                onClick={() => onUpdateStatus(order, order.orderType === 'delivery' ? 'out_for_delivery' : 'ready')}
+                                disabled={isCancelled}
+                                className={`rounded-xl bg-blue-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium ${isCancelled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-blue-500'}`}
+                              >
+                                Ready/Out
+                              </button>
+                              <button
+                                onClick={() => onUpdateStatus(order, 'done')}
+                                disabled={isCancelled}
+                                className={`rounded-xl bg-green-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium ${isCancelled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-green-600'}`}
+                              >
+                                Done
+                              </button>
+                              {session.role !== 'staff' && (
+                                <button
+                                  onClick={() => handleCancelClick(order.id)}
+                                  disabled={isCancelled}
+                                  className={`rounded-xl bg-red-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium ${isCancelled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-red-650'}`}
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
                         <button onClick={() => onPrint(order)} className="rounded-xl border border-slate-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/10 transition-premium">Print</button>
                         {order.customerPhone && (
                           <a

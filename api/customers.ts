@@ -94,8 +94,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
+      const cleanPhone = (p: string) => p.replace(/\D/g, '');
+      const targetPhone = cleanPhone(profile.phone);
+
+      const blockedRef = db.collection('blocked_customers').doc(targetPhone);
+      const blockedSnap = await blockedRef.get();
+      if (blockedSnap.exists) {
+        res.status(403).json({ success: false, message: 'This mobile number is permanently blocked.' });
+        return;
+      }
+
+      if (profile.status === 'blocked') {
+        await blockedRef.set({
+          phone: targetPhone,
+          blockedAt: new Date().toISOString(),
+          customerId: profile.id,
+          name: profile.name
+        });
+      } else {
+        // If status was active/unblocked, remove from blocked list
+        await blockedRef.delete();
+      }
+
       await db.collection('customers').doc(profile.id).set(profile, { merge: true });
       res.status(201).json({ success: true, customer: profile });
+      return;
+    }
+
+    // 4. DELETE remove customer (/api/customers)
+    if (req.method === 'DELETE') {
+      const { customerId } = req.query as { customerId?: string };
+      if (!customerId) {
+        res.status(400).json({ success: false, message: 'Missing customerId parameter.' });
+        return;
+      }
+
+      const docRef = db.collection('customers').doc(decodeURIComponent(customerId));
+      const snap = await docRef.get();
+      if (snap.exists) {
+        const customerData = snap.data() as any;
+        const cleanPhone = (p: string) => p.replace(/\D/g, '');
+        const targetPhone = cleanPhone(customerData.phone);
+
+        // Permanently block the phone number
+        await db.collection('blocked_customers').doc(targetPhone).set({
+          phone: targetPhone,
+          blockedAt: new Date().toISOString(),
+          customerId: customerId,
+          name: customerData.name
+        });
+
+        // Set status to removed
+        await docRef.set({ ...customerData, status: 'removed' }, { merge: true });
+      }
+
+      res.json({ success: true });
       return;
     }
 

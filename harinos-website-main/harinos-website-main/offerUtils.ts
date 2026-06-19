@@ -202,6 +202,10 @@ export const getApplicableDiscountOffer = (
   itemAmount: number,
   cartAmount: number,
 ): OfferCard | undefined => {
+  if (item.category === Category.PIZZA && isSundayDhamakaActive(offers)) {
+    return undefined;
+  }
+
   for (const offer of offers) {
     if (
       !offer.enabled ||
@@ -341,8 +345,49 @@ export const doesOfferConditionMatchCart = (offer: OfferCard, cart: CartItem[]):
   });
 };
 
-export const getAutomaticOfferBonusItems = (cart: CartItem[], offers: OfferCard[]): CartItem[] =>
-  offers
+export const isSundayDhamakaActive = (offers: OfferCard[]): boolean => {
+  const sundayDhamaka = offers.find((o) => o.id === 'offer-sunday-dhamaka');
+  if (!sundayDhamaka || !sundayDhamaka.enabled) return false;
+  return new Date().getDay() === 0;
+};
+
+export const getSundayDhamakaBonusItems = (cart: CartItem[], offers: OfferCard[]): CartItem[] => {
+  if (!isSundayDhamakaActive(offers)) {
+    return [];
+  }
+
+  const bonusItems: CartItem[] = [];
+  const largePizzas = cart.filter(
+    (item) => !item.isOfferBonus && item.category === Category.PIZZA && item.selectedSize === 'Large'
+  );
+
+  for (const item of largePizzas) {
+    const regularItem: CartItem = {
+      ...item,
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      category: item.category,
+      image: item.image,
+      vegetarian: true,
+      available: true,
+      sizes: item.sizes,
+      quantity: item.quantity,
+      selectedSize: 'Regular',
+      basePrice: 0,
+      isOfferBonus: true,
+      sourceOfferId: 'offer-sunday-dhamaka',
+      originalPrice: getItemBasePrice(item, 'Regular'),
+    };
+    bonusItems.push(regularItem);
+  }
+
+  return bonusItems;
+};
+
+export const getAutomaticOfferBonusItems = (cart: CartItem[], offers: OfferCard[]): CartItem[] => {
+  const standardBonus = offers
     .filter((offer) => offer.enabled && !!offer.additionalItem)
     .flatMap((offer) => {
       if (!doesOfferConditionMatchCart(offer, cart) || !offer.additionalItem) {
@@ -362,6 +407,11 @@ export const getAutomaticOfferBonusItems = (cart: CartItem[], offers: OfferCard[
           basePrice: 0,
           isOfferBonus: true,
           sourceOfferId: offer.id,
+          originalPrice: getItemBasePrice(bonusMenuItem, bonusMenuItem.sizes?.[0]?.label),
         },
       ];
     });
+
+  const sundayBonus = getSundayDhamakaBonusItems(cart, offers);
+  return [...standardBonus, ...sundayBonus];
+};

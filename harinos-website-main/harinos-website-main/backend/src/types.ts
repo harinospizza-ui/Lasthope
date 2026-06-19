@@ -50,6 +50,11 @@ export interface CustomerProfile {
   createdAt: string;
   walletBalance?: number;
   rewardPoints?: number;
+  referralCodeUsed?: boolean;
+  referralAttemptsRemaining?: number;
+  referralLocked?: boolean;
+  referralAppliedAt?: string;
+  status?: 'active' | 'blocked' | 'removed';
 }
 
 export interface WalletTransaction {

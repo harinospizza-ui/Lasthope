@@ -98,6 +98,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    if (req.method === 'DELETE') {
+      const { outletId } = req.query as { outletId?: string };
+      if (!outletId) {
+        res.status(400).json({ success: false, message: 'Missing outletId parameter.' });
+        return;
+      }
+      await db.collection('outlets').doc(decodeURIComponent(outletId)).delete();
+      res.json({ success: true });
+      return;
+    }
+
     res.status(405).json({ success: false, message: 'Method not allowed' });
   } catch (error: any) {
     console.error(error);

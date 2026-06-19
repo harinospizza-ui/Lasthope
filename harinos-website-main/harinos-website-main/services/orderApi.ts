@@ -203,18 +203,30 @@ export const saveCustomerToServer = async (profile: CustomerProfile): Promise<vo
   StorageService.saveAdminCustomers([profile, ...localCusts]);
 
   if (isFirebaseClientConfigured()) {
-    try {
-      await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, profile.id), profile, { merge: true });
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
+    await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, profile.id), profile, { merge: true });
+    return;
   }
 
+  await saveCustomerViaApi(profile);
+};
+
+export const deleteCustomerFromServer = async (customerId: string): Promise<void> => {
+  const localCusts = StorageService.getAdminCustomers().filter((c) => c.id !== customerId);
+  StorageService.saveAdminCustomers(localCusts);
+
   try {
-    await saveCustomerViaApi(profile);
+    const apiBase = getApiBase();
+    if (!apiBase) return;
+    const response = await fetch(`${apiBase}/customers?customerId=${encodeURIComponent(customerId)}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || `Customer delete failed with status ${response.status}.`);
+    }
   } catch (error) {
-    console.warn('API save customer failed:', error);
+    console.warn('API delete customer failed:', error);
+    throw error;
   }
 };
 
@@ -552,6 +564,26 @@ export const saveOutletToServer = async (outlet: OutletConfig): Promise<void> =>
     if (!response.ok) throw new Error(`Outlet save failed with status ${response.status}.`);
   } catch (error) {
     console.warn('API save outlet failed:', error);
+  }
+};
+
+export const deleteOutletFromServer = async (outletId: string): Promise<void> => {
+  const localList = StorageService.getAdminOutlets().filter((o) => o.id !== outletId);
+  StorageService.saveAdminOutlets(localList);
+
+  try {
+    const apiBase = getApiBase();
+    if (!apiBase) return;
+    const response = await fetch(`${apiBase}/outlets?outletId=${encodeURIComponent(outletId)}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || `Outlet delete failed with status ${response.status}.`);
+    }
+  } catch (error) {
+    console.warn('API delete outlet failed:', error);
+    throw error;
   }
 };
 

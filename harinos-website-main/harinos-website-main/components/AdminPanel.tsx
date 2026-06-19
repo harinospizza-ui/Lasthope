@@ -15,6 +15,8 @@ import {
   changeStaffPassword,
   getServerWalletTransactions,
   subscribeServerWalletTransactions,
+  getServerSettings,
+  saveSettingsToServer,
 } from '../services/orderApi';
 import { StorageService } from '../services/storage';
 import { notifyCustomerStatusChange } from '../services/notificationService';
@@ -71,6 +73,7 @@ const receiptHtml = (order: Order): string => `
 <div class="dash"></div>
 <div>Cust: ${order.customerName ?? 'Customer'}</div>
 <div>Ph: ${order.customerPhone ?? ''}</div>
+<div>Payment: ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}</div>
 <div class="dash"></div>
 ${order.items.map((item) => `<div class="row"><span>${item.quantity}x ${item.name}${item.selectedSize ? ` [${item.selectedSize}]` : ''}</span><b>Rs ${Math.round(item.totalPrice)}</b></div>`).join('')}
 <div class="dash"></div>
@@ -114,7 +117,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<CustomerProfile[]>([]);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'orders' | 'wallets' | 'menu' | 'outlets' | 'offers' | 'dashboard'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'wallets' | 'menu' | 'outlets' | 'offers' | 'dashboard' | 'settings'>('orders');
+  const [instagramUrlInput, setInstagramUrlInput] = useState('');
+
 
   // Dynamic config items
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -139,6 +144,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
       void getServerOutlets().then((list) => setOutlets(list)).catch(() => {});
       void getServerOffers().then((list) => setOffers(list)).catch(() => {});
       void getServerWalletTransactions().then((txs) => setTransactions(txs)).catch(() => {});
+      void getServerSettings().then((settings) => setInstagramUrlInput(settings.instagramUrl || '')).catch(() => {});
     }
   }, [session]);
 
@@ -351,6 +357,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
             <button onClick={() => setActiveTab('offers')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'offers' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
               Offers
             </button>
+            <button onClick={() => setActiveTab('settings')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'settings' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
+              Settings
+            </button>
           </>
         )}
       </div>
@@ -391,6 +400,40 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
             orders={orders}
             customers={customers}
           />
+        )}
+        {activeTab === 'settings' && session.role !== 'staff' && (
+          <div className="mx-auto max-w-xl px-4 mt-6">
+            <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-2xl">
+              <h3 className="font-display text-2xl font-bold mb-4">Application Settings</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Instagram Page URL</label>
+                  <input
+                    type="text"
+                    placeholder="https://instagram.com/harinospizza"
+                    value={instagramUrlInput}
+                    onChange={(e) => setInstagramUrlInput(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 font-bold text-white outline-none focus:border-red-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500">Provide the Instagram page URL. If empty, the Instagram social icons will be hidden.</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      await saveSettingsToServer({ instagramUrl: instagramUrlInput.trim() });
+                      alert('Settings saved successfully!');
+                      refresh();
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to save settings.');
+                    }
+                  }}
+                  className="w-full rounded-2xl bg-gradient-premium py-4 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_18px_35px_rgba(220,38,38,0.3)] hover:scale-[1.02] transition-transform"
+                >
+                  Save Settings
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

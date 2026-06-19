@@ -1,4 +1,4 @@
-import { CustomerProfile, FullOrderPayload, OrderStatus, MenuItem, OutletConfig, OfferCard, AdminUser, WalletTransaction } from '../types.js';
+import { CustomerProfile, FullOrderPayload, OrderStatus, MenuItem, OutletConfig, OfferCard, AdminUser, WalletTransaction, AppSettings } from '../types.js';
 
 export interface OrderStore {
   name: string;
@@ -18,7 +18,10 @@ export interface OrderStore {
   saveStaffUser(user: AdminUser): Promise<void>;
   getWalletTransactions(): Promise<WalletTransaction[]>;
   saveWalletTransaction(transaction: WalletTransaction): Promise<void>;
+  getSettings(): Promise<AppSettings>;
+  saveSettings(settings: AppSettings): Promise<void>;
 }
+
 
 export const newestOrdersFirst = (orders: FullOrderPayload[]): FullOrderPayload[] =>
   [...orders].sort(

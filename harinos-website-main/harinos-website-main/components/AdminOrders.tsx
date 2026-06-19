@@ -144,7 +144,10 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                               </span>
                             )}
                           </div>
-                          <div className="mt-1 text-xs text-slate-400 font-bold">{order.outletName} • {order.orderType.toUpperCase()}</div>
+                          <div className="mt-1 text-xs text-slate-400 font-bold">
+                            {order.outletName} • {order.orderType.toUpperCase()} • {order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}
+                          </div>
+
                           <div className="mt-1 text-[10px] text-slate-500 font-medium">
                             🕒 {new Date(order.receivedAt ?? order.date).toLocaleDateString()} {new Date(order.receivedAt ?? order.date).toLocaleTimeString()}
                           </div>

@@ -1,4 +1,4 @@
-import { CustomerProfile, Order, OrderStatus, MenuItem, OutletConfig, OfferCard, WalletTransaction } from '../types';
+import { CustomerProfile, Order, OrderStatus, MenuItem, OutletConfig, OfferCard, WalletTransaction, AppSettings } from '../types';
 import {
   collection,
   doc,
@@ -824,3 +824,26 @@ export const subscribeServerWalletTransactions = (
     (error) => onError(error),
   );
 };
+
+export const getServerSettings = async (): Promise<AppSettings> => {
+  const apiBase = getApiBase();
+  if (!apiBase) return {};
+  const response = await fetch(`${apiBase}/settings`);
+  if (!response.ok) throw new Error('Failed to load settings.');
+  const data = await response.json();
+  return data.settings || {};
+};
+
+export const saveSettingsToServer = async (settings: AppSettings): Promise<void> => {
+  const apiBase = getApiBase();
+  if (!apiBase) return;
+  const response = await fetch(`${apiBase}/settings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  });
+  if (!response.ok) throw new Error('Failed to save settings.');
+};
+

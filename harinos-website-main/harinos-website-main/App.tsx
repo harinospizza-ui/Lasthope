@@ -18,7 +18,7 @@ import { MENU_ITEMS, OFFER_CARDS, OUTLET_LOCATIONS } from './constants';
 import { StorageService } from './services/storage';
 import { setDynamicFirebaseConfig } from './services/firebaseClient';
 import { NotificationService } from './services/notification';
-import { getServerOrders, saveCustomerToServer, saveFullOrderToServer, subscribeServerOrder, getServerMenuItems, seedMenuItemsToServer, subscribeServerMenuItems, getServerOutlets, seedOutletsToServer, subscribeServerOutlets, getServerOffers, seedOffersToServer, subscribeServerOffers, saveWalletTransactionToServer, getServerCustomers, verifyServerCustomer } from './services/orderApi';
+import { getServerOrders, saveCustomerToServer, saveFullOrderToServer, subscribeServerOrder, getServerMenuItems, seedMenuItemsToServer, subscribeServerMenuItems, getServerOutlets, seedOutletsToServer, subscribeServerOutlets, getServerOffers, seedOffersToServer, subscribeServerOffers, saveWalletTransactionToServer, getServerCustomers, verifyServerCustomer, getServerSettings } from './services/orderApi';
 import { copyTextToClipboard, getNotificationPermission } from './services/browserSupport';
 import { notifyStaffNewOrder, requestNotificationPermission } from './services/notificationService';
 import {
@@ -114,6 +114,7 @@ const receiptHtml = (order: Order): string => `
 <div class="dash"></div>
 <div>Cust: ${order.customerName ?? 'Customer'}</div>
 <div>Ph: ${order.customerPhone ?? ''}</div>
+<div>Payment: ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}</div>
 <div class="dash"></div>
 ${order.items.map((item) => `<div class="row"><span>${item.quantity}x ${item.name}${item.selectedSize ? ` [${item.selectedSize}]` : ''}</span><b>Rs ${Math.round(item.totalPrice)}</b></div>`).join('')}
 <div class="dash"></div>
@@ -223,6 +224,7 @@ const App: React.FC = () => {
   const [inputOtp, setInputOtp] = useState('');
   const [isWalletPaymentOpen, setIsWalletPaymentOpen] = useState(false);
   const [showShareOptions, setShowShareOptions] = useState(false);
+  const [instagramUrl, setInstagramUrl] = useState<string>('');
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
 
   const customerProfileRef = useRef(customerProfile);
@@ -252,6 +254,22 @@ const App: React.FC = () => {
     };
     fetchConfig();
   }, []);
+
+  // Fetch application settings on startup
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settings = await getServerSettings();
+        if (settings.instagramUrl) {
+          setInstagramUrl(settings.instagramUrl);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch settings:', err);
+      }
+    };
+    void fetchSettings();
+  }, [configLoaded]);
+
 
   // Request notification permission on app load
   useEffect(() => {
@@ -1031,7 +1049,7 @@ const App: React.FC = () => {
     pushAppScreen('payment');
   };
 
-  const handlePaymentComplete = async () => {
+  const handlePaymentComplete = async (paymentMethod?: string) => {
     const checkoutContext = await resolveOrderContext();
     if (!checkoutContext) {
       showNotification(
@@ -1067,7 +1085,9 @@ const App: React.FC = () => {
       walletAmountRedeemed: walletDiscount,
       rewardPointsRedeemed: pointsDiscount,
       rewardPointsEarned: Math.floor(subtotal / 10),
+      paymentMethod: paymentMethod || 'UPI',
     };
+
 
     // Deduct applied wallet amount and points from profile
     if (customerProfile) {
@@ -1457,6 +1477,8 @@ const App: React.FC = () => {
         onPaymentComplete={handlePaymentComplete}
         outletName={selectedOutlet?.name}
         outletPhone={selectedOutlet?.phone}
+        showCOD={true}
+        customerProfile={customerProfile}
       />
 
       <PaymentModal
@@ -1511,6 +1533,22 @@ const App: React.FC = () => {
         </svg>
       </a>
 
+      {instagramUrl && (
+        <a
+          href={instagramUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="fixed bottom-24 right-4 z-[90] flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] text-white shadow-2xl transition-transform active:scale-95 animate-fade-in"
+          aria-label="Follow us on Instagram"
+        >
+          <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+          </svg>
+        </a>
+      )}
+
       {isWalletModalOpen && customerProfile && (
         <WalletModal
           isOpen={isWalletModalOpen}
@@ -1525,6 +1563,7 @@ const App: React.FC = () => {
             setTopUpAmount(String(amount));
             setIsWalletPaymentOpen(true);
           }}
+          instagramUrl={instagramUrl}
         />
       )}
 

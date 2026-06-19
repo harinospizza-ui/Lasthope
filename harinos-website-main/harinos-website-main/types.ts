@@ -97,6 +97,7 @@ export interface Order {
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
+  paymentMethod?: string;
   receivedAt?: string;
   status?: OrderStatus;
   statusUpdatedAt?: string;
@@ -185,3 +186,8 @@ export interface FCMTokenData {
   token: string;
   savedAt: string;
 }
+
+export interface AppSettings {
+  instagramUrl?: string;
+}
+

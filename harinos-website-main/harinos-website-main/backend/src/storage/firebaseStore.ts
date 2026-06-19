@@ -1,8 +1,9 @@
 import admin from 'firebase-admin';
 import { config } from '../config.js';
-import { CustomerProfile, FullOrderPayload, OrderStatus, MenuItem, OutletConfig, OfferCard, AdminUser, WalletTransaction } from '../types.js';
+import { CustomerProfile, FullOrderPayload, OrderStatus, MenuItem, OutletConfig, OfferCard, AdminUser, WalletTransaction, AppSettings } from '../types.js';
 
 import { OrderStore, newestOrdersFirst } from './store.js';
+
 
 let firestore: admin.firestore.Firestore | null = null;
 
@@ -195,5 +196,22 @@ export const firebaseStore: OrderStore = {
       'Saving transaction to Firebase',
     );
   },
+
+  async getSettings() {
+    const doc = await withTimeout(
+      getFirestore().collection('settings').doc('app').get(),
+      'Fetching settings from Firebase',
+    );
+    if (!doc.exists) return {};
+    return doc.data() as AppSettings;
+  },
+
+  async saveSettings(settings) {
+    await withTimeout(
+      getFirestore().collection('settings').doc('app').set(settings, { merge: true }),
+      'Saving settings to Firebase',
+    );
+  },
 };
+
 

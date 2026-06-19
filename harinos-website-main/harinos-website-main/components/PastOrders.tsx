@@ -46,6 +46,10 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
                   <p className="text-slate-400 text-sm font-medium">
                     📅 {new Date(order.receivedAt ?? order.date).toLocaleDateString()} {new Date(order.receivedAt ?? order.date).toLocaleTimeString()}
                   </p>
+                  <p className="text-slate-400 text-sm font-medium">
+                    💳 Payment: {order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}
+                  </p>
+
                   {order.distanceKm && (
                     <p className="text-slate-400 text-sm font-medium">📍 {order.distanceKm.toFixed(1)} km away</p>
                   )}

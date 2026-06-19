@@ -11,6 +11,7 @@ interface WalletModalProps {
   onProfileChange: (profile: CustomerProfile) => void;
   showNotification: (msg: string | { title: string; message: string; type?: 'success' | 'info' | 'warning' | 'error' }) => void;
   onProceedToPayment: (amount: number) => void;
+  instagramUrl?: string;
 }
 
 export const WalletModal: React.FC<WalletModalProps> = ({
@@ -20,6 +21,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
   onProfileChange,
   showNotification,
   onProceedToPayment,
+  instagramUrl = '',
 }) => {
   const [inputOtp, setInputOtp] = useState('');
   const [inputReferralCode, setInputReferralCode] = useState('');
@@ -412,7 +414,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
             </a>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className={`grid gap-3 ${instagramUrl ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <button
               type="button"
               onClick={() => {
@@ -432,6 +434,17 @@ export const WalletModal: React.FC<WalletModalProps> = ({
             >
               <span className="text-xs text-[#0088cc] font-bold">Telegram</span>
             </button>
+            {instagramUrl && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(instagramUrl, '_blank');
+                }}
+                className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:bg-red-50/20 active:scale-95 transition-premium shadow-sm text-center"
+              >
+                <span className="text-xs text-[#E1306C] font-bold">Instagram</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

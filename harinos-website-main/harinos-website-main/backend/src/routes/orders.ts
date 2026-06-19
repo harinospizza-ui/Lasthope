@@ -139,7 +139,18 @@ router.post('/orders/full', async (req, res, next) => {
       status: order.status ?? 'new',
     } as FullOrderPayload;
 
+    if (fullOrder.paymentMethod === 'COD') {
+      const customers = await getOrderStore().getCustomers();
+      const phoneToFind = fullOrder.customerPhone ? fullOrder.customerPhone.replace(/\D/g, '') : '';
+      const customer = customers.find(c => c.phone && c.phone.replace(/\D/g, '') === phoneToFind);
+      if (!customer || !customer.verified) {
+        res.status(400).json({ success: false, message: 'Cash On Delivery is available only for verified customers.' });
+        return;
+      }
+    }
+
     await getOrderStore().saveOrder(fullOrder);
+
 
     // Send notifications to all admins, managers, and staff
     const itemSummary = fullOrder.items
@@ -230,6 +241,7 @@ router.post('/orders', async (req, res, next) => {
       customerName: payload.customerName,
       customerPhone: payload.customerPhone,
       customerEmail: payload.customerEmail,
+      paymentMethod: payload.paymentMethod as string | undefined,
       status: 'new',
       auditTrail: [{
         timestamp: new Date().toISOString(),
@@ -238,7 +250,18 @@ router.post('/orders', async (req, res, next) => {
       }]
     } as any;
 
+    if (newOrder.paymentMethod === 'COD') {
+      const customers = await getOrderStore().getCustomers();
+      const phoneToFind = newOrder.customerPhone ? newOrder.customerPhone.replace(/\D/g, '') : '';
+      const customer = customers.find(c => c.phone && c.phone.replace(/\D/g, '') === phoneToFind);
+      if (!customer || !customer.verified) {
+        res.status(400).json({ success: false, message: 'Cash On Delivery is available only for verified customers.' });
+        return;
+      }
+    }
+
     await store.saveOrder(newOrder);
+
 
     // Send notifications to admins, managers, and staff
     const itemSummary = newOrder.items

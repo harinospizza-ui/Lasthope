@@ -84,6 +84,7 @@ export interface FullOrderPayload {
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
+  paymentMethod?: string;
   receivedAt?: string;
   status?: OrderStatus;
   walletAmountRedeemed?: number;
@@ -146,4 +147,9 @@ export interface OutletConfig {
   minimumOrderIncrementPerKm: number;
   deliveryChargePerKm: number;
 }
+
+export interface AppSettings {
+  instagramUrl?: string;
+}
+
 

@@ -1,8 +1,9 @@
 import mysql from 'mysql2/promise';
 import { config } from '../config.js';
-import { CustomerProfile, FullOrderPayload, OrderStatus, MenuItem, OutletConfig, OfferCard, AdminUser, WalletTransaction } from '../types.js';
+import { CustomerProfile, FullOrderPayload, OrderStatus, MenuItem, OutletConfig, OfferCard, AdminUser, WalletTransaction, AppSettings } from '../types.js';
 
 import { OrderStore, newestOrdersFirst } from './store.js';
+
 
 let pool: mysql.Pool | null = null;
 let schemaReady: Promise<void> | null = null;
@@ -90,8 +91,16 @@ const ensureSchema = async (): Promise<void> => {
           created_at DATETIME NOT NULL
         )
       `);
+
+      await getPool().execute(`
+        CREATE TABLE IF NOT EXISTS settings (
+          id VARCHAR(64) PRIMARY KEY,
+          payload JSON NOT NULL
+        )
+      `);
     })();
   }
+
 
   await schemaReady;
 };
@@ -316,4 +325,25 @@ export const mysqlStore: OrderStore = {
       [transaction.id, JSON.stringify(transaction), toMysqlDate(transaction.createdAt)],
     );
   },
+
+  async getSettings() {
+    await ensureSchema();
+    const [rows] = await getPool().query<mysql.RowDataPacket[]>('SELECT payload FROM settings WHERE id = ?', ['app']);
+    if (rows.length === 0) return {};
+    return parseJsonColumn<AppSettings>(rows[0].payload);
+  },
+
+  async saveSettings(settings) {
+    await ensureSchema();
+    await getPool().execute(
+      `
+        INSERT INTO settings (id, payload)
+        VALUES (?, CAST(? AS JSON))
+        ON DUPLICATE KEY UPDATE
+          payload = VALUES(payload)
+      `,
+      ['app', JSON.stringify(settings)],
+    );
+  },
 };
+

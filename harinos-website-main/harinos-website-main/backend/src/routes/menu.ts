@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getOrderStore } from '../storage/index.js';
-import { MenuItem, OutletConfig, OfferCard } from '../types.js';
+import { MenuItem, OutletConfig, OfferCard, AppSettings } from '../types.js';
 
 const router = Router();
 
@@ -326,4 +326,26 @@ router.post('/offers/seed', async (req, res, next) => {
   }
 });
 
+// Settings
+router.get('/settings', async (_req, res, next) => {
+  try {
+    const store = getOrderStore();
+    const settings = await store.getSettings();
+    res.json({ success: true, settings });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/settings', async (req, res, next) => {
+  try {
+    const settings = req.body as AppSettings;
+    await getOrderStore().saveSettings(settings);
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
+

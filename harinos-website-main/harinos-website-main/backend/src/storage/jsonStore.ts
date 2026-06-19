@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config.js';
-import { CustomerProfile, FullOrderPayload, OrderStatus, MenuItem, OutletConfig, OfferCard, AdminUser, WalletTransaction } from '../types.js';
+import { CustomerProfile, FullOrderPayload, OrderStatus, MenuItem, OutletConfig, OfferCard, AdminUser, WalletTransaction, AppSettings } from '../types.js';
 import { OrderStore, newestOrdersFirst } from './store.js';
 
 const dataRoot = path.resolve(config.fileStore.rootPath);
@@ -12,6 +12,8 @@ const outletsFile = path.join(dataRoot, 'outlets.json');
 const offersFile = path.join(dataRoot, 'offers.json');
 const staffUsersFile = path.join(dataRoot, 'staff_users.json');
 const walletTransactionsFile = path.join(dataRoot, 'wallet_transactions.json');
+const settingsFile = path.join(dataRoot, 'settings.json');
+
 
 
 const readJson = async <T,>(filePath: string, fallback: T): Promise<T> => {
@@ -129,6 +131,13 @@ export const saveStoredWalletTransaction = async (transaction: WalletTransaction
   await writeJson(walletTransactionsFile, [transaction, ...transactions]);
 };
 
+export const getStoredSettings = async (): Promise<AppSettings> =>
+  readJson<AppSettings>(settingsFile, {});
+
+export const saveStoredSettings = async (settings: AppSettings): Promise<void> => {
+  await writeJson(settingsFile, settings);
+};
+
 export const jsonStore: OrderStore = {
   name: 'json',
   getOrders: getStoredOrders,
@@ -147,5 +156,8 @@ export const jsonStore: OrderStore = {
   saveStaffUser: saveStoredStaffUser,
   getWalletTransactions: getStoredWalletTransactions,
   saveWalletTransaction: saveStoredWalletTransaction,
+  getSettings: getStoredSettings,
+  saveSettings: saveStoredSettings,
 };
+
 

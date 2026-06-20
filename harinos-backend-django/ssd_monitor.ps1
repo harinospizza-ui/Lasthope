@@ -65,14 +65,39 @@ while ($true) {
                 Write-Host "Warning: Portable MySQL executable not found on SSD at $mysqldPath" -ForegroundColor Red
             }
 
+            # Initialize database and restricted privileges using local root access
+            $mysqlPath = Join-Path $ssdRoot "harinos-mysql\bin\mysql.exe"
+            if (Test-Path $mysqlPath -and $mysqlRunning) {
+                Write-Host "Initializing database privileges for 'harinos_app'..." -ForegroundColor Yellow
+                $configPath = Join-Path $ssdRoot "harinos-config.json"
+                if (Test-Path $configPath) {
+                    $configObj = Get-Content $configPath | ConvertFrom-Json
+                    $appPass = $configObj.MYSQL_PASSWORD
+                    if ($appPass) {
+                        $initSql = "CREATE DATABASE IF NOT EXISTS harinos_orders CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; " +
+                                   "CREATE USER IF NOT EXISTS 'harinos_app'@'127.0.0.1' IDENTIFIED BY '$appPass'; " +
+                                   "ALTER USER 'harinos_app'@'127.0.0.1' IDENTIFIED BY '$appPass'; " +
+                                   "GRANT SELECT, INSERT, UPDATE, DELETE ON harinos_orders.* TO 'harinos_app'@'127.0.0.1'; " +
+                                   "FLUSH PRIVILEGES;"
+                        Start-Process -FilePath $mysqlPath -ArgumentList "-u root -h 127.0.0.1 -e `"$initSql`"" -WindowStyle Hidden -Wait
+                    }
+                }
+            }
+
             # D. Run Django migrations, replay transaction recovery log, and start server
             $djangoManage = Join-Path $ssdRoot "manage.py"
             if (Test-Path $djangoManage) {
-                # Run migrations
+                # Run migrations as root using temporary env variables
                 Write-Host "Running database migrations..." -ForegroundColor Yellow
+                $env:MYSQL_USER = "root"
+                $env:MYSQL_PASSWORD = ""
                 Start-Process -FilePath "python" -ArgumentList "$djangoManage migrate" -WorkingDirectory $ssdRoot -WindowStyle Hidden -Wait
                 
-                # Replay recovery logs
+                # Remove temporary root env credentials
+                Remove-Item env:MYSQL_USER -ErrorAction SilentlyContinue
+                Remove-Item env:MYSQL_PASSWORD -ErrorAction SilentlyContinue
+
+                # Replay recovery logs (runs under restricted harinos_app)
                 Write-Host "Replaying any pending transactions from recovery log..." -ForegroundColor Yellow
                 Start-Process -FilePath "python" -ArgumentList "$djangoManage replay_recovery_log" -WorkingDirectory $ssdRoot -WindowStyle Hidden -Wait
 

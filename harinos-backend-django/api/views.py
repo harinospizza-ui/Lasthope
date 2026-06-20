@@ -18,13 +18,14 @@ from rest_framework.permissions import AllowAny
 from .models import (
     MenuItem, Outlet, Offer, Customer, Order,
     WalletTransaction, Setting, BlockedCustomer,
-    StaffUser, NotificationToken
+    StaffUser, NotificationToken, hash_phone
 )
 from .serializers import JSONPayloadSerializer
 from .authentication import (
     hash_password, verify_password, generate_jwt,
     JWTAuthentication, DjangoAuthenticatedUser
 )
+from .audit_logger import log_security_event
 
 # Firebase Admin initialization helper
 import firebase_admin
@@ -63,6 +64,18 @@ def get_firebase_app():
         except Exception as e:
             print("Warning: Firebase Admin SDK failed to initialize:", e)
     return firebase_admin._apps
+
+# Helper to get backup encryption Fernet instance
+def get_fernet_for_backup():
+    import base64
+    import hashlib
+    from cryptography.fernet import Fernet
+    key = getattr(settings, 'ENCRYPTION_KEY', '')
+    if not key:
+        key = 'dev-harinos-pizza-secret-key-32-chars-minimum-fallback'
+    key_hash = hashlib.sha256(key.encode('utf-8')).digest()
+    key_b64 = base64.urlsafe_b64encode(key_hash)
+    return Fernet(key_b64)
 
 # Helper to find mysqldump / mysql binaries on SSD
 def get_mysql_tool_path(tool_name):
@@ -183,6 +196,8 @@ def auth_login(request):
                 'outletId': user.payload.get('outletId')
             }, settings.JWT_SECRET)
             
+            log_security_event(request, f"Successful login for user '{username}' (role: {user.role})")
+
             return Response({
                 'success': True,
                 'role': user.role,
@@ -191,8 +206,10 @@ def auth_login(request):
                 'token': token
             })
         else:
+            log_security_event(request, f"Failed login attempt for user '{username}': incorrect password")
             return Response({'success': False, 'message': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
     except StaffUser.DoesNotExist:
+        log_security_event(request, f"Failed login attempt for non-existent user '{username}'")
         return Response({'success': False, 'message': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
@@ -206,6 +223,7 @@ def auth_change_password(request):
 
     # Check permission (only self or admin can update password)
     if request.user.role != 'admin' and request.user.username != username:
+        log_security_event(request, f"Unauthorized password change attempt for user '{username}' denied")
         return Response({'success': False, 'message': 'Unauthorized to change this password.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
@@ -215,8 +233,10 @@ def auth_change_password(request):
         payload['password'] = hashed
         user.payload = payload
         user.save()
+        log_security_event(request, f"Password changed successfully for user '{username}'")
         return Response({'success': True, 'message': 'Password updated successfully.'})
     except StaffUser.DoesNotExist:
+        log_security_event(request, f"Password change failed: target user '{username}' not found")
         return Response({'success': False, 'message': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
 # --- NOTIFICATION TOKEN REGISTRATION ---
@@ -285,11 +305,21 @@ def app_settings(request):
             return Response({'instagramUrl': '', 'menuVersion': '1.0'})
             
     # POST - Save settings
+    auth = JWTAuthentication()
+    auth_res = auth.authenticate(request)
+    if not auth_res:
+        return Response({'success': False, 'message': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+    user_obj, _ = auth_res
+    if user_obj.role != 'admin':
+        log_security_event(request, f"Unauthorized settings modification attempt by user '{user_obj.username}' (role: {user_obj.role}) denied")
+        return Response({'success': False, 'message': 'Admin privileges required.'}, status=status.HTTP_403_FORBIDDEN)
+
     payload = request.data
     Setting.objects.update_or_create(
         id='app',
         defaults={'payload': payload}
     )
+    log_security_event(request, f"Application settings updated by admin '{user_obj.username}'")
     return Response({'success': True})
 
 # --- MENU ITEMS ENDPOINTS ---
@@ -442,6 +472,16 @@ def wallet_transactions(request):
         return Response({'success': True, 'transactions': serializer.data})
 
     # POST
+    # Authenticate and validate roles
+    auth = JWTAuthentication()
+    auth_res = auth.authenticate(request)
+    if not auth_res:
+        return Response({'success': False, 'message': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+    user_obj, _ = auth_res
+    if user_obj.role not in ['admin', 'manager']:
+        log_security_event(request, f"Unauthorized wallet write attempt by user '{user_obj.username}' (role: {user_obj.role}) denied")
+        return Response({'success': False, 'message': 'Admin or manager privileges required.'}, status=status.HTTP_403_FORBIDDEN)
+
     tx = request.data
     tx_id = tx.get('id') or f"tx_{int(time.time()*1000)}"
     tx['id'] = tx_id
@@ -471,7 +511,9 @@ def wallet_transactions(request):
                 payload['walletBalance'] = new_bal
                 cust.payload = payload
                 cust.save()
+                log_security_event(request, f"Wallet adjustment of {amount} for customer {cust_id} (New balance: {new_bal}) authorized by '{user_obj.username}'")
             except Customer.DoesNotExist:
+                log_security_event(request, f"Wallet transaction tried to update non-existent customer {cust_id}")
                 pass
 
     complete_transaction(tx_id)
@@ -542,7 +584,7 @@ def customers_endpoint(request):
         clean_phone = ''.join(c for c in phone if c.isdigit())
 
         # Check blocked
-        if BlockedCustomer.objects.filter(phone=clean_phone).exists():
+        if BlockedCustomer.objects.filter(phone_hash=hash_phone(clean_phone)).exists():
             return Response({'success': False, 'message': 'This mobile number is permanently blocked.'}, status=status.HTTP_403_FORBIDDEN)
 
         otp = str(timezone.random_otp() if hasattr(timezone, 'random_otp') else int(100000 + (time.time() % 1) * 900000))
@@ -556,7 +598,7 @@ def customers_endpoint(request):
         otp_expiry = int((time.time() + 10 * 60) * 1000)
 
         # Find existing customer
-        cust = Customer.objects.filter(Q(phone=phone) | Q(phone=clean_phone)).first()
+        cust = Customer.objects.filter(Q(phone_hash=hash_phone(phone)) | Q(phone_hash=hash_phone(clean_phone))).first()
         
         if cust:
             p = cust.payload
@@ -755,20 +797,21 @@ def customers_endpoint(request):
     clean_phone = ''.join(c for c in profile['phone'] if c.isdigit())
     
     # Check blocked
-    if BlockedCustomer.objects.filter(phone=clean_phone).exists():
+    if BlockedCustomer.objects.filter(phone_hash=hash_phone(clean_phone)).exists():
         return Response({'success': False, 'message': 'This mobile number is permanently blocked.'}, status=status.HTTP_403_FORBIDDEN)
 
     if profile.get('status') == 'blocked':
         BlockedCustomer.objects.update_or_create(
             phone=clean_phone,
             defaults={
+                'phone_hash': hash_phone(clean_phone),
                 'blocked_at': timezone.now(),
                 'customer_id': profile['id'],
                 'name': profile['name']
             }
         )
     else:
-        BlockedCustomer.objects.filter(phone=clean_phone).delete()
+        BlockedCustomer.objects.filter(phone_hash=hash_phone(clean_phone)).delete()
 
     created_str = profile.get('createdAt') or datetime.utcnow().isoformat() + 'Z'
     profile['createdAt'] = created_str
@@ -837,7 +880,7 @@ def orders_endpoint(request):
     cust_phone = order.get('customerPhone')
     if is_cod and cust_phone:
         clean_phone = ''.join(c for c in cust_phone if c.isdigit())
-        cust = Customer.objects.filter(Q(phone=cust_phone) | Q(phone=clean_phone)).first()
+        cust = Customer.objects.filter(Q(phone_hash=hash_phone(cust_phone)) | Q(phone_hash=hash_phone(clean_phone))).first()
         if not cust or not cust.verified:
             return Response({'success': False, 'message': 'Cash On Delivery is available only for verified customers.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -876,6 +919,9 @@ def order_detail(request, order_id):
     except Order.DoesNotExist:
         return Response({'success': False, 'message': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+    if request.method in ['PATCH', 'DELETE'] and ord_obj.status == 'cancelled':
+        return Response({'success': False, 'message': 'Cancelled orders are immutable and cannot be modified.'}, status=status.HTTP_400_BAD_REQUEST)
+
     if request.method == 'GET':
         return Response({'success': True, 'order': ord_obj.payload})
 
@@ -885,6 +931,7 @@ def order_detail(request, order_id):
         p['isDeleted'] = True
         ord_obj.payload = p
         ord_obj.save()
+        log_security_event(request, f"Soft-deleted order {order_id}")
         return Response({'success': True})
 
     # PATCH Order Status
@@ -928,6 +975,7 @@ def order_detail(request, order_id):
 
     with transaction.atomic():
         ord_obj.save()
+    log_security_event(request, f"Updated order {order_id} status from {old_status} to {new_status}")
 
     complete_transaction(patch_tx_id)
 
@@ -936,7 +984,7 @@ def order_detail(request, order_id):
         customer_phone = p.get('customerPhone')
         if customer_phone:
             clean_phone = ''.join(c for c in customer_phone if c.isdigit())
-            cust = Customer.objects.filter(Q(phone=customer_phone) | Q(phone=clean_phone)).first()
+            cust = Customer.objects.filter(Q(phone_hash=hash_phone(customer_phone)) | Q(phone_hash=hash_phone(clean_phone))).first()
             if cust:
                 send_fcm_notification(new_status.upper(), order_id, role='customer', customer_token_data=cust.id)
     except Exception as e:
@@ -950,6 +998,7 @@ def order_detail(request, order_id):
 @authentication_classes([JWTAuthentication])
 def backups_endpoint(request):
     if request.user.role != 'admin':
+        log_security_event(request, "Unauthorized backup list/create attempt denied")
         return Response({'success': False, 'message': 'Admin privileges required.'}, status=status.HTTP_403_FORBIDDEN)
 
     ssd_drive = Path(settings.BASE_DIR).drive
@@ -972,7 +1021,7 @@ def backups_endpoint(request):
                         'filename': file,
                         'size': f"{round(stat.st_size / 1024, 2)} KB",
                         'createdAt': datetime.fromtimestamp(stat.st_mtime).isoformat() + 'Z',
-                        'location': 'External SSD & Laptop Internal Storage',
+                        'location': 'External SSD & Laptop Internal Storage (Encrypted)',
                         'status': 'verified'
                     })
             # Sort newest first
@@ -1018,19 +1067,31 @@ def backups_endpoint(request):
     cmd.append(db_name)
 
     try:
-        # Run dump and save to SSD
-        with open(ssd_backup_path, 'w', encoding='utf-8') as f:
-            res = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, text=True, check=True)
+        # Run dump and capture output
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        raw_sql_bytes = res.stdout
+
+        # Compress and Encrypt
+        import zlib
+        compressed_data = zlib.compress(raw_sql_bytes)
+        f_encryptor = get_fernet_for_backup()
+        encrypted_data = f_encryptor.encrypt(compressed_data)
+
+        # Write to SSD
+        with open(ssd_backup_path, 'wb') as f_out:
+            f_out.write(encrypted_data)
             
         # Copy to internal drive
-        import shutil
-        shutil.copy2(ssd_backup_path, laptop_backup_path)
+        with open(laptop_backup_path, 'wb') as f_out:
+            f_out.write(encrypted_data)
 
         sz = f"{round(os.path.getsize(ssd_backup_path) / 1024, 2)} KB"
+        
+        log_security_event(request, f"Created secure encrypted database backup: {backup_filename}")
 
         return Response({
             'success': True,
-            'message': 'Backup created successfully on SSD and Laptop.',
+            'message': 'Encrypted backup created successfully on SSD and Laptop.',
             'backup': {
                 'filename': backup_filename,
                 'size': sz,
@@ -1038,6 +1099,7 @@ def backups_endpoint(request):
             }
         })
     except Exception as e:
+        log_security_event(request, f"Database backup failed: {str(e)}")
         return Response({'success': False, 'message': f"Failed to dump database: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1045,6 +1107,7 @@ def backups_endpoint(request):
 @authentication_classes([JWTAuthentication])
 def restore_endpoint(request):
     if request.user.role != 'admin':
+        log_security_event(request, "Unauthorized restore attempt denied")
         return Response({'success': False, 'message': 'Admin privileges required.'}, status=status.HTTP_403_FORBIDDEN)
 
     filename = request.data.get('filename')
@@ -1058,16 +1121,25 @@ def restore_endpoint(request):
     if not os.path.exists(target_path):
         return Response({'success': False, 'message': 'Backup file not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    # 1. Integrity check: verify it starts with standard mysql comments or has valid sql content
+    # 1. Decrypt, decompress, and run integrity checks
     try:
-        with open(target_path, 'r', errors='ignore') as f:
-            first_line = f.readline()
-            if not first_line or not (first_line.startswith('--') or 'mysql' in first_line.lower()):
-                return Response({'success': False, 'message': 'Backup integrity verification failed: invalid SQL file.'}, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({'success': False, 'message': f"Failed to read backup for integrity checks: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        with open(target_path, 'rb') as f_in:
+            encrypted_data = f_in.read()
 
-    # 2. Create emergency backup first
+        import zlib
+        f_decryptor = get_fernet_for_backup()
+        compressed_data = f_decryptor.decrypt(encrypted_data)
+        raw_sql_bytes = zlib.decompress(compressed_data)
+
+        raw_sql_str = raw_sql_bytes.decode('utf-8', errors='ignore')
+        first_line = raw_sql_str.splitlines()[0] if raw_sql_str else ""
+        if not first_line or not (first_line.startswith('--') or 'mysql' in first_line.lower()):
+            return Response({'success': False, 'message': 'Backup integrity verification failed: invalid decrypted SQL content.'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        log_security_event(request, f"Restore failed integrity check: {filename} - {str(e)}")
+        return Response({'success': False, 'message': f"Failed to decrypt/verify backup: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 2. Create emergency backup of current DB state first (fully encrypted)
     db_settings = settings.DATABASES['default']
     db_name = db_settings['NAME']
     db_user = db_settings['USER']
@@ -1088,9 +1160,17 @@ def restore_endpoint(request):
     dump_cmd.append(db_name)
 
     try:
-        with open(emergency_path, 'w', encoding='utf-8') as f:
-            subprocess.run(dump_cmd, stdout=f, check=True)
+        res = subprocess.run(dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        emergency_bytes = res.stdout
+        
+        compressed_emerg = zlib.compress(emergency_bytes)
+        f_encryptor = get_fernet_for_backup()
+        encrypted_emerg = f_encryptor.encrypt(compressed_emerg)
+        
+        with open(emergency_path, 'wb') as f:
+            f.write(encrypted_emerg)
     except Exception as e:
+        log_security_event(request, f"Emergency backup before restore failed: {str(e)}")
         return Response({'success': False, 'message': f"Emergency backup creation failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # 3. Restore selected backup
@@ -1104,9 +1184,10 @@ def restore_endpoint(request):
     restore_cmd.append(db_name)
 
     try:
-        with open(target_path, 'r', encoding='utf-8') as f:
-            subprocess.run(restore_cmd, stdin=f, check=True)
-        return Response({'success': True, 'message': 'Database restored successfully from backup.'})
+        # Pipe decrypted sql bytes directly into mysql stdin in-memory
+        subprocess.run(restore_cmd, input=raw_sql_bytes, check=True)
+        log_security_event(request, f"Successfully restored database from backup: {filename}")
+        return Response({'success': True, 'message': 'Database restored successfully from secure backup.'})
     except Exception as e:
-        # Emergency rollback if restore fails?
+        log_security_event(request, f"Database restore execution failed: {str(e)}")
         return Response({'success': False, 'message': f"Database restore failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

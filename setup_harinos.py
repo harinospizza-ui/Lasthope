@@ -98,14 +98,22 @@ def main():
     else:
         print("[+] Captured JWT_SECRET from environment.")
         
-    # 4. Generate harinos-config.json
+    # 4. Generate secure random DB password and Fernet encryption key
+    import secrets
+    from cryptography.fernet import Fernet
+    app_password = secrets.token_hex(16)  # 32 characters
+    encryption_key = Fernet.generate_key().decode('utf-8')
+    print("[+] Generated secure database password and Fernet encryption key.")
+
+    # 5. Generate harinos-config.json
     config_dict = {
         "JWT_SECRET": jwt_secret,
         "MYSQL_DATABASE": "harinos_orders",
-        "MYSQL_USER": "root",
-        "MYSQL_PASSWORD": "",
+        "MYSQL_USER": "harinos_app",
+        "MYSQL_PASSWORD": app_password,
         "MYSQL_HOST": "127.0.0.1",
         "MYSQL_PORT": 3306,
+        "ENCRYPTION_KEY": encryption_key,
         "DEBUG": True,
         "SSD_ROOT": ssd_path
     }

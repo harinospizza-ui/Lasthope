@@ -149,3 +149,6 @@ CORS_ALLOW_CREDENTIALS = True
 
 # JWT Authentication Config
 JWT_SECRET = os.getenv('JWT_SECRET', 'dev-harinos-pizza-secret-key-32-chars-minimum')
+
+# AES Encryption Key for PII and backups
+ENCRYPTION_KEY = config_data.get('ENCRYPTION_KEY', os.getenv('ENCRYPTION_KEY', ''))

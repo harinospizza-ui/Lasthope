@@ -1,30 +1,7 @@
 import { CustomerProfile, Order, OrderStatus, MenuItem, OutletConfig, OfferCard, WalletTransaction, AppSettings } from '../types';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  setDoc,
-  updateDoc,
-  Unsubscribe,
-} from 'firebase/firestore';
-import {
-  db,
-  FIRESTORE_CUSTOMERS_COLLECTION,
-  FIRESTORE_ORDERS_COLLECTION,
-  FIRESTORE_MENU_ITEMS_COLLECTION,
-  FIRESTORE_OUTLETS_COLLECTION,
-  FIRESTORE_OFFERS_COLLECTION,
-  FIRESTORE_WALLET_TRANSACTIONS_COLLECTION,
-  isFirebaseClientConfigured as originalIsFirebaseClientConfigured,
-} from './firebaseClient';
 import { StorageService } from './storage';
 
-const isFirebaseClientConfigured = () => false;
+export type Unsubscribe = () => void;
 
 let dynamicApiUrl = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
 
@@ -66,7 +43,7 @@ const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Resp
 };
 
 const getApiBase = (): string | null => dynamicApiUrl || null;
-export const isOrderApiConfigured = (): boolean => isFirebaseClientConfigured() || Boolean(getApiBase());
+export const isOrderApiConfigured = (): boolean => Boolean(getApiBase());
 
 const getAuthHeaders = (): Record<string, string> => {
   const session = StorageService.getAdminSession();
@@ -147,19 +124,6 @@ export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: st
 };
 
 export const getServerOrders = async (): Promise<Order[]> => {
-  if (isFirebaseClientConfigured()) {
-    try {
-      const snapshot = await getDocs(
-        query(collection(db(), FIRESTORE_ORDERS_COLLECTION), orderBy('receivedAt', 'desc'), limit(500)),
-      );
-      const ordersList = sortOrders(snapshot.docs.map((orderDoc) => orderDoc.data() as Order));
-      StorageService.saveAdminOrders(ordersList);
-      return ordersList;
-    } catch (error) {
-      if (!getApiBase()) return sortOrders(StorageService.getAdminOrders());
-    }
-  }
-
   try {
     const ordersList = await getOrdersViaApi();
     StorageService.saveAdminOrders(ordersList);
@@ -171,16 +135,6 @@ export const getServerOrders = async (): Promise<Order[]> => {
 };
 
 export const getServerOrderById = async (orderId: string): Promise<Order | null> => {
-  if (isFirebaseClientConfigured()) {
-    try {
-      const snap = await getDoc(doc(db(), FIRESTORE_ORDERS_COLLECTION, orderId));
-      if (snap.exists()) return snap.data() as Order;
-      return null;
-    } catch (error) {
-      if (!getApiBase()) return StorageService.getAdminOrders().find(o => o.id === orderId) || null;
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return StorageService.getAdminOrders().find(o => o.id === orderId) || null;
@@ -202,18 +156,6 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
     StorageService.saveAdminOrders(localOrders);
   }
 
-  if (isFirebaseClientConfigured()) {
-    try {
-      await updateDoc(doc(db(), FIRESTORE_ORDERS_COLLECTION, orderId), {
-        status,
-        statusUpdatedAt: new Date().toISOString(),
-      });
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
-  }
-
   try {
     await updateOrderStatusViaApi(orderId, status);
   } catch (error) {
@@ -224,11 +166,6 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
 export const saveCustomerToServer = async (profile: CustomerProfile): Promise<void> => {
   const localCusts = StorageService.getAdminCustomers().filter((c) => c.id !== profile.id);
   StorageService.saveAdminCustomers([profile, ...localCusts]);
-
-  if (isFirebaseClientConfigured()) {
-    await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, profile.id), profile, { merge: true });
-    return;
-  }
 
   await saveCustomerViaApi(profile);
 };
@@ -262,20 +199,6 @@ const sortCustomers = (customers: CustomerProfile[]): CustomerProfile[] => {
 };
 
 export const getServerCustomers = async (): Promise<CustomerProfile[]> => {
-  if (isFirebaseClientConfigured()) {
-    try {
-      const snapshot = await getDocs(
-        query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), limit(500)),
-      );
-      const list = snapshot.docs.map((customerDoc) => customerDoc.data() as CustomerProfile);
-      const sorted = sortCustomers(list);
-      StorageService.saveAdminCustomers(sorted);
-      return sorted;
-    } catch (error) {
-      return sortCustomers(StorageService.getAdminCustomers());
-    }
-  }
-
   try {
     if (!getApiBase()) return sortCustomers(StorageService.getAdminCustomers());
     const response = await fetch(`${getApiBase()}/customers`, { cache: 'no-store' });
@@ -370,35 +293,6 @@ export const verifyServerCustomer = async (customerId: string): Promise<Customer
     return updated;
   };
 
-  if (isFirebaseClientConfigured()) {
-    try {
-      const docRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, customerId);
-      const snap = await getDocs(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION));
-      const allCustomers = snap.docs.map((customerDoc) => customerDoc.data() as CustomerProfile);
-      const dbTarget = allCustomers.find((c) => c.id === customerId);
-      if (!dbTarget) throw new Error('Customer not found.');
-
-      const targetPhone = cleanPhone(dbTarget.phone);
-      const alreadyVerified = allCustomers.some(
-        (c) => c.verified && c.id !== customerId && c.phone && cleanPhone(c.phone) === targetPhone
-      );
-
-      if (alreadyVerified) {
-        throw new Error(`Verification rejected: The mobile number ${dbTarget.phone} is already verified under another customer profile.`);
-      }
-
-      const referralCode = dbTarget.referralCode ?? generateReferralCode();
-      await updateDoc(docRef, { verified: true, referralCode });
-      
-      const updated = { ...dbTarget, verified: true, referralCode };
-      localCusts[targetIdx] = updated;
-      StorageService.saveAdminCustomers(localCusts);
-      return updated;
-    } catch (error) {
-      if (!getApiBase()) return localVerify();
-    }
-  }
-
   try {
     if (!getApiBase()) return localVerify();
     const response = await fetch(`${getApiBase()}/customers/${encodeURIComponent(customerId)}/verify`, {
@@ -427,44 +321,66 @@ export const verifyServerCustomer = async (customerId: string): Promise<Customer
   }
 };
 
-export const subscribeServerOrders = (onOrders: (orders: Order[]) => void, onError: (error: Error) => void): Unsubscribe | null => {
-  if (!isFirebaseClientConfigured()) return null;
-
-  return onSnapshot(
-    query(collection(db(), FIRESTORE_ORDERS_COLLECTION), orderBy('receivedAt', 'desc'), limit(500)),
-    (snapshot) => onOrders(sortOrders(snapshot.docs.map((orderDoc) => orderDoc.data() as Order))),
-    (error) => onError(error),
-  );
+// Polling-based Subscriptions for Offline/SSD Local Server Mode
+export const subscribeServerOrders = (
+  onOrders: (orders: Order[]) => void,
+  onError: (error: Error) => void,
+): Unsubscribe => {
+  let intervalId: any = null;
+  const fetchAndCallback = async () => {
+    try {
+      const orders = await getServerOrders();
+      onOrders(orders);
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  fetchAndCallback();
+  intervalId = setInterval(fetchAndCallback, 3000);
+  return () => {
+    if (intervalId) clearInterval(intervalId);
+  };
 };
 
 export const subscribeServerCustomers = (
   onCustomers: (customers: CustomerProfile[]) => void,
   onError: (error: Error) => void,
-): Unsubscribe | null => {
-  if (!isFirebaseClientConfigured()) return null;
-
-  return onSnapshot(
-    query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), limit(500)),
-    (snapshot) => {
-      const list = snapshot.docs.map((customerDoc) => customerDoc.data() as CustomerProfile);
-      onCustomers(sortCustomers(list));
-    },
-    (error) => onError(error),
-  );
+): Unsubscribe => {
+  let intervalId: any = null;
+  const fetchAndCallback = async () => {
+    try {
+      const customers = await getServerCustomers();
+      onCustomers(customers);
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  fetchAndCallback();
+  intervalId = setInterval(fetchAndCallback, 5000);
+  return () => {
+    if (intervalId) clearInterval(intervalId);
+  };
 };
 
 export const subscribeServerOrder = (
   orderId: string,
   onOrder: (order: Order | null) => void,
   onError: (error: Error) => void,
-): Unsubscribe | null => {
-  if (!isFirebaseClientConfigured()) return null;
-
-  return onSnapshot(
-    doc(db(), FIRESTORE_ORDERS_COLLECTION, orderId),
-    (snapshot) => onOrder(snapshot.exists() ? (snapshot.data() as Order) : null),
-    (error) => onError(error),
-  );
+): Unsubscribe => {
+  let intervalId: any = null;
+  const fetchAndCallback = async () => {
+    try {
+      const order = await getServerOrderById(orderId);
+      onOrder(order);
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  fetchAndCallback();
+  intervalId = setInterval(fetchAndCallback, 3000);
+  return () => {
+    if (intervalId) clearInterval(intervalId);
+  };
 };
 
 export const authenticateAdminViaApi = async (username: string, password: string): Promise<any> => {
@@ -491,17 +407,6 @@ export const authenticateAdminViaApi = async (username: string, password: string
 
 // Dynamic Menu Items
 export const getServerMenuItems = async (): Promise<MenuItem[]> => {
-  if (isFirebaseClientConfigured()) {
-    try {
-      const snapshot = await getDocs(collection(db(), FIRESTORE_MENU_ITEMS_COLLECTION));
-      const items = snapshot.docs.map((doc) => doc.data() as MenuItem);
-      StorageService.saveAdminMenuItems(items);
-      return items;
-    } catch (error) {
-      if (!getApiBase()) return StorageService.getAdminMenuItems();
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return StorageService.getAdminMenuItems();
@@ -521,15 +426,6 @@ export const saveMenuItemToServer = async (item: MenuItem): Promise<void> => {
   const localItems = StorageService.getAdminMenuItems().filter((i) => i.id !== item.id);
   StorageService.saveAdminMenuItems([item, ...localItems]);
 
-  if (isFirebaseClientConfigured()) {
-    try {
-      await setDoc(doc(db(), FIRESTORE_MENU_ITEMS_COLLECTION, item.id), item, { merge: true });
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return;
@@ -546,17 +442,6 @@ export const saveMenuItemToServer = async (item: MenuItem): Promise<void> => {
 
 export const seedMenuItemsToServer = async (items: MenuItem[]): Promise<void> => {
   StorageService.saveAdminMenuItems(items);
-
-  if (isFirebaseClientConfigured()) {
-    try {
-      for (const item of items) {
-        await setDoc(doc(db(), FIRESTORE_MENU_ITEMS_COLLECTION, item.id), item, { merge: true });
-      }
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
-  }
 
   try {
     const apiBase = getApiBase();
@@ -575,33 +460,25 @@ export const seedMenuItemsToServer = async (items: MenuItem[]): Promise<void> =>
 export const subscribeServerMenuItems = (
   onItems: (items: MenuItem[]) => void,
   onError: (error: Error) => void,
-): Unsubscribe | null => {
-  if (!isFirebaseClientConfigured()) return null;
-
-  return onSnapshot(
-    collection(db(), FIRESTORE_MENU_ITEMS_COLLECTION),
-    (snapshot) => {
-      const items = snapshot.docs.map((doc) => doc.data() as MenuItem);
-      StorageService.saveAdminMenuItems(items);
+): Unsubscribe => {
+  let intervalId: any = null;
+  const fetchAndCallback = async () => {
+    try {
+      const items = await getServerMenuItems();
       onItems(items);
-    },
-    (error) => onError(error),
-  );
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  fetchAndCallback();
+  intervalId = setInterval(fetchAndCallback, 10000);
+  return () => {
+    if (intervalId) clearInterval(intervalId);
+  };
 };
 
 // Dynamic Outlets
 export const getServerOutlets = async (): Promise<OutletConfig[]> => {
-  if (isFirebaseClientConfigured()) {
-    try {
-      const snapshot = await getDocs(collection(db(), FIRESTORE_OUTLETS_COLLECTION));
-      const list = snapshot.docs.map((doc) => doc.data() as OutletConfig);
-      StorageService.saveAdminOutlets(list);
-      return list;
-    } catch (error) {
-      if (!getApiBase()) return StorageService.getAdminOutlets();
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return StorageService.getAdminOutlets();
@@ -620,15 +497,6 @@ export const getServerOutlets = async (): Promise<OutletConfig[]> => {
 export const saveOutletToServer = async (outlet: OutletConfig): Promise<void> => {
   const localList = StorageService.getAdminOutlets().filter((o) => o.id !== outlet.id);
   StorageService.saveAdminOutlets([outlet, ...localList]);
-
-  if (isFirebaseClientConfigured()) {
-    try {
-      await setDoc(doc(db(), FIRESTORE_OUTLETS_COLLECTION, outlet.id), outlet, { merge: true });
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
-  }
 
   try {
     const apiBase = getApiBase();
@@ -667,17 +535,6 @@ export const deleteOutletFromServer = async (outletId: string): Promise<void> =>
 export const seedOutletsToServer = async (outlets: OutletConfig[]): Promise<void> => {
   StorageService.saveAdminOutlets(outlets);
 
-  if (isFirebaseClientConfigured()) {
-    try {
-      for (const outlet of outlets) {
-        await setDoc(doc(db(), FIRESTORE_OUTLETS_COLLECTION, outlet.id), outlet, { merge: true });
-      }
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return;
@@ -695,33 +552,25 @@ export const seedOutletsToServer = async (outlets: OutletConfig[]): Promise<void
 export const subscribeServerOutlets = (
   onOutlets: (outlets: OutletConfig[]) => void,
   onError: (error: Error) => void,
-): Unsubscribe | null => {
-  if (!isFirebaseClientConfigured()) return null;
-
-  return onSnapshot(
-    collection(db(), FIRESTORE_OUTLETS_COLLECTION),
-    (snapshot) => {
-      const list = snapshot.docs.map((doc) => doc.data() as OutletConfig);
-      StorageService.saveAdminOutlets(list);
-      onOutlets(list);
-    },
-    (error) => onError(error),
-  );
+): Unsubscribe => {
+  let intervalId: any = null;
+  const fetchAndCallback = async () => {
+    try {
+      const outlets = await getServerOutlets();
+      onOutlets(outlets);
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  fetchAndCallback();
+  intervalId = setInterval(fetchAndCallback, 10000);
+  return () => {
+    if (intervalId) clearInterval(intervalId);
+  };
 };
 
 // Dynamic Offers
 export const getServerOffers = async (): Promise<OfferCard[]> => {
-  if (isFirebaseClientConfigured()) {
-    try {
-      const snapshot = await getDocs(collection(db(), FIRESTORE_OFFERS_COLLECTION));
-      const list = snapshot.docs.map((doc) => doc.data() as OfferCard);
-      StorageService.saveAdminOffers(list);
-      return list;
-    } catch (error) {
-      if (!getApiBase()) return StorageService.getAdminOffers();
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return StorageService.getAdminOffers();
@@ -741,15 +590,6 @@ export const saveOfferToServer = async (offer: OfferCard): Promise<void> => {
   const localList = StorageService.getAdminOffers().filter((o) => o.id !== offer.id);
   StorageService.saveAdminOffers([offer, ...localList]);
 
-  if (isFirebaseClientConfigured()) {
-    try {
-      await setDoc(doc(db(), FIRESTORE_OFFERS_COLLECTION, offer.id), offer, { merge: true });
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return;
@@ -766,17 +606,6 @@ export const saveOfferToServer = async (offer: OfferCard): Promise<void> => {
 
 export const seedOffersToServer = async (offers: OfferCard[]): Promise<void> => {
   StorageService.saveAdminOffers(offers);
-
-  if (isFirebaseClientConfigured()) {
-    try {
-      for (const offer of offers) {
-        await setDoc(doc(db(), FIRESTORE_OFFERS_COLLECTION, offer.id), offer, { merge: true });
-      }
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
-  }
 
   try {
     const apiBase = getApiBase();
@@ -795,18 +624,21 @@ export const seedOffersToServer = async (offers: OfferCard[]): Promise<void> => 
 export const subscribeServerOffers = (
   onOffers: (offers: OfferCard[]) => void,
   onError: (error: Error) => void,
-): Unsubscribe | null => {
-  if (!isFirebaseClientConfigured()) return null;
-
-  return onSnapshot(
-    collection(db(), FIRESTORE_OFFERS_COLLECTION),
-    (snapshot) => {
-      const list = snapshot.docs.map((doc) => doc.data() as OfferCard);
-      StorageService.saveAdminOffers(list);
-      onOffers(list);
-    },
-    (error) => onError(error),
-  );
+): Unsubscribe => {
+  let intervalId: any = null;
+  const fetchAndCallback = async () => {
+    try {
+      const offers = await getServerOffers();
+      onOffers(offers);
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  fetchAndCallback();
+  intervalId = setInterval(fetchAndCallback, 10000);
+  return () => {
+    if (intervalId) clearInterval(intervalId);
+  };
 };
 
 export const changeStaffPassword = async (
@@ -827,19 +659,6 @@ export const changeStaffPassword = async (
 };
 
 export const getServerWalletTransactions = async (): Promise<WalletTransaction[]> => {
-  if (isFirebaseClientConfigured()) {
-    try {
-      const snapshot = await getDocs(
-        query(collection(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION), orderBy('createdAt', 'desc')),
-      );
-      const list = snapshot.docs.map((doc) => doc.data() as WalletTransaction);
-      StorageService.saveAdminTransactions(list);
-      return list;
-    } catch (error) {
-      if (!getApiBase()) return StorageService.getAdminTransactions();
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return StorageService.getAdminTransactions();
@@ -862,15 +681,6 @@ export const saveWalletTransactionToServer = async (transaction: WalletTransacti
   const localList = StorageService.getAdminTransactions().filter((t) => t.id !== transaction.id);
   StorageService.saveAdminTransactions([transaction, ...localList]);
 
-  if (isFirebaseClientConfigured()) {
-    try {
-      await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, transaction.id), transaction, { merge: true });
-      return;
-    } catch (error) {
-      if (!getApiBase()) return;
-    }
-  }
-
   try {
     const apiBase = getApiBase();
     if (!apiBase) return;
@@ -888,18 +698,21 @@ export const saveWalletTransactionToServer = async (transaction: WalletTransacti
 export const subscribeServerWalletTransactions = (
   onTransactions: (transactions: WalletTransaction[]) => void,
   onError: (error: Error) => void,
-): Unsubscribe | null => {
-  if (!isFirebaseClientConfigured()) return null;
-
-  return onSnapshot(
-    query(collection(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION), orderBy('createdAt', 'desc')),
-    (snapshot) => {
-      const list = snapshot.docs.map((doc) => doc.data() as WalletTransaction);
-      StorageService.saveAdminTransactions(list);
-      onTransactions(list);
-    },
-    (error) => onError(error),
-  );
+): Unsubscribe => {
+  let intervalId: any = null;
+  const fetchAndCallback = async () => {
+    try {
+      const txs = await getServerWalletTransactions();
+      onTransactions(txs);
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  fetchAndCallback();
+  intervalId = setInterval(fetchAndCallback, 5000);
+  return () => {
+    if (intervalId) clearInterval(intervalId);
+  };
 };
 
 export const getServerSettings = async (): Promise<AppSettings> => {
@@ -990,6 +803,3 @@ export const triggerDatabaseRestore = async (filename: string): Promise<any> => 
   }
   return await response.json();
 };
-
-
-

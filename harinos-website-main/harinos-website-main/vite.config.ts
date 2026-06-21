@@ -1,7 +1,6 @@
 import path from 'path';
 import { Plugin, defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { createApp } from './backend/src/app.js';
 
 const createNoCacheVersionPlugin = (buildVersion: string): Plugin => ({
   name: 'harinos-no-cache-version',
@@ -40,12 +39,7 @@ const createNoCacheVersionPlugin = (buildVersion: string): Plugin => ({
   },
 });
 
-const createLocalApiPlugin = (): Plugin => ({
-  name: 'harinos-local-api',
-  configureServer(server) {
-    server.middlewares.use('/api', createApp());
-  },
-});
+
 
 export default defineConfig(() => {
   const buildVersion = new Date().toISOString();
@@ -56,7 +50,7 @@ export default defineConfig(() => {
       port: 3000,
       host: '0.0.0.0',
     },
-    plugins: [react(), createNoCacheVersionPlugin(buildVersion), createLocalApiPlugin()],
+    plugins: [react(), createNoCacheVersionPlugin(buildVersion)],
     build: {
       target: ['es2018', 'safari13'],
       cssTarget: 'safari13',

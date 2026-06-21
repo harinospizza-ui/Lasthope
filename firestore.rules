@@ -56,49 +56,62 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Menu Items Rules: Public read, Admin/Manager write
+    // Menu Items Rules: Public read, Admin/Manager write or bootstrapping
     match /menu_items/{itemId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager();
+      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
-    // Outlets Rules: Public read, Admin/Manager write
+    // Outlets Rules: Public read, Admin/Manager write or bootstrapping
     match /outlets/{outletId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager();
+      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
-    // Offers Rules: Public read, Admin/Manager write
+    // Offers Rules: Public read, Admin/Manager write or bootstrapping
     match /offers/{offerId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager();
+      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
-    // Role-specific Collections Rules: Admin only
+    // Role-specific Collections Rules: Public read for login check, write restricted except bootstrapping
     match /admins/{username} {
-      allow read, write: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
       allow delete: if false;
     }
 
     match /managers/{username} {
-      allow read, write: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
       allow delete: if isAdmin();
     }
 
     match /staff/{username} {
-      allow read, write: if isAdminOrManager();
+      allow read: if true;
+      allow write: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
       allow delete: if isAdminOrManager();
     }
 
-    // Application Settings Rules: Public read, Admin/Manager write
+    // Application Settings Rules: Public read, Admin/Manager write or bootstrapping
     match /settings/{settingsId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager();
+      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
     match /storeConfiguration/{configId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager();
+      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
+    }
+
+    // Notifications Rules: Public read/write
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
+    // User Sessions Rules: Public read/write
+    match /userSessions/{username} {
+      allow read, write: if true;
     }
 
     // Security & Audit Logs Rules

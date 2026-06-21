@@ -1,0 +1,148 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Check roles based on Firebase Auth email address
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'admin@harinos.local';
+    }
+    
+    function isManager() {
+      return request.auth != null && request.auth.token.email == 'manager@harinos.local';
+    }
+    
+    function isStaff() {
+      return request.auth != null && request.auth.token.email == 'staff@harinos.local';
+    }
+    
+    function isAdminOrManager() {
+      return isAdmin() || isManager();
+    }
+    
+    function isStaffUser() {
+      return isAdmin() || isManager() || isStaff();
+    }
+
+    // Orders Rules: Customers need public read/write access (unauthenticated)
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    // Customers Rules: Customers need public read/write access (unauthenticated)
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
+
+    match /customerProfiles/{customerId} {
+      allow read, write: if true;
+    }
+
+    // Verification Requests Rules
+    match /customerVerificationRequests/{requestId} {
+      allow read, write: if true;
+    }
+
+    // Wallets Rules
+    match /wallets/{walletId} {
+      allow read, write: if true;
+    }
+
+    // Wallet Transactions Rules
+    match /wallet_transactions/{transactionId} {
+      allow read, write: if true;
+    }
+
+    match /walletTransactions/{transactionId} {
+      allow read, write: if true;
+    }
+
+    // Menu Items Rules: Public read, Admin/Manager write
+    match /menu_items/{itemId} {
+      allow read: if true;
+      allow write, delete: if isAdminOrManager();
+    }
+
+    // Outlets Rules: Public read, Admin/Manager write
+    match /outlets/{outletId} {
+      allow read: if true;
+      allow write, delete: if isAdminOrManager();
+    }
+
+    // Offers Rules: Public read, Admin/Manager write
+    match /offers/{offerId} {
+      allow read: if true;
+      allow write, delete: if isAdminOrManager();
+    }
+
+    // Role-specific Collections Rules: Admin only
+    match /admins/{username} {
+      allow read, write: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /managers/{username} {
+      allow read, write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /staff/{username} {
+      allow read, write: if isAdminOrManager();
+      allow delete: if isAdminOrManager();
+    }
+
+    // Application Settings Rules: Public read, Admin/Manager write
+    match /settings/{settingsId} {
+      allow read: if true;
+      allow write, delete: if isAdminOrManager();
+    }
+
+    match /storeConfiguration/{configId} {
+      allow read: if true;
+      allow write, delete: if isAdminOrManager();
+    }
+
+    // Security & Audit Logs Rules
+    match /security_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if true;
+      allow delete: if false;
+    }
+
+    // Usage Rules
+    match /firestore_usage/{usageId} {
+      allow read: if isAdminOrManager();
+      allow write, delete: if false;
+    }
+
+    match /notification_stats/{statsId} {
+      allow read: if isAdminOrManager();
+      allow write, delete: if false;
+    }
+
+    // Devices & Token Rules
+    match /notification_tokens/{tokenId} {
+      allow read, write: if true;
+    }
+    
+    // Referrals Rules
+    match /referrals/{referralId} {
+      allow read, write: if true;
+    }
+
+    // Customer History
+    match /customerHistory/{customerId} {
+      allow read, write: if true;
+    }
+
+    // Order History
+    match /orderHistory/{orderId} {
+      allow read, write: if true;
+    }
+    
+    // Business Data
+    match /businessData/{dataId} {
+      allow read: if true;
+      allow write: if isAdminOrManager();
+    }
+  }
+}

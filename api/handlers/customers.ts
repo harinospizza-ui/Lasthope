@@ -77,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const docRef = db.collection('customers').doc(decodeURIComponent(customerId));
       const snap = await docRef.get();
       if (!snap.exists) {
-        res.status(404).json({ success: false, message: 'Customer not found.' });
+        res.status(404).json({ success: false, message: 'Customer profile missing' });
         return;
       }
       const customerData = snap.data() as any;
@@ -186,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const snap = await docRef.get();
         await trackUsage({ reads: 1, customersReads: 1 });
         if (!snap.exists) {
-          res.status(404).json({ success: false, message: 'Customer not found.' });
+          res.status(404).json({ success: false, message: 'Customer profile missing' });
           return;
         }
         res.json({ success: true, customer: sanitizeCustomer(snap.data()) });
@@ -436,17 +436,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const requestId = `req_${Date.now()}`;
 
         // Store verification request in Firestore
-        const requestDocRef = db.collection('customerVerificationRequests').doc(requestId);
-        await requestDocRef.set({
-          requestId,
-          customerName: name?.trim() || 'Customer',
-          mobileNumber: phone,
-          otp,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          verifiedAt: null,
-          verifiedBy: null
-        });
+        try {
+          const requestDocRef = db.collection('customerVerificationRequests').doc(requestId);
+          await requestDocRef.set({
+            requestId,
+            customerName: name?.trim() || 'Customer',
+            mobileNumber: phone,
+            otp,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            verifiedAt: null,
+            verifiedBy: null
+          });
+        } catch (err: any) {
+          console.error('Firestore write error for verification request:', err);
+          const isPermissionDenied = err.code === 7 || err.message?.toLowerCase().includes('permission');
+          res.status(500).json({
+            success: false,
+            message: isPermissionDenied ? 'Firestore permission denied' : 'Verification request write failed'
+          });
+          return;
+        }
 
         await trackUsage({ reads: 1, writes: 1 });
 

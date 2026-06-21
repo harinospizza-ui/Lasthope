@@ -121,8 +121,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const migrationBatch = db.batch();
       let migrationRequired = false;
 
-      if (snapshot.empty) {
-        for (const user of DEFAULT_STAFF) {
+      const existingUsernames = new Set(snapshot.docs.map(docDoc => docDoc.id));
+
+      for (const user of DEFAULT_STAFF) {
+        if (!existingUsernames.has(user.username)) {
           const hashedUser = {
             uid: user.username,
             username: user.username,
@@ -136,26 +138,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           migrationBatch.set(staffRef.doc(user.username), hashedUser);
           migrationRequired = true;
         }
-      } else {
-        snapshot.docs.forEach(docDoc => {
-          const data = docDoc.data();
-          const docId = docDoc.id;
-          let changed = false;
-          const updatedFields: any = {};
-
-          if (!data.uid) { updatedFields.uid = docId; changed = true; }
-          if (!data.username) { updatedFields.username = docId; changed = true; }
-          if (!data.role) { updatedFields.role = 'staff'; changed = true; }
-          if (data.active === undefined) { updatedFields.active = true; changed = true; }
-          if (!data.createdAt) { updatedFields.createdAt = now; changed = true; }
-          if (!data.lastLogin) { updatedFields.lastLogin = now; changed = true; }
-
-          if (changed) {
-            migrationBatch.set(docDoc.ref, updatedFields, { merge: true });
-            migrationRequired = true;
-          }
-        });
       }
+
+      snapshot.docs.forEach(docDoc => {
+        const data = docDoc.data();
+        const docId = docDoc.id;
+        let changed = false;
+        const updatedFields: any = {};
+
+        if (!data.uid) { updatedFields.uid = docId; changed = true; }
+        if (!data.username) { updatedFields.username = docId; changed = true; }
+        if (!data.role) { updatedFields.role = 'staff'; changed = true; }
+        if (data.active === undefined) { updatedFields.active = true; changed = true; }
+        if (!data.createdAt) { updatedFields.createdAt = now; changed = true; }
+        if (!data.lastLogin) { updatedFields.lastLogin = now; changed = true; }
+
+        if (changed) {
+          migrationBatch.set(docDoc.ref, updatedFields, { merge: true });
+          migrationRequired = true;
+        }
+      });
 
       if (migrationRequired) {
         await migrationBatch.commit();
@@ -170,12 +172,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (process.env.DEBUG_AUTH === 'true') {
           console.warn(`[DEBUG_AUTH] Login failed for ${username}: User not found.`);
         }
-        res.status(401).json({ success: false, message: 'User not found' });
+        const isDefault = ['Admin_Harinos', 'Manager_Harinos', 'Staff_Harinos'].includes(username);
+        res.status(401).json({ success: false, message: isDefault ? 'Admin account missing' : 'User not found' });
         return;
       }
       
       const user = userDoc.data() as any;
-
+ 
       if (user.active === false) {
         await logSecurityEvent('FAILED_LOGIN_ACCOUNT_DISABLED', username, 'Disabled user attempt', clientIp);
         if (process.env.DEBUG_AUTH === 'true') {
@@ -184,7 +187,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(403).json({ success: false, message: 'Account disabled' });
         return;
       }
-
+ 
       if (!user.role) {
         await logSecurityEvent('FAILED_LOGIN_ROLE_NOT_ASSIGNED', username, 'Missing role attempt', clientIp);
         if (process.env.DEBUG_AUTH === 'true') {
@@ -193,7 +196,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(403).json({ success: false, message: 'Role not assigned' });
         return;
       }
-
+ 
       if (!user.password) {
         await logSecurityEvent('FAILED_LOGIN_PROFILE_MISSING', username, 'Missing password profile', clientIp);
         if (process.env.DEBUG_AUTH === 'true') {
@@ -202,13 +205,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(401).json({ success: false, message: 'Profile missing' });
         return;
       }
-
+ 
       if (!verifyPassword(password, user.password)) {
         await logSecurityEvent('FAILED_LOGIN_INCORRECT_PASSWORD', username, 'Invalid password attempt', clientIp);
         if (process.env.DEBUG_AUTH === 'true') {
           console.warn(`[DEBUG_AUTH] Login failed for ${username}: Incorrect password.`);
         }
-        res.status(401).json({ success: false, message: 'Incorrect password' });
+        res.status(401).json({ success: false, message: 'Password mismatch' });
         return;
       }
 

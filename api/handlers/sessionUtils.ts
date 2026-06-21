@@ -53,7 +53,7 @@ export async function validateSession(
 
       const sessionData = sessionSnap.data();
       if (sessionData?.sessionId !== sessionId) {
-        res.status(401).json({ success: false, message: 'Your account was logged in from another device.' });
+        res.status(401).json({ success: false, message: 'Session conflict detected' });
         return { success: false };
       }
 

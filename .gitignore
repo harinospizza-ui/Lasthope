@@ -42,3 +42,8 @@ __pycache__/
 *.pyd
 db.sqlite3
 
+# Compiled API files
+api/**/*.js
+api/*.js
+scratch/verify_api.js
+

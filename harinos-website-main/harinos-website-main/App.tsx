@@ -466,21 +466,21 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Real-time single-device session sync listener for Admin & Manager
+  // Real-time single-device session sync listener for Admin & Manager, plus Firebase Auth for all staff
   useEffect(() => {
-    if (!configLoaded || !adminSession || (adminSession.role !== 'admin' && adminSession.role !== 'manager')) {
+    if (!configLoaded || !adminSession) {
       return;
     }
-
+ 
     let isMounted = true;
     let unsubscribe: (() => void) | undefined;
-
+ 
     const setupSessionListener = async () => {
       try {
         const { doc, onSnapshot } = await import('firebase/firestore');
         const { getAuth, signInWithCustomToken } = await import('firebase/auth');
         const { db, getFirebaseApp } = await import('./services/firebaseClient');
-
+ 
         // Authenticate client with Firebase Auth using Custom Token
         if (adminSession.firebaseToken) {
           const auth = getAuth(getFirebaseApp());
@@ -489,38 +489,40 @@ const App: React.FC = () => {
             console.log('Signed into Firebase Auth for session guard.');
           }
         }
-
+ 
         if (!isMounted) return;
-
-        const docRef = doc(db(), 'userSessions', adminSession.username);
-        unsubscribe = onSnapshot(docRef, (docSnap) => {
-          if (!isMounted) return;
-
-          if (!docSnap.exists()) {
-            console.warn('Session document missing. Forcing logout.');
-            triggerForcedLogout();
-            return;
-          }
-
-          const data = docSnap.data();
-          if (data?.sessionId !== adminSession.sessionId) {
-            console.warn('Session ID mismatch. Local:', adminSession.sessionId, 'Remote:', data?.sessionId);
-            triggerForcedLogout();
-          }
-        }, (error) => {
-          console.error('Session sync error:', error);
-        });
+ 
+        if (adminSession.role === 'admin' || adminSession.role === 'manager') {
+          const docRef = doc(db(), 'userSessions', adminSession.username);
+          unsubscribe = onSnapshot(docRef, (docSnap) => {
+            if (!isMounted) return;
+ 
+            if (!docSnap.exists()) {
+              console.warn('Session document missing. Forcing logout.');
+              triggerForcedLogout();
+              return;
+            }
+ 
+            const data = docSnap.data();
+            if (data?.sessionId !== adminSession.sessionId) {
+              console.warn('Session ID mismatch. Local:', adminSession.sessionId, 'Remote:', data?.sessionId);
+              triggerForcedLogout();
+            }
+          }, (error) => {
+            console.error('Session sync error:', error);
+          });
+        }
       } catch (err) {
         console.error('Failed to setup session listener:', err);
       }
     };
-
+ 
     const triggerForcedLogout = () => {
       // Clean local storage
       StorageService.clearAdminSession();
       setAdminSession(null);
       setIsAdminPanelOpen(false);
-
+ 
       // Call API logout endpoint to clean up backend
       const apiBase = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
       fetch(`${apiBase}/auth/logout`, {
@@ -532,13 +534,13 @@ const App: React.FC = () => {
         },
         body: JSON.stringify({ forced: true }),
       }).catch(() => {});
-
+ 
       // Alert user
       alert('Your account was logged in from another device.');
     };
-
+ 
     setupSessionListener();
-
+ 
     return () => {
       isMounted = false;
       if (unsubscribe) unsubscribe();

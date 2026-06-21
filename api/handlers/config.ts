@@ -11,12 +11,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   res.json({
-    apiKey: (process.env.VITE_FIREBASE_API_KEY || '').trim(),
-    authDomain: (process.env.VITE_FIREBASE_AUTH_DOMAIN || '').trim(),
-    projectId: (process.env.VITE_FIREBASE_PROJECT_ID || '').trim(),
-    storageBucket: (process.env.VITE_FIREBASE_STORAGE_BUCKET || '').trim(),
-    messagingSenderId: (process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '').trim(),
-    appId: (process.env.VITE_FIREBASE_APP_ID || '').trim(),
-    vapidKey: (process.env.VITE_FIREBASE_VAPID_KEY || '').trim(),
+    success: true,
+    config: {
+      apiKey: (process.env.VITE_FIREBASE_API_KEY || '').trim(),
+      authDomain: (process.env.VITE_FIREBASE_AUTH_DOMAIN || '').trim(),
+      projectId: (process.env.VITE_FIREBASE_PROJECT_ID || '').trim(),
+      storageBucket: (process.env.VITE_FIREBASE_STORAGE_BUCKET || '').trim(),
+      messagingSenderId: (process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '').trim(),
+      appId: (process.env.VITE_FIREBASE_APP_ID || '').trim(),
+      vapidKey: (process.env.VITE_FIREBASE_VAPID_KEY || '').trim(),
+    }
   });
 }

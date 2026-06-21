@@ -215,6 +215,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
         username: user.username,
         outletId: user.outletId ?? OUTLET_LOCATIONS[0]?.id ?? null,
         token: user.token,
+        firebaseToken: user.firebaseToken,
+        sessionId: user.sessionId,
         loginTime: new Date().toISOString(),
         lastActivityTime: new Date().toISOString(),
       };

@@ -1099,13 +1099,29 @@ export const authenticateAdminViaApi = async (username: string, password: string
 
   await updateDoc(doc(db(), collectionName, username), { lastLogin: new Date().toISOString() });
 
+  const newSessionId = `session_${Date.now()}`;
+
+  if (role === 'admin' || role === 'manager') {
+    try {
+      await setDoc(doc(db(), 'userSessions', username), {
+        sessionId: newSessionId,
+        username: username,
+        role: role,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      console.log(`Registered new session ${newSessionId} for ${username} in Firestore.`);
+    } catch (sessionErr) {
+      console.warn('Failed to register session ID in Firestore:', sessionErr);
+    }
+  }
+
   return {
     role: role,
     username: username,
     outletId: userDoc.outletId || null,
     token: userCredential.user.uid,
     firebaseToken: undefined,
-    sessionId: `session_${Date.now()}`
+    sessionId: newSessionId
   };
 };
 

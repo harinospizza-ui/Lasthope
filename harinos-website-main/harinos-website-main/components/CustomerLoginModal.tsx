@@ -88,7 +88,7 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
     }
   };
 
-  const handleSendOtp = async () => {
+  const handleLogin = async () => {
     setError('');
     
     if (!checkBusinessHours()) {
@@ -107,45 +107,14 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
     try {
       const result = await initCustomerLogin(phone, undefined, false);
       
-      if (result.success) {
-        setMode('otp');
-        if (result.requestId) {
-          setRequestId(result.requestId);
-        }
-        alert(result.message || 'Verification request submitted. Please wait while we verify your number.');
+      if (result.success && result.customer) {
+        alert(result.message || 'Login successful!');
+        onSave(result.customer);
       } else {
-        setError(result.message || 'Failed to send OTP. Please try again.');
+        setError(result.message || 'Login failed. Please try again.');
       }
     } catch (err: any) {
       setError(err.message || 'Network error initiating login.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    setError('');
-
-    if (!checkBusinessHours()) {
-      setError("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
-      return;
-    }
-
-    if (otp.trim().length !== 6) {
-      setError('Please enter the 6-digit OTP code.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await verifyCustomerLogin(requestId, otp.trim());
-      if (result.success && result.customer) {
-        onSave(result.customer);
-      } else {
-        setError(result.message || 'Incorrect OTP. Please try again.');
-      }
-    } catch (err: any) {
-      setError(err.message || 'OTP verification failed.');
     } finally {
       setLoading(false);
     }
@@ -269,11 +238,11 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
             </div>
             
             <button
-              onClick={handleSendOtp}
+              onClick={handleLogin}
               disabled={loading || !checkBusinessHours()}
               className="w-full rounded-2xl bg-red-655 bg-red-600 hover:bg-red-500 text-white py-4 text-[11px] font-black uppercase tracking-widest transition-premium active:scale-95 shadow-lg shadow-red-200 disabled:opacity-50"
             >
-              {loading ? "Submitting..." : "Request Verification"}
+              {loading ? "Submitting..." : "Continue"}
             </button>
 
             <div className="text-center mt-4">
@@ -282,42 +251,6 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
                 className="text-[10px] font-black uppercase tracking-wider text-slate-455 hover:text-red-600 transition-colors"
               >
                 New Customer? Create Account
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 4. OTP MODE */}
-        {mode === 'otp' && (
-          <div className="mt-6 space-y-4">
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 ml-1 text-center">Enter 6-Digit OTP</label>
-              <input
-                value={otp}
-                onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder="0 0 0 0 0 0"
-                disabled={loading}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-black text-slate-900 outline-none focus:border-red-500 focus:bg-white transition-all text-center tracking-[0.6em] text-lg font-mono"
-              />
-            </div>
-            
-            <button
-              onClick={handleVerifyOtp}
-              disabled={loading || !checkBusinessHours()}
-              className="w-full rounded-2xl bg-red-650 bg-red-600 hover:bg-red-500 text-white py-4 text-[11px] font-black uppercase tracking-widest transition-premium active:scale-95 shadow-lg shadow-red-200 disabled:opacity-50"
-            >
-              {loading ? "Verifying..." : "Verify & Continue"}
-            </button>
-
-            <div className="text-center mt-4">
-              <button
-                onClick={() => { setMode(name ? 'register' : 'login'); setError(''); setOtp(''); }}
-                className="text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-slate-900 transition-colors"
-              >
-                ← Go Back
               </button>
             </div>
           </div>

@@ -7,6 +7,7 @@ import {
   subscribeServerCustomers,
   subscribeServerOrders,
   updateServerOrderStatus,
+  deleteOrderFromServer,
   verifyServerCustomer,
   authenticateAdminViaApi,
   getServerMenuItems,
@@ -20,7 +21,7 @@ import {
   getBackupStatus,
   triggerDatabaseBackup,
   triggerDatabaseRestore,
-
+  logoutAdmin,
 } from '../services/orderApi';
 import { StorageService } from '../services/storage';
 import { notifyCustomerStatusChange } from '../services/notificationService';
@@ -228,26 +229,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   };
 
   const setStatus = (order: Order, status: OrderStatus, reason?: string) => {
-    const apiBase = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
-    fetch(`${apiBase}/orders/${encodeURIComponent(order.id)}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${session?.token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ status, reason }),
-    })
-      .then((res) => {
-        if (res.ok) {
-          if (status !== 'new') {
-            void notifyCustomerStatusChange(order, status);
-          }
-          refresh();
-        } else {
-          res.json().then((d) => alert(d.message || 'Failed to update status.'));
+    updateServerOrderStatus(order.id, status, reason)
+      .then(() => {
+        if (status !== 'new') {
+          void notifyCustomerStatusChange(order, status);
         }
+        refresh();
       })
-      .catch(() => alert('Network error updating status.'));
+      .catch((err: any) => alert(err.message || 'Failed to update status.'));
   };
 
   const verifyCustomer = async (customer: CustomerProfile) => {
@@ -269,24 +258,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   };
 
   const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('Are you sure you want to permanently delete this order?')) {
+      return;
+    }
     try {
-      const apiBase = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
-      const response = await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session?.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (response.ok) {
-        alert('Order deleted successfully (soft deleted).');
-        refresh();
-      } else {
-        const err = await response.json().catch(() => ({}));
-        alert(err.message || 'Failed to delete order.');
-      }
-    } catch {
-      alert('Network error deleting order.');
+      await deleteOrderFromServer(orderId);
+      alert('Order deleted successfully (permanently deleted).');
+      refresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete order.');
     }
   };
 
@@ -356,16 +336,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
             </button>
             <button 
               onClick={async () => {
-                const apiBase = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
-                await fetch(`${apiBase}/auth/logout`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.token}`,
-                    'X-Session-Id': session.sessionId || '',
-                  }
-                }).catch(() => {});
-                StorageService.clearAdminSession(); 
+                await logoutAdmin().catch(() => {});
                 onSessionChange(null); 
               }} 
               className="rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white transition hover:bg-white/20 active:scale-95"

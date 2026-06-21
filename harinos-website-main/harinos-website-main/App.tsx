@@ -478,17 +478,11 @@ const App: React.FC = () => {
     const setupSessionListener = async () => {
       try {
         const { doc, onSnapshot } = await import('firebase/firestore');
-        const { getAuth, signInWithCustomToken } = await import('firebase/auth');
-        const { db, getFirebaseApp } = await import('./services/firebaseClient');
+        const { db } = await import('./services/firebaseClient');
+        const { reauthenticateStaffSession } = await import('./services/orderApi');
  
-        // Authenticate client with Firebase Auth using Custom Token
-        if (adminSession.firebaseToken) {
-          const auth = getAuth(getFirebaseApp());
-          if (!auth.currentUser) {
-            await signInWithCustomToken(auth, adminSession.firebaseToken);
-            console.log('Signed into Firebase Auth for session guard.');
-          }
-        }
+        // Authenticate client with Firebase Auth using role-based credentials
+        await reauthenticateStaffSession();
  
         if (!isMounted) return;
  
@@ -626,6 +620,19 @@ const App: React.FC = () => {
       isMounted = false;
       clearInterval(interval);
     };
+  }, [configLoaded, customerProfile?.id]);
+
+  useEffect(() => {
+    if (!configLoaded || !customerProfile) return;
+    const reauth = async () => {
+      try {
+        const { reauthenticateCustomerSession } = await import('./services/orderApi');
+        await reauthenticateCustomerSession();
+      } catch (err) {
+        console.warn('Failed to reauthenticate customer session:', err);
+      }
+    };
+    void reauth();
   }, [configLoaded, customerProfile?.id]);
 
   const showNotification = useCallback((messageOrObj: string | { title: string; message: string; type?: 'success' | 'info' | 'warning' | 'error' }) => {

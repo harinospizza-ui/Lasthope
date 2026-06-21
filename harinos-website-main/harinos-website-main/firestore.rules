@@ -2,93 +2,134 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Check if the authenticated user is an Admin or Manager
+    // Check roles based on Firebase Auth email address
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'admin@harinos.local';
+    }
+    
+    function isManager() {
+      return request.auth != null && request.auth.token.email == 'manager@harinos.local';
+    }
+    
+    function isStaff() {
+      return request.auth != null && request.auth.token.email == 'staff@harinos.local';
+    }
+    
     function isAdminOrManager() {
-      return request.auth != null && (request.auth.uid == 'Admin_Harinos' || request.auth.uid == 'Manager_Harinos');
+      return isAdmin() || isManager();
+    }
+    
+    function isStaffUser() {
+      return isAdmin() || isManager() || isStaff();
     }
 
-    // Orders Collection Rules: Authenticated users (admin, manager, staff) can read
+    // Orders Rules
     match /orders/{orderId} {
       allow read: if request.auth != null;
-      allow write, delete: if false;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (isStaffUser() || request.auth.token.email == 'customer_' + resource.data.customerPhone + '@harinos.local');
+      allow delete: if isAdminOrManager();
     }
 
-    // Customers Collection Rules: Admin/Manager can read/write
+    // Customers Rules
     match /customers/{customerId} {
-      allow read, write, delete: if isAdminOrManager();
+      allow read, write: if request.auth != null && (isAdminOrManager() || request.auth.token.email == 'customer_' + customerId + '@harinos.local');
+      allow delete: if isAdminOrManager();
     }
 
-    // Verification Requests: Admin/Manager can read/write
+    match /customerProfiles/{customerId} {
+      allow read, write: if request.auth != null && (isAdminOrManager() || request.auth.token.email == 'customer_' + customerId + '@harinos.local');
+      allow delete: if isAdminOrManager();
+    }
+
+    // Verification Requests Rules
     match /customerVerificationRequests/{requestId} {
-      allow read, write, delete: if isAdminOrManager();
+      allow read, write: if request.auth != null && (isAdminOrManager() || request.auth.token.email == 'customer_' + requestId + '@harinos.local');
+      allow delete: if isAdminOrManager();
     }
 
-    // Wallet Transactions Rules: Admin/Manager can read/write
+    // Wallets Rules
+    match /wallets/{walletId} {
+      allow read: if request.auth != null && (isAdminOrManager() || request.auth.token.email == 'customer_' + walletId + '@harinos.local');
+      allow write: if isAdminOrManager();
+      allow delete: if isAdminOrManager();
+    }
+
+    // Wallet Transactions Rules
     match /wallet_transactions/{transactionId} {
-      allow read, write, delete: if isAdminOrManager();
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if isAdminOrManager();
     }
 
-    // Menu Items Rules: Read-only for public, writes for Admins/Managers
+    match /walletTransactions/{transactionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if isAdminOrManager();
+    }
+
+    // Menu Items Rules
     match /menu_items/{itemId} {
       allow read: if true;
       allow write, delete: if isAdminOrManager();
     }
 
-    // Outlets Rules: Read-only for public, writes for Admins/Managers
+    // Outlets Rules
     match /outlets/{outletId} {
       allow read: if true;
       allow write, delete: if isAdminOrManager();
     }
 
-    // Offers Rules: Read-only for public, writes for Admins/Managers
+    // Offers Rules
     match /offers/{offerId} {
       allow read: if true;
       allow write, delete: if isAdminOrManager();
     }
 
-    // Users Rules: Block all direct client SDK reads/writes
-    match /users/{username} {
-      allow read, write, delete: if false;
+    // Role-specific Collections Rules
+    match /admins/{username} {
+      allow read, write: if isAdmin();
+      allow delete: if false;
     }
 
-    // Notification Tokens Rules: Admin/Manager can read (for getNotificationDashboardData counting)
-    match /notification_tokens/{tokenId} {
-      allow read: if isAdminOrManager();
-      allow write, delete: if false;
+    match /managers/{username} {
+      allow read, write: if isAdmin();
+      allow delete: if isAdmin();
     }
 
-    // Notification Log Rules: Block all direct client SDK reads/writes
-    match /notification_log/{logId} {
-      allow read, write, delete: if false;
+    match /staff/{username} {
+      allow read, write: if isAdminOrManager();
+      allow delete: if isAdminOrManager();
     }
 
-    // Security Logs Rules: Block all direct client SDK reads/writes
-    match /security_logs/{logId} {
-      allow read, write, delete: if false;
-    }
-
-    // Settings Rules: Read-only for public, writes for Admins/Managers
+    // Application Settings Rules
     match /settings/{settingsId} {
       allow read: if true;
       allow write, delete: if isAdminOrManager();
     }
 
-    // Firestore Usage Log Rules: Admin/Manager can read
+    // Security & Audit Logs Rules
+    match /security_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if request.auth != null;
+      allow delete: if false;
+    }
+
+    // Usage Rules
     match /firestore_usage/{usageId} {
       allow read: if isAdminOrManager();
       allow write, delete: if false;
     }
 
-    // Notification Stats Rules: Admin/Manager can read
     match /notification_stats/{statsId} {
       allow read: if isAdminOrManager();
       allow write, delete: if false;
     }
 
-    // User Sessions Rules: Read-only for owners authenticated via Firebase Auth custom token
-    match /userSessions/{username} {
-      allow read: if request.auth != null && request.auth.uid == username;
-      allow write, delete: if false;
+    // Devices & Token Rules
+    match /notification_tokens/{tokenId} {
+      allow read: if isAdminOrManager();
+      allow write, delete: if true;
     }
   }
 }

@@ -1,124 +1,215 @@
-import { CustomerProfile, Order, OrderStatus, MenuItem, OutletConfig, OfferCard, WalletTransaction, AppSettings, VerificationRequest } from '../types';
+import { 
+  CustomerProfile, 
+  Order, 
+  OrderStatus, 
+  MenuItem, 
+  OutletConfig, 
+  OfferCard, 
+  WalletTransaction, 
+  AppSettings, 
+  VerificationRequest,
+  AdminSession,
+  Category
+} from '../types';
 import { StorageService } from './storage';
 import {
   db,
+  auth,
+  storage,
   FIRESTORE_ORDERS_COLLECTION,
   FIRESTORE_CUSTOMERS_COLLECTION,
   FIRESTORE_MENU_ITEMS_COLLECTION,
   FIRESTORE_OUTLETS_COLLECTION,
   FIRESTORE_OFFERS_COLLECTION,
   FIRESTORE_WALLET_TRANSACTIONS_COLLECTION,
-  FIRESTORE_NOTIFICATION_TOKENS_COLLECTION,
   FIRESTORE_VERIFICATION_REQUESTS_COLLECTION
 } from './firebaseClient';
-import { doc, getDoc, getDocs, setDoc, deleteDoc, collection, query, where, orderBy, limit, startAfter, onSnapshot, updateDoc, getCountFromServer } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  onSnapshot, 
+  updateDoc, 
+  getCountFromServer,
+  runTransaction
+} from 'firebase/firestore';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  updatePassword as updateAuthPassword, 
+  signOut 
+} from 'firebase/auth';
+import { 
+  ref, 
+  uploadString, 
+  listAll, 
+  getMetadata, 
+  getBytes 
+} from 'firebase/storage';
+import { hashPasswordClient } from './hashUtils';
 
 export type Unsubscribe = () => void;
 
-let dynamicApiUrl = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
+export interface BackupDetail {
+  filename: string;
+  size: string;
+  date: string;
+  status: string;
+  location: string;
+}
 
-const originalFetch = window.fetch;
-const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-  let targetInput = input;
-  if (typeof input === 'string' && input.startsWith('/api') && dynamicApiUrl.startsWith('http')) {
-    targetInput = dynamicApiUrl + input.substring(4);
-  }
-  const response = await originalFetch(targetInput, init);
-  if (response.status === 401) {
-    const session = StorageService.getAdminSession();
-    if (session) {
-      console.warn('Unauthorized API request (401). Clearing session and dispatching logout event.');
-      StorageService.clearAdminSession();
-      window.dispatchEvent(new CustomEvent('harinos-unauthorized'));
-    }
-  }
-  return response;
+export interface BackupStatusResponse {
+  success: boolean;
+  backups: BackupDetail[];
+  lastBackupTime?: string;
+  lastBackupSize?: string;
+  lastBackupStatus?: string;
+  lastBackupLocation?: string;
+}
+
+export interface NotificationDashboardData {
+  success: boolean;
+  totalDevices: number;
+  stats: any[];
+}
+
+export const checkBusinessHours = (): boolean => {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const ist = new Date(utc + (3600000 * 5.5)); // IST is UTC+5.5
+  const hours = ist.getHours();
+  return hours >= 11 && hours < 21;
 };
 
-const getApiBase = (): string | null => dynamicApiUrl || null;
-export const isOrderApiConfigured = (): boolean => Boolean(getApiBase());
-
-const getAuthHeaders = (): Record<string, string> => {
-  const session = StorageService.getAdminSession();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (session) {
-    if (session.token) {
-      headers['Authorization'] = `Bearer ${session.token}`;
-    }
-    if (session.sessionId) {
-      headers['X-Session-Id'] = session.sessionId;
-    }
-  }
-  return headers;
-};
+export const isOrderApiConfigured = (): boolean => true;
 
 const sortOrders = (orders: Order[]): Order[] =>
   [...orders].sort((a, b) => new Date(b.receivedAt ?? b.date).getTime() - new Date(a.receivedAt ?? a.date).getTime());
 
-const saveFullOrderViaApi = async (order: Order): Promise<void> => {
-  if (!getApiBase()) throw new Error('Central API is not configured.');
-  const response = await fetch(`${getApiBase()}/orders/full`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(order),
+const sortCustomers = (customers: CustomerProfile[]): CustomerProfile[] => {
+  return [...customers].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
   });
-  if (!response.ok) throw new Error(`Order sync failed with status ${response.status}.`);
 };
 
-const getOrdersViaApi = async (): Promise<Order[]> => {
-  if (!getApiBase()) return [];
-  const response = await fetch(`${getApiBase()}/orders`, {
-    headers: getAuthHeaders(),
-    cache: 'no-store'
-  });
-  if (!response.ok) throw new Error(`Order fetch failed with status ${response.status}.`);
-  const data = (await response.json()) as { orders?: Order[] };
-  return data.orders ?? [];
+const DEFAULT_STAFF = [
+  { role: 'admin', username: 'Admin_Harinos', password: 'Harinos_Admin', collection: 'admins', email: 'admin@harinos.local', dbPass: 'AdminDBAccessPass1!' },
+  { role: 'manager', username: 'Manager_Harinos', password: 'Harinos_Manager', collection: 'managers', email: 'manager@harinos.local', dbPass: 'ManagerDBAccessPass1!' },
+  { role: 'staff', username: 'Staff_Harinos', password: 'Harinos_Staff', collection: 'staff', email: 'staff@harinos.local', dbPass: 'StaffDBAccessPass1!' },
+];
+
+export const reauthenticateStaffSession = async (): Promise<void> => {
+  const session = StorageService.getAdminSession();
+  if (!session) return;
+  
+  const authInstance = auth();
+  if (authInstance.currentUser) return;
+  
+  const def = DEFAULT_STAFF.find(d => d.role === session.role);
+  if (def) {
+    try {
+      await signInWithEmailAndPassword(authInstance, def.email, def.dbPass);
+      console.log('Automatically re-authenticated staff session in Firebase Auth.');
+    } catch (err) {
+      console.warn('Failed to auto-login staff to Firebase Auth:', err);
+    }
+  }
 };
 
-const updateOrderStatusViaApi = async (orderId: string, status: OrderStatus): Promise<void> => {
-  if (!getApiBase()) throw new Error('Central API is not configured.');
-  const response = await fetch(`${getApiBase()}/orders/${encodeURIComponent(orderId)}/status`, {
-    method: 'PATCH',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ status }),
-  });
-  if (!response.ok) throw new Error(`Status update failed with status ${response.status}.`);
-};
-
-const saveCustomerViaApi = async (profile: CustomerProfile): Promise<void> => {
-  if (!getApiBase()) throw new Error('Central API is not configured.');
-  const response = await fetch(`${getApiBase()}/customers`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(profile),
-  });
-  if (!response.ok) throw new Error(`Customer sync failed with status ${response.status}.`);
+export const reauthenticateCustomerSession = async (): Promise<void> => {
+  const profile = StorageService.getCustomerProfile();
+  if (!profile) return;
+  
+  const authInstance = auth();
+  if (authInstance.currentUser) return;
+  
+  const cleanPhone = profile.phone.replace(/\D/g, '');
+  const email = `customer_${cleanPhone}@harinos.local`;
+  const password = `customer_${cleanPhone}_pass`;
+  try {
+    await signInWithEmailAndPassword(authInstance, email, password);
+    console.log('Automatically re-authenticated customer in Firebase Auth.');
+  } catch (err) {
+    console.warn('Failed to auto-login customer to Firebase Auth:', err);
+  }
 };
 
 export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: string }): Promise<Order> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('Central API is not configured.');
-
-  const response = await fetch(`${apiBase}/orders`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(order),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Order placement failed with status ${response.status}.`);
+  if (!checkBusinessHours()) {
+    throw new Error("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
   }
 
-  const data = await response.json() as { success: boolean; order: Order };
-  if (!data.success || !data.order) {
-    throw new Error('Order placement failed: invalid response from server.');
+  if (order.orderType !== 'dinein') {
+    const hasBeverages = order.items.some(item => item.category === Category.BEVERAGES || item.category === 'Beverages');
+    if (hasBeverages) {
+      throw new Error("Beverages are available for Dine-In only.");
+    }
   }
 
-  const localOrders = StorageService.getAdminOrders().filter((o) => o.id !== data.order.id);
-  StorageService.saveAdminOrders([data.order, ...localOrders]);
+  if (order.orderType === 'delivery') {
+    if (order.distanceKm && order.distanceKm > 5) {
+      throw new Error("Delivery is only available within 5 KM.");
+    }
+  }
 
-  return data.order;
+  if (order.customerPhone) {
+    const cleanPhone = order.customerPhone.replace(/\D/g, '');
+    const customerSnap = await getDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone));
+    if (customerSnap.exists()) {
+      const customerData = customerSnap.data() as CustomerProfile;
+      if (customerData.status === 'blocked' || customerData.active === false) {
+        throw new Error("Forbidden. Blocked customer cannot place orders.");
+      }
+    }
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayFormatted = todayStr.replace(/-/g, '');
+  const startOfDay = new Date(todayStr + 'T00:00:00.000Z');
+
+  const q = query(
+    collection(db(), FIRESTORE_ORDERS_COLLECTION),
+    where('receivedAt', '>=', startOfDay.toISOString())
+  );
+  const snapshot = await getDocs(q);
+  const dailySeq = snapshot.size + 1;
+  const orderId = `HRN-${todayFormatted}-${dailySeq}`;
+
+  const nextOrder: Order = {
+    ...order,
+    id: orderId,
+    receivedAt: new Date().toISOString(),
+    date: new Date().toLocaleString(),
+    status: 'new',
+    auditTrail: [{
+      timestamp: new Date().toISOString(),
+      updatedBy: order.customerName ? String(order.customerName) : 'customer',
+      action: 'Order placed'
+    }]
+  } as Order;
+
+  await setDoc(doc(db(), FIRESTORE_ORDERS_COLLECTION, orderId), nextOrder);
+
+  try {
+    const { notifyCustomerStatusChange } = await import('./notificationService');
+    void notifyCustomerStatusChange(nextOrder, 'new');
+  } catch (err) {
+    console.warn('FCM order placement notify failed:', err);
+  }
+
+  const localOrders = StorageService.getAdminOrders().filter((o) => o.id !== orderId);
+  StorageService.saveAdminOrders([nextOrder, ...localOrders]);
+
+  return nextOrder;
 };
 
 export const getServerOrders = async (): Promise<Order[]> => {
@@ -208,19 +299,105 @@ export const getServerOrderById = async (orderId: string): Promise<Order | null>
   }
 };
 
-export const updateServerOrderStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
-  const localOrders = StorageService.getAdminOrders();
-  const idx = localOrders.findIndex((o) => o.id === orderId);
-  if (idx >= 0) {
-    localOrders[idx] = { ...localOrders[idx], status, statusUpdatedAt: new Date().toISOString() };
-    StorageService.saveAdminOrders(localOrders);
+export const updateServerOrderStatus = async (orderId: string, status: OrderStatus, reason?: string): Promise<void> => {
+  const session = StorageService.getAdminSession();
+  const callerName = session ? session.username : 'system';
+
+  if (status === 'cancelled' && session?.role === 'staff') {
+    throw new Error('Forbidden. Staff cannot cancel orders.');
   }
 
-  try {
-    await updateOrderStatusViaApi(orderId, status);
-  } catch (error) {
-    console.warn('API update order status failed:', error);
+  const cleanId = orderId.trim();
+  const orderRef = doc(db(), FIRESTORE_ORDERS_COLLECTION, cleanId);
+  const snap = await getDoc(orderRef);
+
+  if (!snap.exists()) {
+    throw new Error('Order not found.');
   }
+
+  const orderData = snap.data() as Order;
+  if (orderData.status === 'cancelled') {
+    throw new Error('Cancelled orders cannot be modified.');
+  }
+
+  if (status === 'cancelled') {
+    await deleteDoc(orderRef);
+
+    const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    await setDoc(doc(db(), 'security_logs', logId), {
+      id: logId,
+      timestamp: new Date().toISOString(),
+      action: 'ORDER_CANCELLED',
+      username: callerName,
+      details: `Permanently deleted order: ${cleanId}, Reason: ${reason || ''}`
+    });
+
+    try {
+      const { notifyCustomerStatusChange } = await import('./notificationService');
+      void notifyCustomerStatusChange({ ...orderData, status }, status);
+    } catch (err) {
+      console.warn('FCM status notify failed:', err);
+    }
+  } else {
+    const auditTrail = orderData.auditTrail || [];
+    auditTrail.push({
+      timestamp: new Date().toISOString(),
+      updatedBy: callerName,
+      action: `Status updated to ${status}`,
+      previousStatus: orderData.status,
+      newStatus: status,
+      reason: reason || ''
+    });
+
+    await updateDoc(orderRef, {
+      status,
+      statusUpdatedAt: new Date().toISOString(),
+      auditTrail
+    });
+
+    const localOrders = StorageService.getAdminOrders();
+    const idx = localOrders.findIndex((o) => o.id === cleanId);
+    if (idx >= 0) {
+      localOrders[idx] = {
+        ...localOrders[idx],
+        status,
+        statusUpdatedAt: new Date().toISOString(),
+        auditTrail
+      };
+      StorageService.saveAdminOrders(localOrders);
+    }
+
+    try {
+      const { notifyCustomerStatusChange } = await import('./notificationService');
+      void notifyCustomerStatusChange({ ...orderData, status }, status);
+    } catch (err) {
+      console.warn('FCM status notify failed:', err);
+    }
+  }
+};
+
+export const deleteOrderFromServer = async (orderId: string): Promise<void> => {
+  const session = StorageService.getAdminSession();
+  if (!session || (session.role !== 'admin' && session.role !== 'manager')) {
+    throw new Error('Forbidden. Admin/Manager role required.');
+  }
+
+  const cleanId = orderId.trim();
+  const orderDocRef = doc(db(), FIRESTORE_ORDERS_COLLECTION, cleanId);
+
+  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  await setDoc(doc(db(), 'security_logs', logId), {
+    id: logId,
+    timestamp: new Date().toISOString(),
+    action: 'ORDER_DELETED',
+    username: session.username,
+    details: `Permanently deleted order: ${cleanId}`
+  });
+
+  await deleteDoc(orderDocRef);
+
+  const localOrders = StorageService.getAdminOrders().filter((o) => o.id !== cleanId);
+  StorageService.saveAdminOrders(localOrders);
 };
 
 export const saveCustomerToServer = async (profile: CustomerProfile): Promise<void> => {
@@ -229,6 +406,7 @@ export const saveCustomerToServer = async (profile: CustomerProfile): Promise<vo
 
   try {
     await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, profile.id), profile, { merge: true });
+    await setDoc(doc(db(), 'customerProfiles', profile.id), profile, { merge: true });
   } catch (error) {
     console.warn('Direct Firestore save customer failed:', error);
     throw error;
@@ -236,23 +414,27 @@ export const saveCustomerToServer = async (profile: CustomerProfile): Promise<vo
 };
 
 export const deleteCustomerFromServer = async (customerId: string): Promise<void> => {
-  const localCusts = StorageService.getAdminCustomers().filter((c) => c.id !== customerId);
-  StorageService.saveAdminCustomers(localCusts);
-
-  try {
-    await deleteDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, customerId));
-  } catch (error) {
-    console.warn('Direct Firestore delete customer failed:', error);
-    throw error;
+  const cleanId = customerId.trim();
+  await deleteDoc(doc(db(), 'customers', cleanId));
+  await deleteDoc(doc(db(), 'customerProfiles', cleanId));
+  await deleteDoc(doc(db(), 'wallets', cleanId));
+  await deleteDoc(doc(db(), 'customerVerificationRequests', cleanId));
+  await deleteDoc(doc(db(), 'customerVerification', cleanId));
+  
+  const txQuery = query(collection(db(), 'wallet_transactions'), where('customerId', '==', cleanId));
+  const txSnap = await getDocs(txQuery);
+  for (const docDoc of txSnap.docs) {
+    await deleteDoc(docDoc.ref);
   }
-};
+  
+  const txQuery2 = query(collection(db(), 'walletTransactions'), where('customerId', '==', cleanId));
+  const txSnap2 = await getDocs(txQuery2);
+  for (const docDoc of txSnap2.docs) {
+    await deleteDoc(docDoc.ref);
+  }
 
-const sortCustomers = (customers: CustomerProfile[]): CustomerProfile[] => {
-  return [...customers].sort((a, b) => {
-    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return timeB - timeA;
-  });
+  const localCusts = StorageService.getAdminCustomers().filter((c) => c.id !== cleanId);
+  StorageService.saveAdminCustomers(localCusts);
 };
 
 export const getServerCustomers = async (): Promise<CustomerProfile[]> => {
@@ -284,152 +466,245 @@ export const registerCustomer = async (
   phone: string,
   name: string
 ): Promise<{ success: boolean; customer: CustomerProfile; requestId: string; message?: string }> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('Central API is not configured.');
-  
-  const response = await fetch(`${apiBase}/customers?action=register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, name }),
-  });
-  
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.message || 'Registration failed.');
+  if (!checkBusinessHours()) {
+    throw new Error("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
   }
+
+  const cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length !== 10) {
+    throw new Error('Please enter a valid 10-digit mobile number.');
+  }
+
+  const blockedSnap = await getDoc(doc(db(), 'blocked_customers', cleanPhone));
+  if (blockedSnap.exists()) {
+    throw new Error('This mobile number is permanently blocked.');
+  }
+
+  const existingSnap = await getDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone));
+  if (existingSnap.exists()) {
+    throw new Error('This phone number is already registered. Please login instead.');
+  }
+
+  const referralCode = Math.floor(65536 + Math.random() * 983039).toString(16).toUpperCase();
+  const nowStr = new Date().toISOString();
+
+  const email = `customer_${cleanPhone}@harinos.local`;
+  const password = `customer_${cleanPhone}_pass`;
   
-  return await response.json();
+  let userCredential;
+  try {
+    userCredential = await signInWithEmailAndPassword(auth(), email, password);
+  } catch (err: any) {
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+      userCredential = await createUserWithEmailAndPassword(auth(), email, password);
+    } else {
+      throw err;
+    }
+  }
+
+  const customerProfile: CustomerProfile = {
+    id: cleanPhone,
+    customerId: cleanPhone,
+    name: name.trim(),
+    fullName: name.trim(),
+    phone: cleanPhone,
+    mobileNumber: cleanPhone,
+    email: email,
+    loginMethod: 'phone',
+    verified: false,
+    walletBalance: 0,
+    loyaltyPoints: 0,
+    rewardPoints: 0,
+    active: true,
+    status: 'active',
+    createdAt: nowStr,
+    lastLogin: nowStr,
+    referralAttemptsRemaining: 3,
+    referralCodeUsed: false,
+    referralLocked: false,
+    referralCode: referralCode
+  };
+
+  await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone), customerProfile);
+  await setDoc(doc(db(), 'customerProfiles', cleanPhone), customerProfile);
+  await setDoc(doc(db(), 'wallets', cleanPhone), { customerId: cleanPhone, balance: 0, createdAt: nowStr });
+  await setDoc(doc(db(), FIRESTORE_VERIFICATION_REQUESTS_COLLECTION, cleanPhone), {
+    requestId: cleanPhone,
+    customerId: cleanPhone,
+    customerName: name.trim(),
+    mobileNumber: cleanPhone,
+    otp: 'NO_OTP',
+    status: 'pending',
+    createdAt: nowStr,
+    verifiedAt: null,
+    verifiedBy: null
+  });
+
+  return {
+    success: true,
+    customer: customerProfile,
+    requestId: cleanPhone,
+    message: 'Account created successfully!'
+  };
 };
 
 export const initCustomerLogin = async (
   phone: string,
   name?: string,
   isRegistering?: boolean
-): Promise<{ success: boolean; exists: boolean; requestId?: string; message?: string }> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('Central API is not configured.');
-  
-  const response = await fetch(`${apiBase}/customers?action=login-init`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, name, isRegistering }),
-  });
-  
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.message || 'Verification request failed.');
+): Promise<{ success: boolean; exists: boolean; customer?: CustomerProfile; requestId?: string; message?: string }> => {
+  if (!checkBusinessHours()) {
+    throw new Error("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
   }
 
-  const data = await response.json();
-  return data;
+  const cleanPhone = phone.replace(/\D/g, '');
+  const customerSnap = await getDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone));
+  
+  if (!customerSnap.exists()) {
+    return { success: false, exists: false, message: 'User not found. Please register.' };
+  }
+
+  const customerData = customerSnap.data() as CustomerProfile;
+  if (customerData.active === false || customerData.status === 'blocked') {
+    return { success: false, exists: true, message: 'Account disabled' };
+  }
+
+  const email = `customer_${cleanPhone}@harinos.local`;
+  const password = `customer_${cleanPhone}_pass`;
+  
+  try {
+    await signInWithEmailAndPassword(auth(), email, password);
+  } catch (err: any) {
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+      await createUserWithEmailAndPassword(auth(), email, password);
+    } else {
+      throw err;
+    }
+  }
+
+  const updatedProfile = { ...customerData, lastLogin: new Date().toISOString() };
+  await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone), updatedProfile);
+  await setDoc(doc(db(), 'customerProfiles', cleanPhone), updatedProfile);
+
+  return {
+    success: true,
+    exists: true,
+    customer: updatedProfile,
+    requestId: cleanPhone,
+    message: 'Login successful!'
+  };
 };
 
 export const verifyCustomerLogin = async (
   requestId: string,
   otp: string
 ): Promise<{ success: boolean; customer?: CustomerProfile; message?: string }> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('Central API is not configured.');
-  
-  const response = await fetch(`${apiBase}/customers?action=login-verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ requestId, otp }),
-  });
-  
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.message || 'OTP verification failed.');
-  }
-  
-  const data = await response.json();
-  return data;
+  return { success: true };
 };
 
 export const verifyServerCustomer = async (customerId: string, otp?: string): Promise<CustomerProfile | null> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('Central API is not configured.');
+  const cleanId = customerId.trim();
+  const customerRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId);
+  const profileRef = doc(db(), 'customerProfiles', cleanId);
+  const verifyRef = doc(db(), FIRESTORE_VERIFICATION_REQUESTS_COLLECTION, cleanId);
 
-  const response = await fetch(`${apiBase}/customers/${encodeURIComponent(customerId)}/verify`, {
-    method: 'PATCH',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ otp }),
-  });
+  await updateDoc(customerRef, { verified: true });
+  try {
+    await updateDoc(profileRef, { verified: true });
+  } catch (err) {}
+  try {
+    await updateDoc(verifyRef, {
+      status: 'verified',
+      verifiedAt: new Date().toISOString(),
+      verifiedBy: 'admin'
+    });
+  } catch (err) {}
 
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.message || `Customer verification failed with status ${response.status}.`);
-  }
-
-  const data = (await response.json()) as { customer?: CustomerProfile };
-  const updated = data.customer ?? null;
-  if (updated) {
-    const localCusts = StorageService.getAdminCustomers();
-    const idx = localCusts.findIndex((c) => c.id === customerId);
-    if (idx >= 0) {
-      localCusts[idx] = updated;
-    } else {
-      localCusts.push(updated);
-    }
-    StorageService.saveAdminCustomers(localCusts);
-  }
-  return updated;
+  const snap = await getDoc(customerRef);
+  return snap.exists() ? (snap.data() as CustomerProfile) : null;
 };
 
-
-
 export const blockCustomerOnServer = async (customerId: string, blocked: boolean): Promise<any> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('Central API is not configured.');
+  const cleanId = customerId.trim();
+  const status = blocked ? 'blocked' : 'active';
+  const active = !blocked;
 
-  const response = await fetch(`${apiBase}/customers?action=block`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ customerId, blocked }),
-  });
+  await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId), { status, active });
+  try {
+    await updateDoc(doc(db(), 'customerProfiles', cleanId), { status, active });
+  } catch (err) {}
 
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.message || `Failed to update block status.`);
+  if (blocked) {
+    await setDoc(doc(db(), 'blocked_customers', cleanId), {
+      phone: cleanId,
+      blockedAt: new Date().toISOString(),
+      customerId: cleanId
+    });
+  } else {
+    await deleteDoc(doc(db(), 'blocked_customers', cleanId));
   }
 
-  return await response.json();
+  return { success: true };
 };
 
 export const bulkRemoveCustomersFromServer = async (customerIds: string[]): Promise<any> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('Central API is not configured.');
-
-  const response = await fetch(`${apiBase}/customers?action=bulk-remove`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ customerIds }),
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.message || `Failed bulk delete operation.`);
+  for (const id of customerIds) {
+    await deleteCustomerFromServer(id);
   }
-
-  return await response.json();
+  return { success: true };
 };
 
 export const mergeCustomersOnServer = async (primaryId: string, secondaryId: string): Promise<any> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('Central API is not configured.');
-
-  const response = await fetch(`${apiBase}/customers?action=merge`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ primaryId, secondaryId }),
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.message || `Failed merge operation.`);
+  const pId = primaryId.trim();
+  const sId = secondaryId.trim();
+  if (pId === sId) {
+    throw new Error('Primary and secondary profiles cannot be the same.');
   }
 
-  return await response.json();
+  const primaryRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, pId);
+  const secondaryRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, sId);
+
+  await runTransaction(db(), async (transaction) => {
+    const primarySnap = await transaction.get(primaryRef);
+    const secondarySnap = await transaction.get(secondaryRef);
+
+    if (!primarySnap.exists()) {
+      throw new Error('Primary customer not found.');
+    }
+    if (!secondarySnap.exists()) {
+      throw new Error('Secondary customer not found.');
+    }
+
+    const primaryData = primarySnap.data() as CustomerProfile;
+    const secondaryData = secondarySnap.data() as CustomerProfile;
+
+    const mergedBalance = (primaryData.walletBalance || 0) + (secondaryData.walletBalance || 0);
+    const mergedPoints = (primaryData.rewardPoints || primaryData.loyaltyPoints || 0) + (secondaryData.rewardPoints || secondaryData.loyaltyPoints || 0);
+
+    transaction.update(primaryRef, {
+      walletBalance: mergedBalance,
+      rewardPoints: mergedPoints,
+      loyaltyPoints: mergedPoints
+    });
+
+    transaction.delete(secondaryRef);
+
+    const txId = `tx_merge_${Date.now()}`;
+    const txRef = doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
+    transaction.set(txRef, {
+      id: txId,
+      customerId: pId,
+      customerName: primaryData.name || primaryData.fullName || 'Customer',
+      customerPhone: primaryData.phone || primaryData.mobileNumber || '',
+      amount: secondaryData.walletBalance || 0,
+      type: 'credit',
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+      description: `Merged profile ${sId}. Transferred Rs ${secondaryData.walletBalance || 0} and ${mergedPoints} points.`
+    });
+  });
+
+  return { success: true };
 };
 
 export const subscribeServerOrders = (
@@ -564,27 +839,87 @@ export const subscribeServerOrder = (
 };
 
 export const authenticateAdminViaApi = async (username: string, password: string): Promise<any> => {
-  const apiBase = getApiBase();
-  if (apiBase) {
-    const response = await fetch(`${apiBase}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    if (response.ok) {
-      const data = await response.json();
-      return {
-        ...data.user,
-        token: data.token,
-        sessionId: data.sessionId,
-        firebaseToken: data.firebaseToken,
-      };
+  let role: AdminSession['role'] | null = null;
+  let collectionName = '';
+  let userDoc: any = null;
+
+  const docSnapAdmins = await getDoc(doc(db(), 'admins', username));
+  if (docSnapAdmins.exists()) {
+    role = 'admin';
+    collectionName = 'admins';
+    userDoc = docSnapAdmins.data();
+  } else {
+    const docSnapManagers = await getDoc(doc(db(), 'managers', username));
+    if (docSnapManagers.exists()) {
+      role = 'manager';
+      collectionName = 'managers';
+      userDoc = docSnapManagers.data();
     } else {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.message || 'Invalid credentials.');
+      const docSnapStaff = await getDoc(doc(db(), 'staff', username));
+      if (docSnapStaff.exists()) {
+        role = 'staff';
+        collectionName = 'staff';
+        userDoc = docSnapStaff.data();
+      }
     }
   }
-  throw new Error('API is not configured. Admin authentication unavailable offline.');
+
+  const def = DEFAULT_STAFF.find(d => d.username === username);
+  if (!userDoc) {
+    if (def && password === def.password) {
+      const hash = await hashPasswordClient(password);
+      userDoc = {
+        uid: username,
+        username: username,
+        role: def.role,
+        passwordHash: hash,
+        outletId: null,
+        active: true,
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      };
+      await setDoc(doc(db(), def.collection, username), userDoc);
+      role = def.role as any;
+      collectionName = def.collection;
+    } else {
+      throw new Error('Invalid credentials.');
+    }
+  } else {
+    const hash = await hashPasswordClient(password);
+    if (userDoc.passwordHash !== hash) {
+      throw new Error('Invalid credentials.');
+    }
+    if (userDoc.active === false) {
+      throw new Error('Account disabled');
+    }
+  }
+
+  const currentRoleDef = DEFAULT_STAFF.find(d => d.role === role);
+  if (!currentRoleDef) {
+    throw new Error('System error: invalid role configuration.');
+  }
+
+  let userCredential;
+  try {
+    userCredential = await signInWithEmailAndPassword(auth(), currentRoleDef.email, currentRoleDef.dbPass);
+  } catch (err: any) {
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+      userCredential = await createUserWithEmailAndPassword(auth(), currentRoleDef.email, currentRoleDef.dbPass);
+    } else {
+      throw err;
+    }
+  }
+
+  await updateDoc(doc(db(), collectionName, username), { lastLogin: new Date().toISOString() });
+
+  return {
+    role: role,
+    username: username,
+    outletId: userDoc.outletId || null,
+    token: userCredential.user.uid,
+    firebaseToken: undefined,
+    sessionId: `session_${Date.now()}`
+  };
 };
 
 export const getServerMenuItems = async (): Promise<MenuItem[]> => {
@@ -765,16 +1100,31 @@ export const changeStaffPassword = async (
   username: string,
   newPassword: string
 ): Promise<void> => {
-  const apiBase = getApiBase();
-  if (apiBase) {
-    const response = await fetch(`${apiBase}/auth/change-password`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ username, newPassword }),
-    });
-    if (response.ok) return;
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.message || 'Password update failed.');
+  let collectionName = '';
+  const snapAdmins = await getDoc(doc(db(), 'admins', username));
+  if (snapAdmins.exists()) collectionName = 'admins';
+  else {
+    const snapManagers = await getDoc(doc(db(), 'managers', username));
+    if (snapManagers.exists()) collectionName = 'managers';
+    else {
+      const snapStaff = await getDoc(doc(db(), 'staff', username));
+      if (snapStaff.exists()) collectionName = 'staff';
+    }
+  }
+
+  if (!collectionName) {
+    throw new Error('User not found.');
+  }
+
+  const hash = await hashPasswordClient(newPassword);
+  await updateDoc(doc(db(), collectionName, username), { passwordHash: hash });
+
+  const session = StorageService.getAdminSession();
+  if (session && session.username === username) {
+    const authInstance = auth();
+    if (authInstance.currentUser) {
+      await updateAuthPassword(authInstance.currentUser, newPassword);
+    }
   }
 };
 
@@ -798,6 +1148,24 @@ export const saveWalletTransactionToServer = async (transaction: WalletTransacti
 
   try {
     await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, transaction.id), transaction, { merge: true });
+    
+    const custRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, transaction.customerId);
+    const custSnap = await getDoc(custRef);
+    if (custSnap.exists()) {
+      const custData = custSnap.data() as CustomerProfile;
+      const currentBalance = custData.walletBalance || 0;
+      let newBalance = currentBalance;
+      if (transaction.status === 'completed') {
+        if (transaction.type === 'topup' || transaction.type === 'credit' || transaction.type === 'reward' || transaction.type === 'admin_adjustment') {
+          newBalance += transaction.amount;
+        } else if (transaction.type === 'debit') {
+          newBalance -= transaction.amount;
+        }
+      }
+      await updateDoc(custRef, { walletBalance: newBalance });
+      await updateDoc(doc(db(), 'customerProfiles', transaction.customerId), { walletBalance: newBalance });
+      await setDoc(doc(db(), 'wallets', transaction.customerId), { customerId: transaction.customerId, balance: newBalance }, { merge: true });
+    }
   } catch (error) {
     console.warn('Direct Firestore save transaction failed:', error);
   }
@@ -855,43 +1223,111 @@ export const getFirestoreUsage = async (): Promise<any[]> => {
 };
 
 export const getBackupStatus = async (): Promise<BackupStatusResponse> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('API is not configured.');
-  const response = await fetch(`${apiBase}/admin/backup`, {
-    headers: getAuthHeaders(),
-    cache: 'no-store'
-  });
-  if (!response.ok) throw new Error('Failed to load backup status.');
-  return (await response.json()) as BackupStatusResponse;
+  try {
+    const backupsRef = ref(storage(), 'backups');
+    const res = await listAll(backupsRef);
+    const backupsList: BackupDetail[] = [];
+    for (const itemRef of res.items) {
+      try {
+        const metadata = await getMetadata(itemRef);
+        backupsList.push({
+          filename: itemRef.name,
+          size: `${Math.round(metadata.size / 1024)} KB`,
+          date: metadata.timeCreated,
+          status: 'completed',
+          location: 'Firebase Storage'
+        });
+      } catch (err) {
+        console.warn('Metadata fetch failed for backup item:', itemRef.name, err);
+      }
+    }
+    backupsList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const lastBackup = backupsList[0];
+    return {
+      success: true,
+      backups: backupsList,
+      lastBackupTime: lastBackup ? new Date(lastBackup.date).toLocaleString() : 'Never',
+      lastBackupSize: lastBackup ? lastBackup.size : '0 KB',
+      lastBackupStatus: lastBackup ? 'completed' : 'N/A',
+      lastBackupLocation: lastBackup ? 'Firebase Storage' : 'N/A'
+    };
+  } catch (error: any) {
+    console.error('Backup listing failed:', error);
+    throw new Error(error.message || 'Failed to list backups.');
+  }
 };
 
 export const triggerDatabaseBackup = async (): Promise<any> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('API is not configured.');
-  const response = await fetch(`${apiBase}/admin/backup`, {
-    method: 'POST',
-    headers: getAuthHeaders()
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.message || 'Failed to trigger database backup.');
+  try {
+    const collectionsToBackup = [
+      'admins', 'managers', 'staff', 'customers', 'customerProfiles',
+      'customerVerification', 'wallets', 'walletTransactions', 'orders',
+      'orderHistory', 'customerHistory', 'offers', 'menuItems', 'outlets',
+      'analytics', 'notifications', 'storeConfiguration', 'businessData',
+      'referrals', 'customerVerificationRequests', 'wallet_transactions',
+      'settings'
+    ];
+
+    const backupData: Record<string, any[]> = {};
+    for (const col of collectionsToBackup) {
+      try {
+        const snap = await getDocs(collection(db(), col));
+        backupData[col] = snap.docs.map(docDoc => ({ id: docDoc.id, ...docDoc.data() }));
+      } catch (err) {
+        console.warn(`Could not fetch collection ${col} during backup:`, err);
+      }
+    }
+
+    const jsonStr = JSON.stringify(backupData);
+    const filename = `backup_${Date.now()}.json`;
+    const storageRef = ref(storage(), `backups/${filename}`);
+    
+    await uploadString(storageRef, jsonStr, 'raw', { contentType: 'application/json' });
+    
+    return {
+      success: true,
+      backup: {
+        filename,
+        location: 'Firebase Storage'
+      }
+    };
+  } catch (error: any) {
+    console.error('Database backup failed:', error);
+    throw new Error(error.message || 'Failed to create backup.');
   }
-  return await response.json();
 };
 
 export const triggerDatabaseRestore = async (filename: string): Promise<any> => {
-  const apiBase = getApiBase();
-  if (!apiBase) throw new Error('API is not configured.');
-  const response = await fetch(`${apiBase}/admin/restore`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ filename })
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.message || 'Failed to restore database from backup.');
+  try {
+    const storageRef = ref(storage(), `backups/${filename}`);
+    const bytes = await getBytes(storageRef);
+    const decoder = new TextDecoder('utf-8');
+    const jsonStr = decoder.decode(bytes);
+    const backupData = JSON.parse(jsonStr) as Record<string, any[]>;
+
+    for (const colName of Object.keys(backupData)) {
+      const docs = backupData[colName];
+      try {
+        const oldSnap = await getDocs(collection(db(), colName));
+        for (const oldDoc of oldSnap.docs) {
+          await deleteDoc(oldDoc.ref);
+        }
+        for (const docData of docs) {
+          const { id, ...data } = docData;
+          if (id) {
+            await setDoc(doc(db(), colName, id), data);
+          }
+        }
+      } catch (err) {
+        console.warn(`Restore error in collection ${colName}:`, err);
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Database restore failed:', error);
+    throw new Error(error.message || 'Failed to restore database from backup.');
   }
-  return await response.json();
 };
 
 export const getNotificationDashboardData = async (): Promise<NotificationDashboardData> => {
@@ -920,4 +1356,14 @@ export const getNotificationDashboardData = async (): Promise<NotificationDashbo
     console.warn('Direct Firestore get notification dashboard failed:', error);
     throw error;
   }
+};
+
+export const logoutAdmin = async (): Promise<void> => {
+  try {
+    const authInstance = auth();
+    await signOut(authInstance);
+  } catch (err) {
+    console.warn('Firebase Auth sign out failed:', err);
+  }
+  StorageService.clearAdminSession();
 };

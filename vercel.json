@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "harinos-website-main/harinos-website-main/dist",
   "cleanUrls": true,
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/index.ts" }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

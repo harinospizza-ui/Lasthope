@@ -460,15 +460,24 @@ const App: React.FC = () => {
           } else {
             // Document exists, sync local verified/coins status with server
             const serverCust = snap.data() as CustomerProfile;
-            if (serverCust.verified !== localProfile.verified || serverCust.coins !== localProfile.coins || serverCust.status !== localProfile.status) {
+            const serverPoints = serverCust.rewardPoints ?? serverCust.coins ?? 0;
+            const localPoints = localProfile.rewardPoints ?? localProfile.coins ?? 0;
+
+            if (
+              serverCust.verified !== localProfile.verified || 
+              serverPoints !== localPoints || 
+              serverCust.status !== localProfile.status
+            ) {
               const updated = {
                 ...localProfile,
                 verified: !!serverCust.verified,
-                coins: serverCust.coins ?? localProfile.coins ?? 0,
+                coins: serverPoints,
+                rewardPoints: serverPoints,
                 status: serverCust.status ?? localProfile.status ?? 'active',
                 legacyUser: !!serverCust.legacyUser
               };
               StorageService.saveCustomerProfile(updated);
+              setCustomerProfile(updated);
             }
           }
         } catch (err) {

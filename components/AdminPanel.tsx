@@ -178,7 +178,37 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   const [settingsOutletChargePerKm, setSettingsOutletChargePerKm] = useState('15');
   const [settingsOutletManager, setSettingsOutletManager] = useState('');
 
-  const previousOrderCount = useRef(0);
+  const notifiedOrderIds = useRef<Set<string>>(new Set());
+  const initialLoadDone = useRef(false);
+
+  const playChime = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playNote = (frequency: number, startTime: number, duration: number) => {
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(frequency, startTime);
+        gainNode.gain.setValueAtTime(0.3, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+      const now = audioCtx.currentTime;
+      playNote(587.33, now, 0.4); // D5
+      playNote(880.00, now + 0.15, 0.6); // A5
+    } catch (err) {
+      console.warn('Audio chime failed:', err);
+    }
+  };
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      void Notification.requestPermission();
+    }
+  }, []);
 
   const refresh = useCallback((forceAll = false) => {
     if (!session) return;
@@ -213,13 +243,32 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
     if (!session) return;
     const unsubscribeOrders = subscribeServerOrders(
       (serverOrders) => {
-        if (previousOrderCount.current > 0 && serverOrders.length > previousOrderCount.current) {
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('🍕 New Order Received', { body: `Total Orders: ${serverOrders.length}` });
+        let hasNewOrder = false;
+
+        serverOrders.forEach((o) => {
+          if (o.id && !notifiedOrderIds.current.has(o.id)) {
+            // Keep track of all orders we have seen
+            notifiedOrderIds.current.add(o.id);
+
+            // Only trigger notifications if this is NOT the initial load
+            // and the order is a new status order.
+            if (initialLoadDone.current && o.status === 'new') {
+              hasNewOrder = true;
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('🍕 New Order Received', { 
+                  body: `Order #${o.id.replace('HRN-', '')} from ${o.customerName || 'Customer'} - Rs ${Math.round(o.total)}` 
+                });
+              }
+            }
           }
+        });
+
+        if (hasNewOrder) {
+          playChime();
           navigator.vibrate?.([300, 200, 300]);
         }
-        previousOrderCount.current = serverOrders.length;
+
+        initialLoadDone.current = true;
         setOrders(serverOrders);
       },
       () => refresh(),

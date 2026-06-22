@@ -12,6 +12,7 @@ import {
   Category
 } from '../types';
 import { StorageService } from './storage';
+import { OUTLET_LOCATIONS } from '../constants';
 import {
   db,
   auth,
@@ -56,6 +57,74 @@ import {
 import { hashPasswordClient } from './hashUtils';
 
 export type Unsubscribe = () => void;
+
+export const getFallbackOutletConfig = (): OutletConfig => {
+  if (OUTLET_LOCATIONS && OUTLET_LOCATIONS.length > 0) {
+    return OUTLET_LOCATIONS[0];
+  }
+  return {
+    id: 'outlet-1',
+    enabled: true,
+    name: "Harino's Main Outlet",
+    phone: '+917818958571',
+    latitude: 28.011897,
+    longitude: 77.675534,
+    deliveryRadiusKm: 7,
+    freeDeliveryRadiusKm: 3,
+    freeDeliveryMinimumOrder: 150,
+    minimumOrderIncrementPerKm: 100,
+    deliveryChargePerKm: 15
+  };
+};
+
+export const validateAndHealOutlet = (data: any, fallback: OutletConfig): { healedOutlet: OutletConfig; repaired: boolean } => {
+  let repaired = false;
+  if (!data || typeof data !== 'object') {
+    return { healedOutlet: { ...fallback }, repaired: true };
+  }
+
+  const healed: any = { ...data };
+
+  // ID check
+  if (!healed.id || typeof healed.id !== 'string') {
+    healed.id = fallback.id;
+    repaired = true;
+  }
+
+  // check enabled
+  if (healed.enabled === undefined || healed.enabled === null) {
+    healed.enabled = fallback.enabled;
+    repaired = true;
+  } else {
+    healed.enabled = healed.enabled === true || String(healed.enabled) === 'true';
+  }
+
+  // check required string fields
+  const stringFields = ['name', 'phone'];
+  for (const field of stringFields) {
+    if (!healed[field] || typeof healed[field] !== 'string' || healed[field].trim() === '') {
+      healed[field] = (fallback as any)[field];
+      repaired = true;
+    }
+  }
+
+  // check number fields
+  const numberFields = [
+    'latitude', 'longitude', 'deliveryRadiusKm', 'freeDeliveryRadiusKm',
+    'freeDeliveryMinimumOrder', 'minimumOrderIncrementPerKm', 'deliveryChargePerKm'
+  ];
+  for (const field of numberFields) {
+    const val = Number(healed[field]);
+    if (healed[field] === undefined || healed[field] === null || isNaN(val)) {
+      healed[field] = (fallback as any)[field];
+      repaired = true;
+    } else {
+      healed[field] = val;
+    }
+  }
+
+  return { healedOutlet: healed as OutletConfig, repaired };
+};
 
 export interface BackupDetail {
   filename: string;
@@ -1578,16 +1647,47 @@ export const subscribeServerMenuItems = (
 };
 
 export const getServerOutlets = async (): Promise<OutletConfig[]> => {
+  const fallbackConfig = getFallbackOutletConfig();
   try {
     const snapshot = await getDocs(collection(db(), FIRESTORE_OUTLETS_COLLECTION));
-    const list = snapshot.docs
-      .map((docDoc) => docDoc.data() as OutletConfig)
-      .filter(o => o.id !== '_init_placeholder');
+    const list: OutletConfig[] = [];
+
+    for (const docDoc of snapshot.docs) {
+      if (docDoc.id === '_init_placeholder') continue;
+      const data = docDoc.data();
+      const { healedOutlet, repaired } = validateAndHealOutlet(data, fallbackConfig);
+      
+      if (repaired) {
+        console.log(`[OUTLET HEALING] Repaired empty/corrupted outlet document with ID: ${docDoc.id}`);
+        try {
+          await setDoc(docDoc.ref, healedOutlet, { merge: true });
+        } catch (saveErr) {
+          console.warn(`[OUTLET HEALING] Failed to save healed outlet ${docDoc.id} back to Firestore:`, saveErr);
+        }
+      }
+      list.push(healedOutlet);
+    }
+
+    if (list.length === 0) {
+      console.log('[OUTLET HEALING] No outlets found in Firestore. Seeding default configuration...');
+      try {
+        await seedOutletsToServer(OUTLET_LOCATIONS);
+      } catch (seedErr) {
+        console.warn('[OUTLET HEALING] Failed to seed default outlets to Firestore:', seedErr);
+      }
+      StorageService.saveAdminOutlets(OUTLET_LOCATIONS);
+      return OUTLET_LOCATIONS;
+    }
+
     StorageService.saveAdminOutlets(list);
     return list;
   } catch (error) {
-    console.warn('Direct Firestore get outlets failed, using cache:', error);
-    return StorageService.getAdminOutlets();
+    console.warn('Direct Firestore get outlets failed, falling back to cache/constants:', error);
+    const cached = StorageService.getAdminOutlets();
+    if (cached && cached.length > 0) {
+      return cached;
+    }
+    return OUTLET_LOCATIONS;
   }
 };
 
@@ -1633,15 +1733,33 @@ export const subscribeServerOutlets = (
   onOutlets: (outlets: OutletConfig[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe => {
+  const fallbackConfig = getFallbackOutletConfig();
   return onSnapshot(
     collection(db(), FIRESTORE_OUTLETS_COLLECTION),
     (snapshot) => {
       const outlets = snapshot.docs
-        .map((docDoc) => docDoc.data() as OutletConfig)
-        .filter(o => o.id !== '_init_placeholder');
-      onOutlets(outlets);
+        .map((docDoc) => {
+          if (docDoc.id === '_init_placeholder') return null;
+          const data = docDoc.data();
+          const { healedOutlet } = validateAndHealOutlet(data, fallbackConfig);
+          return healedOutlet;
+        })
+        .filter((o): o is OutletConfig => o !== null);
+      
+      if (outlets.length === 0) {
+        onOutlets(OUTLET_LOCATIONS);
+      } else {
+        onOutlets(outlets);
+      }
     },
     (error) => {
+      console.warn('Outlets subscription failed, falling back to cache/constants:', error);
+      const cached = StorageService.getAdminOutlets();
+      if (cached && cached.length > 0) {
+        onOutlets(cached);
+      } else {
+        onOutlets(OUTLET_LOCATIONS);
+      }
       onError(error);
     }
   );

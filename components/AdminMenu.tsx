@@ -111,6 +111,19 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   const [newItemSpicy, setNewItemSpicy] = useState(false);
   const [newItemPopular, setNewItemPopular] = useState(false);
 
+  // Sort menuItems: by Category order first, then by Price ascending
+  const sortedMenuItems = React.useMemo(() => {
+    const categoryOrder = [Category.PIZZA, Category.BURGERS, Category.FRIES, Category.MOMOS, Category.SIDES, Category.BEVERAGES];
+    return [...menuItems].sort((a, b) => {
+      const idxA = categoryOrder.indexOf(a.category);
+      const idxB = categoryOrder.indexOf(b.category);
+      if (idxA !== idxB) {
+        return idxA - idxB;
+      }
+      return a.price - b.price;
+    });
+  }, [menuItems]);
+
   // Operations
   const toggleItemAvailability = async (item: MenuItem) => {
     const updated = { ...item, available: !item.available };
@@ -276,7 +289,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
         )}
 
         <div className="grid gap-4 md:grid-cols-2">
-          {menuItems.map((item) => (
+          {sortedMenuItems.map((item) => (
             <div key={item.id} className={`rounded-2xl p-4 flex gap-4 shadow-2xl glass-card transition-premium ${!item.available ? 'opacity-50 grayscale-[30%] border border-red-500/20' : ''}`}>
               <img src={item.image} className="w-20 h-20 rounded-xl object-cover" onError={(e) => { e.currentTarget.src = '/icon-192.png'; }} />
               <div className="flex-1 flex flex-col justify-between">

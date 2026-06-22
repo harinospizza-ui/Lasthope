@@ -175,20 +175,22 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
   const [isAutoScrolling, setIsAutoScrolling] = useState(true);
   const verticalIndexRef = useRef(0);
 
-  // Grouping logic based on item IDs
-  const pizzas = items.filter((item) => item.category === Category.PIZZA);
-  const cheesePizzas = pizzas.filter((item) => item.id.startsWith('cheese_'));
-  const masalaPizzas = pizzas.filter((item) => item.id.startsWith('masala_'));
-  const vegloverOverloadPizzas = pizzas.filter((item) => item.id === 'p4_vl' || item.id === 'p3_vo');
-  const harinosSpecialPizzas = pizzas.filter((item) => item.id === 'p_hs');
+  // Grouping and sorting (ascending by price) logic
+  const sortByPrice = (a: MenuItem, b: MenuItem) => a.price - b.price;
 
-  const burgers = items.filter((item) => item.category === Category.BURGERS);
-  const fries = items.filter((item) => item.category === Category.FRIES);
+  const pizzas = items.filter((item) => item.category === Category.PIZZA);
+  const cheesePizzas = pizzas.filter((item) => item.id.startsWith('cheese_')).sort(sortByPrice);
+  const masalaPizzas = pizzas.filter((item) => item.id.startsWith('masala_')).sort(sortByPrice);
+  const vegloverOverloadPizzas = pizzas.filter((item) => !item.id.startsWith('cheese_') && !item.id.startsWith('masala_') && item.id !== 'p_hs').sort(sortByPrice);
+  const harinosSpecialPizzas = pizzas.filter((item) => item.id === 'p_hs').sort(sortByPrice);
+
+  const burgers = items.filter((item) => item.category === Category.BURGERS).sort(sortByPrice);
+  const fries = items.filter((item) => item.category === Category.FRIES).sort(sortByPrice);
   const momos = items.filter((item) => item.category === Category.MOMOS);
-  const vegMomos = momos.filter((item) => item.name.toLowerCase().includes('veg'));
-  const soyaMomos = momos.filter((item) => item.name.toLowerCase().includes('soya'));
-  const sides = items.filter((item) => item.category === Category.SIDES);
-  const beverages = items.filter((item) => item.category === Category.BEVERAGES);
+  const soyaMomos = momos.filter((item) => item.name.toLowerCase().includes('soya')).sort(sortByPrice);
+  const vegMomos = momos.filter((item) => !item.name.toLowerCase().includes('soya')).sort(sortByPrice);
+  const sides = items.filter((item) => item.category === Category.SIDES).sort(sortByPrice);
+  const beverages = items.filter((item) => item.category === Category.BEVERAGES).sort(sortByPrice);
 
   // Auto-scrolling Vertical + Horizontal Effect
   useEffect(() => {

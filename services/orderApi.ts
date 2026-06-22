@@ -1,12 +1,12 @@
-import { 
-  CustomerProfile, 
-  Order, 
-  OrderStatus, 
-  MenuItem, 
-  OutletConfig, 
-  OfferCard, 
-  WalletTransaction, 
-  AppSettings, 
+import {
+  CustomerProfile,
+  Order,
+  OrderStatus,
+  MenuItem,
+  OutletConfig,
+  OfferCard,
+  WalletTransaction,
+  AppSettings,
   VerificationRequest,
   AdminSession,
   Category
@@ -25,34 +25,34 @@ import {
   FIRESTORE_WALLET_TRANSACTIONS_COLLECTION,
   FIRESTORE_VERIFICATION_REQUESTS_COLLECTION
 } from './firebaseClient';
-import { 
-  doc, 
-  getDoc, 
-  getDocs, 
-  setDoc, 
-  deleteDoc, 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  onSnapshot, 
-  updateDoc, 
+import {
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  updateDoc,
   getCountFromServer,
   runTransaction
 } from 'firebase/firestore';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  updatePassword as updateAuthPassword, 
-  signOut 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updatePassword as updateAuthPassword,
+  signOut
 } from 'firebase/auth';
-import { 
-  ref, 
-  uploadString, 
-  listAll, 
-  getMetadata, 
-  getBytes 
+import {
+  ref,
+  uploadString,
+  listAll,
+  getMetadata,
+  getBytes
 } from 'firebase/storage';
 import { hashPasswordClient } from './hashUtils';
 
@@ -179,10 +179,10 @@ const DEFAULT_STAFF = [
 export const reauthenticateStaffSession = async (): Promise<void> => {
   const session = StorageService.getAdminSession();
   if (!session) return;
-  
+
   const authInstance = auth();
   if (authInstance.currentUser) return;
-  
+
   const def = DEFAULT_STAFF.find(d => d.role === session.role);
   if (def) {
     try {
@@ -255,9 +255,9 @@ export const initializeFirebaseCollections = async (): Promise<void> => {
 
     // 3. Auto-verify existence of remaining collections by creating placeholder docs if empty
     const collectionsToVerify = [
-      'customers', 'customerProfiles', 'customerVerification', 'wallets', 
-      'walletTransactions', 'orders', 'orderHistory', 'customerHistory', 
-      'offers', 'menuItems', 'outlets', 'analytics', 'notifications', 
+      'customers', 'customerProfiles', 'customerVerification', 'wallets',
+      'walletTransactions', 'orders', 'orderHistory', 'customerHistory',
+      'offers', 'menuItems', 'outlets', 'analytics', 'notifications',
       'businessData', 'referrals', 'customerVerificationRequests', 'wallet_transactions'
     ];
 
@@ -387,7 +387,7 @@ export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: st
   // Auto-update orderHistory
   try {
     await setDoc(doc(db(), 'orderHistory', orderId), nextOrder);
-  } catch (err) {}
+  } catch (err) { }
 
   try {
     const { notifyCustomerStatusChange } = await import('./notificationService');
@@ -516,7 +516,7 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
     await deleteDoc(orderRef);
     try {
       await deleteDoc(doc(db(), 'orderHistory', cleanId));
-    } catch (err) {}
+    } catch (err) { }
 
     const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     await setDoc(doc(db(), 'security_logs', logId), {
@@ -551,7 +551,7 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
     });
     try {
       await updateDoc(doc(db(), 'orderHistory', cleanId), { status, statusUpdatedAt: new Date().toISOString(), auditTrail });
-    } catch (err) {}
+    } catch (err) { }
 
     const localOrders = StorageService.getAdminOrders();
     const idx = localOrders.findIndex((o) => o.id === cleanId);
@@ -595,7 +595,7 @@ export const deleteOrderFromServer = async (orderId: string): Promise<void> => {
   await deleteDoc(orderDocRef);
   try {
     await deleteDoc(doc(db(), 'orderHistory', cleanId));
-  } catch (err) {}
+  } catch (err) { }
 
   const localOrders = StorageService.getAdminOrders().filter((o) => o.id !== cleanId);
   StorageService.saveAdminOrders(localOrders);
@@ -606,8 +606,21 @@ export const saveCustomerToServer = async (profile: CustomerProfile): Promise<vo
   StorageService.saveAdminCustomers([profile, ...localCusts]);
 
   try {
-    await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, profile.id), profile, { merge: true });
-    await setDoc(doc(db(), 'customerProfiles', profile.id), profile, { merge: true });
+    const cleanProfile = JSON.parse(
+      JSON.stringify(profile)
+    );
+
+    await setDoc(
+      doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, profile.id),
+      cleanProfile,
+      { merge: true }
+    );
+
+    await setDoc(
+      doc(db(), 'customerProfiles', profile.id),
+      cleanProfile,
+      { merge: true }
+    );
   } catch (error) {
     console.warn('Direct Firestore save customer failed:', error);
     throw error;
@@ -617,7 +630,7 @@ export const saveCustomerToServer = async (profile: CustomerProfile): Promise<vo
 export const deleteCustomerFromServer = async (customerId: string): Promise<void> => {
   const rawId = customerId.trim();
   const cleanId = rawId.split('-')[0].trim().replace(/\D/g, '').slice(0, 10);
-  
+
   const safeDelete = async (col: string, docId: string) => {
     try {
       await deleteDoc(doc(db(), col, docId));
@@ -635,26 +648,26 @@ export const deleteCustomerFromServer = async (customerId: string): Promise<void
     await safeDelete('customerVerificationRequests', docId);
     await safeDelete('customerVerification', docId);
     await safeDelete('customerHistory', docId);
-    
+
     try {
       const txQuery = query(collection(db(), 'wallet_transactions'), where('customerId', '==', docId));
       const txSnap = await getDocs(txQuery);
       for (const docDoc of txSnap.docs) {
         try {
           await deleteDoc(docDoc.ref);
-        } catch (e) {}
+        } catch (e) { }
       }
-    } catch (e) {}
-    
+    } catch (e) { }
+
     try {
       const txQuery2 = query(collection(db(), 'walletTransactions'), where('customerId', '==', docId));
       const txSnap2 = await getDocs(txQuery2);
       for (const docDoc of txSnap2.docs) {
         try {
           await deleteDoc(docDoc.ref);
-        } catch (e) {}
+        } catch (e) { }
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const localCusts = StorageService.getAdminCustomers().filter((c) => c.id !== rawId && c.id !== cleanId);
@@ -684,7 +697,7 @@ export const getServerCustomers = async (): Promise<CustomerProfile[]> => {
               await setDoc(profileRef, { ...customer, legacyUser: false });
             }
           }
-        } catch (e) {}
+        } catch (e) { }
       })();
     }, 100);
 
@@ -724,7 +737,7 @@ export const getServerCustomerById = async (customerId: string): Promise<Custome
       const customerData = customerSnap.data() as CustomerProfile;
       const newProfile: CustomerProfile = { ...customerData, legacyUser: false };
       await setDoc(profileRef, newProfile);
-      
+
       const walletRef = doc(db(), 'wallets', cleanId);
       const walletSnap = await getDoc(walletRef);
       if (!walletSnap.exists()) {
@@ -755,7 +768,7 @@ export const getServerCustomerById = async (customerId: string): Promise<Custome
           legacySourceId = p.id;
           break;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (legacyData) {
@@ -766,7 +779,7 @@ export const getServerCustomerById = async (customerId: string): Promise<Custome
           balance = walletSnap.data().balance ?? balance;
           await deleteDoc(doc(db(), 'wallets', `cust_${cleanId}`));
         }
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         const q1 = query(collection(db(), 'orders'), where('customerId', '==', `cust_${cleanId}`));
@@ -774,14 +787,14 @@ export const getServerCustomerById = async (customerId: string): Promise<Custome
         for (const d of snap1.docs) {
           await updateDoc(d.ref, { customerId: cleanId });
         }
-      } catch (e) {}
+      } catch (e) { }
       try {
         const q2 = query(collection(db(), 'orderHistory'), where('customerId', '==', `cust_${cleanId}`));
         const snap2 = await getDocs(q2);
         for (const d of snap2.docs) {
           await updateDoc(d.ref, { customerId: cleanId });
         }
-      } catch (e) {}
+      } catch (e) { }
 
       const nowStr = new Date().toISOString();
       const verifiedStatus = legacyData.verified === true || legacyData.status === 'verified';
@@ -821,7 +834,7 @@ export const getServerCustomerById = async (customerId: string): Promise<Custome
       if (legacySourceId.startsWith('cust_') || legacySourceCol === 'legacyCustomers') {
         try {
           await deleteDoc(doc(db(), legacySourceCol, legacySourceId));
-        } catch (e) {}
+        } catch (e) { }
       }
       return newProfile;
     }
@@ -1002,7 +1015,7 @@ export const initCustomerLogin = async (
     if (customerData.active === false || customerData.status === 'blocked') {
       return { success: false, exists: true, message: 'Account disabled' };
     }
-    
+
     // Auto-update default names with customer's entered name
     let updatedName = customerData.name || '';
     if (name && name.trim() && (!updatedName || updatedName.startsWith('Customer_'))) {
@@ -1013,24 +1026,24 @@ export const initCustomerLogin = async (
       updatedFullName = name.trim();
     }
 
-    const updatedProfile = { 
-      ...customerData, 
+    const updatedProfile = {
+      ...customerData,
       name: updatedName,
       fullName: updatedFullName,
-      lastLogin: new Date().toISOString() 
+      lastLogin: new Date().toISOString()
     };
     await setDoc(profileRef, updatedProfile);
-    
+
     // Sync to customers collection
     const customerRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone);
     const customerSnap = await getDoc(customerRef);
     if (!customerSnap.exists()) {
       await setDoc(customerRef, updatedProfile);
     } else {
-      await updateDoc(customerRef, { 
+      await updateDoc(customerRef, {
         name: updatedProfile.name,
         fullName: updatedProfile.fullName,
-        lastLogin: updatedProfile.lastLogin 
+        lastLogin: updatedProfile.lastLogin
       });
     }
 
@@ -1093,14 +1106,14 @@ export const initCustomerLogin = async (
       for (const d of snap1.docs) {
         await updateDoc(d.ref, { customerId: cleanPhone });
       }
-    } catch (e) {}
+    } catch (e) { }
     try {
       const q2 = query(collection(db(), 'orderHistory'), where('customerId', '==', `cust_${cleanPhone}`));
       const snap2 = await getDocs(q2);
       for (const d of snap2.docs) {
         await updateDoc(d.ref, { customerId: cleanPhone });
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const nowStr = new Date().toISOString();
     const verifiedStatus = legacyData.verified === true || legacyData.status === 'verified';
@@ -1151,7 +1164,7 @@ export const initCustomerLogin = async (
     if (legacySourceId.startsWith('cust_') || legacySourceCol === 'legacyCustomers') {
       try {
         await deleteDoc(doc(db(), legacySourceCol, legacySourceId));
-      } catch (e) {}
+      } catch (e) { }
     }
 
     return {
@@ -1242,14 +1255,14 @@ export const verifyServerCustomer = async (customerId: string, otp?: string): Pr
   await updateDoc(customerRef, { verified: true, legacyUser: false, referralCode });
   try {
     await updateDoc(profileRef, { verified: true, legacyUser: false, referralCode });
-  } catch (err) {}
+  } catch (err) { }
   try {
     await updateDoc(verifyRef, {
       status: 'verified',
       verifiedAt: new Date().toISOString(),
       verifiedBy: 'admin'
     });
-  } catch (err) {}
+  } catch (err) { }
 
   const freshSnap = await getDoc(customerRef);
   return freshSnap.exists() ? (freshSnap.data() as CustomerProfile) : null;
@@ -1263,7 +1276,7 @@ export const blockCustomerOnServer = async (customerId: string, blocked: boolean
   await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId), { status, active });
   try {
     await updateDoc(doc(db(), 'customerProfiles', cleanId), { status, active });
-  } catch (err) {}
+  } catch (err) { }
 
   if (blocked) {
     await setDoc(doc(db(), 'blocked_customers', cleanId), {
@@ -1656,7 +1669,7 @@ export const getServerOutlets = async (): Promise<OutletConfig[]> => {
       if (docDoc.id === '_init_placeholder') continue;
       const data = docDoc.data();
       const { healedOutlet, repaired } = validateAndHealOutlet(data, fallbackConfig);
-      
+
       if (repaired) {
         console.log(`[OUTLET HEALING] Repaired empty/corrupted outlet document with ID: ${docDoc.id}`);
         try {
@@ -1667,8 +1680,8 @@ export const getServerOutlets = async (): Promise<OutletConfig[]> => {
       }
       list.push(healedOutlet);
     }
-console.log('OUTLETS FROM FIREBASE:', list);
-console.log('OUTLETS COUNT:', list.length);
+    console.log('OUTLETS FROM FIREBASE:', list);
+    console.log('OUTLETS COUNT:', list.length);
     if (list.length === 0) {
       console.log('[OUTLET HEALING] No outlets found in Firestore. Seeding default configuration...');
       try {
@@ -1746,7 +1759,7 @@ export const subscribeServerOutlets = (
           return healedOutlet;
         })
         .filter((o): o is OutletConfig => o !== null);
-      
+
       if (outlets.length === 0) {
         onOutlets(OUTLET_LOCATIONS);
       } else {
@@ -1857,8 +1870,8 @@ export const changeStaffPassword = async (
 };
 
 export const changeAdminPasswordWithVerification = async (
-  username: string, 
-  previousPass: string, 
+  username: string,
+  previousPass: string,
   newPassword: string
 ): Promise<void> => {
   const docRef = doc(db(), 'admins', username);
@@ -1908,7 +1921,7 @@ export const saveWalletTransactionToServer = async (transaction: WalletTransacti
 
   try {
     await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, transaction.id), transaction, { merge: true });
-    
+
     const custRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, transaction.customerId);
     const custSnap = await getDoc(custRef);
     if (custSnap.exists()) {
@@ -2044,9 +2057,9 @@ export const triggerDatabaseBackup = async (): Promise<any> => {
     const jsonStr = JSON.stringify(backupData);
     const filename = `backup_${Date.now()}.json`;
     const storageRef = ref(storage(), `backups/${filename}`);
-    
+
     await uploadString(storageRef, jsonStr, 'raw', { contentType: 'application/json' });
-    
+
     return {
       success: true,
       backup: {
@@ -2137,7 +2150,7 @@ export const compressYearlySalesSummary = async (): Promise<{ success: boolean; 
   try {
     const ordersSnap = await getDocs(collection(db(), FIRESTORE_ORDERS_COLLECTION));
     const allOrders = ordersSnap.docs.map(docDoc => docDoc.data() as Order);
-    
+
     const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000;
     const oldOrders = allOrders.filter(o => {
       const orderTime = o.receivedAt ? Date.parse(o.receivedAt) : Date.parse(o.date);
@@ -2181,7 +2194,7 @@ export const compressYearlySalesSummary = async (): Promise<{ success: boolean; 
       await deleteDoc(doc(db(), FIRESTORE_ORDERS_COLLECTION, order.id));
       try {
         await deleteDoc(doc(db(), 'orderHistory', order.id));
-      } catch (err) {}
+      } catch (err) { }
       deletedCount++;
     }
 
@@ -2194,7 +2207,7 @@ export const compressYearlySalesSummary = async (): Promise<{ success: boolean; 
 
 export const getLegacyCustomersFromServer = async (): Promise<any[]> => {
   const legacyList: any[] = [];
-  
+
   // 1. Fetch from legacyCustomers collection
   try {
     const snap1 = await getDocs(collection(db(), 'legacyCustomers'));
@@ -2230,19 +2243,19 @@ export const getLegacyCustomersFromServer = async (): Promise<any[]> => {
     const verified = c.verified === true || c.status === 'verified';
     const walletBalance = c.walletBalance ?? c.balance ?? c.rewardPoints ?? c.coins ?? 0;
     const referralCode = c.referralCode || '';
-    
+
     let ordersCount = 0;
     try {
       const q1 = query(collection(db(), FIRESTORE_ORDERS_COLLECTION), where('customerId', '==', phone));
       const count1 = await getCountFromServer(q1);
       const q2 = query(collection(db(), 'orderHistory'), where('customerId', '==', phone));
       const count2 = await getCountFromServer(q2);
-      
+
       const q1_legacy = query(collection(db(), FIRESTORE_ORDERS_COLLECTION), where('customerId', '==', 'cust_' + phone));
       const count1_legacy = await getCountFromServer(q1_legacy);
       const q2_legacy = query(collection(db(), 'orderHistory'), where('customerId', '==', 'cust_' + phone));
       const count2_legacy = await getCountFromServer(q2_legacy);
-      
+
       ordersCount = count1.data().count + count2.data().count + count1_legacy.data().count + count2_legacy.data().count;
     } catch (err) {
       console.warn('Error counting orders:', err);
@@ -2270,11 +2283,11 @@ export const importLegacyCustomer = async (legacyCust: any): Promise<void> => {
   const verified = legacyCust.verified;
   const walletBalance = legacyCust.walletBalance;
   let referralCode = legacyCust.referralCode;
-  
+
   if (verified && !referralCode) {
     referralCode = await generateUniqueReferralCode();
   }
-  
+
   const nowStr = new Date().toISOString();
   const customerProfile: CustomerProfile = {
     id: phone,
@@ -2302,14 +2315,14 @@ export const importLegacyCustomer = async (legacyCust: any): Promise<void> => {
   // Recreate profile in both collections
   await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, phone), customerProfile);
   await setDoc(doc(db(), 'customerProfiles', phone), customerProfile);
-  
+
   // Wallet
   await setDoc(doc(db(), 'wallets', phone), {
     customerId: phone,
     balance: walletBalance,
     createdAt: nowStr
   }, { merge: true });
-  
+
   // History
   await setDoc(doc(db(), 'customerHistory', phone), {
     customerId: phone,
@@ -2353,12 +2366,12 @@ export const importLegacyCustomer = async (legacyCust: any): Promise<void> => {
   if (legacyCust.id.startsWith('cust_')) {
     try {
       await deleteDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, legacyCust.id));
-    } catch (e) {}
+    } catch (e) { }
   }
   if (legacyCust.source === 'legacyCustomers') {
     try {
       await deleteDoc(doc(db(), 'legacyCustomers', legacyCust.id));
-    } catch (e) {}
+    } catch (e) { }
   }
 };
 
@@ -2372,7 +2385,7 @@ export const rejectLegacyCustomer = async (legacyCust: any): Promise<void> => {
     await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, legacyCust.id), { status: 'rejected', active: false });
     try {
       await updateDoc(doc(db(), 'customerProfiles', legacyCust.id), { status: 'rejected', active: false });
-    } catch (e) {}
+    } catch (e) { }
   }
 };
 
@@ -2421,7 +2434,7 @@ export const changeAccountPassword = async (
 
   const targetData = targetSnap.data();
   const currentHash = await hashPasswordClient(currentPassword);
-  
+
   if (targetData.passwordHash !== currentHash && targetData.password !== currentPassword) {
     throw new Error('Incorrect current password.');
   }
@@ -2460,7 +2473,7 @@ export const repairMissingCustomerProfiles = async (): Promise<void> => {
           legacyUser: false
         };
         await setDoc(doc(db(), 'customerProfiles', customer.id), newProfile);
-        
+
         const walletRef = doc(db(), 'wallets', customer.id);
         const walletSnap = await getDoc(walletRef);
         if (!walletSnap.exists()) {
@@ -2496,20 +2509,20 @@ export const getReferredCustomers = async (referralCode: string): Promise<Custom
 export const regenerateReferralCodeForCustomer = async (customerId: string): Promise<string> => {
   const cleanId = customerId.trim();
   const code = await generateUniqueReferralCode();
-  
+
   await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId), { referralCode: code });
   try {
     await updateDoc(doc(db(), 'customerProfiles', cleanId), { referralCode: code });
-  } catch (e) {}
-  
+  } catch (e) { }
+
   return code;
 };
 
 export const disableReferralCodeForCustomer = async (customerId: string): Promise<void> => {
   const cleanId = customerId.trim();
-  
+
   await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId), { referralCode: '' });
   try {
     await updateDoc(doc(db(), 'customerProfiles', cleanId), { referralCode: '' });
-  } catch (e) {}
+  } catch (e) { }
 };

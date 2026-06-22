@@ -59,19 +59,22 @@ service cloud.firestore {
     // Menu Items Rules: Public read, Admin/Manager write or bootstrapping
     match /menu_items/{itemId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
+      allow create: if true;
+      allow update, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
     // Outlets Rules: Public read, Admin/Manager write or bootstrapping
     match /outlets/{outletId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
+      allow create: if true;
+      allow update, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
     // Offers Rules: Public read, Admin/Manager write or bootstrapping
     match /offers/{offerId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
+      allow create: if true;
+      allow update, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
     // Role-specific Collections Rules: Public read for login check, write restricted except bootstrapping
@@ -96,12 +99,14 @@ service cloud.firestore {
     // Application Settings Rules: Public read, Admin/Manager write or bootstrapping
     match /settings/{settingsId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
+      allow create: if true;
+      allow update, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
     match /storeConfiguration/{configId} {
       allow read: if true;
-      allow write, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
+      allow create: if true;
+      allow update, delete: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
     // Notifications Rules: Public read/write

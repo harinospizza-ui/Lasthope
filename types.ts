@@ -62,6 +62,7 @@ export interface CustomerLocation {
   latitude: number;
   longitude: number;
   mapUrl: string;
+  address?: string;
 }
 
 export interface CartItem extends MenuItem {

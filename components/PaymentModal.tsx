@@ -99,7 +99,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 <div className="relative rounded-[1.75rem] border-2 border-dashed border-orange-200 bg-orange-50 p-3 sm:p-4">
                   <div className="flex h-40 w-40 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-inner sm:h-48 sm:w-48">
                     <img
-                      src="/paymentQR.jpeg"
+                      src="/images/PaymentQR.jpeg"
                       alt="Payment QR"
                       className="h-32 w-32 opacity-90 sm:h-40 sm:w-40"
                     />

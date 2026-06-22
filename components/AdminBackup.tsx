@@ -151,7 +151,7 @@ export const AdminBackup: React.FC<AdminBackupProps> = ({ session }) => {
                   {backups.map((bk) => (
                     <tr key={bk.filename} className="hover:bg-white/[0.01] transition-colors">
                       <td className="p-4 font-mono font-bold text-slate-300">{bk.filename}</td>
-                      <td className="p-4 text-slate-400">{new Date(bk.createdAt).toLocaleString()}</td>
+                      <td className="p-4 text-slate-400">{new Date(bk.date).toLocaleString()}</td>
                       <td className="p-4 text-slate-300 font-semibold">{bk.size}</td>
                       <td className="p-4">
                         <span className="rounded-full bg-green-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-green-400">

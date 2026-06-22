@@ -23,7 +23,8 @@ import {
   FIRESTORE_OUTLETS_COLLECTION,
   FIRESTORE_OFFERS_COLLECTION,
   FIRESTORE_WALLET_TRANSACTIONS_COLLECTION,
-  FIRESTORE_VERIFICATION_REQUESTS_COLLECTION
+  FIRESTORE_VERIFICATION_REQUESTS_COLLECTION,
+  FIRESTORE_NOTIFICATION_TOKENS_COLLECTION
 } from './firebaseClient';
 import {
   doc,
@@ -59,9 +60,6 @@ import { hashPasswordClient } from './hashUtils';
 export type Unsubscribe = () => void;
 
 export const getFallbackOutletConfig = (): OutletConfig => {
-  if (OUTLET_LOCATIONS && OUTLET_LOCATIONS.length > 0) {
-    return OUTLET_LOCATIONS[0];
-  }
   return {
     id: 'outlet-1',
     enabled: true,
@@ -143,10 +141,18 @@ export interface BackupStatusResponse {
   lastBackupLocation?: string;
 }
 
+export interface NotificationStats {
+  date: string;
+  sent: number;
+  failed: number;
+  removedTokens: number;
+  updatedAt: string;
+}
+
 export interface NotificationDashboardData {
   success: boolean;
   totalDevices: number;
-  stats: any[];
+  stats: NotificationStats[];
 }
 
 export const checkBusinessHours = (): boolean => {
@@ -255,9 +261,9 @@ export const initializeFirebaseCollections = async (): Promise<void> => {
 
     // 3. Auto-verify existence of remaining collections by creating placeholder docs if empty
     const collectionsToVerify = [
-      'customers', 'customerProfiles', 'customerVerification', 'wallets',
+      'customers', 'customerProfiles', 'wallets',
       'walletTransactions', 'orders', 'orderHistory', 'customerHistory',
-      'offers', 'menuItems', 'outlets', 'analytics', 'notifications',
+      'offers', 'menu_items', 'outlets', 'notifications',
       'businessData', 'referrals', 'customerVerificationRequests', 'wallet_transactions'
     ];
 
@@ -334,7 +340,7 @@ export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: st
   }
 
   if (order.orderType !== 'dinein') {
-    const hasBeverages = order.items.some(item => item.category === Category.BEVERAGES || item.category === 'Beverages');
+    const hasBeverages = order.items.some(item => (item.category as string) === 'Beverages');
     if (hasBeverages) {
       throw new Error("Beverages are available for Dine-In only.");
     }
@@ -646,7 +652,6 @@ export const deleteCustomerFromServer = async (customerId: string): Promise<void
     await safeDelete('customerProfiles', docId);
     await safeDelete('wallets', docId);
     await safeDelete('customerVerificationRequests', docId);
-    await safeDelete('customerVerification', docId);
     await safeDelete('customerHistory', docId);
 
     try {

@@ -1307,7 +1307,7 @@ const App: React.FC = () => {
       customerEmail: customerProfile?.email,
       walletAmountRedeemed: walletDiscount,
       rewardPointsRedeemed: pointsDiscount,
-      rewardPointsEarned: Math.floor(subtotal / 10),
+      rewardPointsEarned: subtotal > 200 ? Math.floor(subtotal / 10) : 0,
       paymentMethod: paymentMethod || 'UPI',
     };
 
@@ -1349,7 +1349,7 @@ const App: React.FC = () => {
         void saveWalletTransactionToServer(tx).catch(console.error);
       }
 
-      const pointsEarned = Math.floor(subtotal / 10);
+      const pointsEarned = subtotal > 200 ? Math.floor(subtotal / 10) : 0;
       if (pointsEarned > 0) {
         updatedProfile.rewardPoints = (updatedProfile.rewardPoints ?? 0) + pointsEarned;
         // Log transaction

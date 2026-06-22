@@ -45,6 +45,32 @@ export const WalletModal: React.FC<WalletModalProps> = ({
     return () => unsub();
   }, [isOpen, customerProfile?.id]);
 
+  useEffect(() => {
+    if (!isOpen || !customerProfile?.id) return;
+    const isVerified = customerProfile.verified === true || String(customerProfile.verified) === 'true';
+    if (isVerified) {
+      const code = customerProfile.referralCode || '';
+      const isFiveCharHex = /^[0-9A-F]{5}$/.test(code);
+      if (!code || !isFiveCharHex) {
+        void (async () => {
+          try {
+            const result = await verifyServerCustomer(customerProfile.id);
+            if (result && result.referralCode) {
+              const updated = {
+                ...customerProfile,
+                referralCode: result.referralCode
+              };
+              StorageService.saveCustomerProfile(updated);
+              onProfileChange(updated);
+            }
+          } catch (e) {
+            console.warn('Failed to auto-generate referral code:', e);
+          }
+        })();
+      }
+    }
+  }, [isOpen, customerProfile, onProfileChange]);
+
   if (!isOpen) return null;
 
   const handleShare = async () => {
@@ -472,58 +498,132 @@ export const WalletModal: React.FC<WalletModalProps> = ({
           </div>
         )}
 
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 text-center">Share & Earn 100 Coins</div>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <button
-              type="button"
-              onClick={handleShare}
-              className="flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 px-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-700 transition-all active:scale-95"
-            >
-              Share App
-            </button>
-            <a
-              href="https://wa.me/917818958571?text=Hello%20Harinos%20Support"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 px-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-700 transition-all active:scale-95 text-center"
-            >
-              💬 Need Help
-            </a>
-          </div>
+        {/* My Referral Code Section */}
+        {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && customerProfile.referralCode && (
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 text-center">My Referral Code</div>
+            <div className="bg-slate-50 border border-slate-200 rounded-3xl p-4 text-center mb-4">
+              <div className="text-2xl font-display font-black text-slate-900 tracking-wider">
+                {customerProfile.referralCode}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const didCopy = await copyTextToClipboard(customerProfile.referralCode || '');
+                    if (didCopy) {
+                      showNotification({ title: 'Code Copied', message: 'Referral code copied to clipboard!', type: 'success' });
+                    }
+                  }}
+                  className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
+                >
+                  Copy Code
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards.`;
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({
+                          title: "Harino's Pizza Referral",
+                          text: shareText,
+                          url: 'https://harinos.store'
+                        });
+                      } catch (e) {}
+                    } else {
+                      const didCopy = await copyTextToClipboard(shareText);
+                      if (didCopy) {
+                        showNotification({ title: 'Share Copied', message: 'Referral message copied to clipboard.', type: 'success' });
+                      }
+                    }
+                  }}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
+                >
+                  Share Code
+                </button>
+              </div>
+            </div>
 
-          <div className={`grid gap-3 ${instagramUrl ? 'grid-cols-3' : 'grid-cols-2'}`}>
-            <button
-              type="button"
-              onClick={() => {
-                const shareText = `Order from Harino's Pizza: https://harinos.store`;
-                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`, '_blank');
-              }}
-              className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:bg-red-50/20 active:scale-95 transition-premium shadow-sm text-center"
-            >
-              <span className="text-xs text-[#25D366] font-bold">WhatsApp</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                window.open(`https://t.me/share/url?url=https://harinos.store`, '_blank');
-              }}
-              className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:bg-red-50/20 active:scale-95 transition-premium shadow-sm text-center"
-            >
-              <span className="text-xs text-[#0088cc] font-bold">Telegram</span>
-            </button>
-            {instagramUrl && (
+            {/* Platform-specific quick shares */}
+            <div className="grid grid-cols-4 gap-2 text-center mb-4">
               <button
                 type="button"
                 onClick={() => {
-                  window.open(instagramUrl, '_blank');
+                  const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards.`;
+                  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`, '_blank');
                 }}
-                className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:bg-red-50/20 active:scale-95 transition-premium shadow-sm text-center"
+                className="py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[9px] font-black uppercase tracking-wider text-[#25D366] transition-all active:scale-95"
               >
-                <span className="text-xs text-[#E1306C] font-bold">Instagram</span>
+                WhatsApp
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => {
+                  const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards.`;
+                  window.open(`https://t.me/share/url?url=https://harinos.store&text=${encodeURIComponent(shareText)}`, '_blank');
+                }}
+                className="py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[9px] font-black uppercase tracking-wider text-[#0088cc] transition-all active:scale-95"
+              >
+                Telegram
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards.`;
+                  void copyTextToClipboard(shareText).then(() => {
+                    showNotification({
+                      title: 'Copy & Share',
+                      message: 'Message copied! Open Instagram to share.',
+                      type: 'success'
+                    });
+                    if (instagramUrl) {
+                      window.open(instagramUrl, '_blank');
+                    } else {
+                      window.open('https://instagram.com', '_blank');
+                    }
+                  });
+                }}
+                className="py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[9px] font-black uppercase tracking-wider text-[#E1306C] transition-all active:scale-95"
+              >
+                Instagram
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards: https://harinos.store`;
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: "Harino's Pizza Referral",
+                        text: shareText,
+                        url: 'https://harinos.store'
+                      });
+                    } catch (e) {}
+                  } else {
+                    const didCopy = await copyTextToClipboard(shareText);
+                    if (didCopy) {
+                      showNotification({ title: 'Link Copied', message: 'Referral link copied to clipboard.', type: 'success' });
+                    }
+                  }
+                }}
+                className="py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[9px] font-black uppercase tracking-wider text-slate-700 transition-all active:scale-95"
+              >
+                Device
+              </button>
+            </div>
           </div>
+        )}
+
+        <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+          <a
+            href="https://wa.me/917818958571?text=Hello%20Harinos%20Support"
+            target="_blank"
+            rel="noreferrer"
+            className="flex-1 flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-700 transition-all active:scale-95 text-center"
+          >
+            💬 Need Help
+          </a>
         </div>
       </div>
     </div>

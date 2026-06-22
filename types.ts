@@ -181,6 +181,8 @@ export interface CustomerProfile {
   status?: 'active' | 'blocked' | 'removed';
   legacyUser?: boolean;
   coins?: number;
+  referralCount?: number;
+  referralEarnings?: number;
 }
 
 export interface WalletTransaction {

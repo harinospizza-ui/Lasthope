@@ -580,6 +580,23 @@ export const getServerCustomers = async (): Promise<CustomerProfile[]> => {
         .map((docDoc) => docDoc.data() as CustomerProfile)
         .filter(c => c.id !== '_init_placeholder')
     );
+
+    // Dynamic background check/heal for loaded customers
+    setTimeout(() => {
+      void (async () => {
+        try {
+          for (const customer of sorted) {
+            const profileRef = doc(db(), 'customerProfiles', customer.id);
+            const profileSnap = await getDoc(profileRef);
+            if (!profileSnap.exists()) {
+              console.log(`Background healing profile for: ${customer.id}`);
+              await setDoc(profileRef, { ...customer, legacyUser: false });
+            }
+          }
+        } catch (e) {}
+      })();
+    }, 100);
+
     StorageService.saveAdminCustomers(sorted);
     return sorted;
   } catch (error) {
@@ -590,11 +607,165 @@ export const getServerCustomers = async (): Promise<CustomerProfile[]> => {
 
 export const getServerCustomerById = async (customerId: string): Promise<CustomerProfile | null> => {
   try {
-    const snap = await getDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, customerId));
-    if (!snap.exists()) return null;
-    return snap.data() as CustomerProfile;
+    const cleanId = customerId.trim();
+    if (!cleanId || cleanId === '_init_placeholder') return null;
+
+    // 1. Search customerProfiles
+    const profileRef = doc(db(), 'customerProfiles', cleanId);
+    const profileSnap = await getDoc(profileRef);
+    if (profileSnap.exists()) {
+      const profile = profileSnap.data() as CustomerProfile;
+      const customerRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId);
+      const customerSnap = await getDoc(customerRef);
+      if (!customerSnap.exists()) {
+        await setDoc(customerRef, profile);
+      }
+      return profile;
+    }
+
+    // 2. Search customers
+    const customerRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId);
+    const customerSnap = await getDoc(customerRef);
+    if (customerSnap.exists()) {
+      const customerData = customerSnap.data() as CustomerProfile;
+      const newProfile: CustomerProfile = { ...customerData, legacyUser: false };
+      await setDoc(profileRef, newProfile);
+      
+      const walletRef = doc(db(), 'wallets', cleanId);
+      const walletSnap = await getDoc(walletRef);
+      if (!walletSnap.exists()) {
+        await setDoc(walletRef, {
+          customerId: cleanId,
+          balance: customerData.walletBalance || 0,
+          createdAt: customerData.createdAt || new Date().toISOString()
+        });
+      }
+      return newProfile;
+    }
+
+    // 3. Search legacy sources
+    let legacyData: any = null;
+    let legacySourceCol = '';
+    let legacySourceId = '';
+    const paths = [
+      { col: 'customers', id: `cust_${cleanId}` },
+      { col: 'legacyCustomers', id: cleanId },
+      { col: 'legacyCustomers', id: `cust_${cleanId}` }
+    ];
+    for (const p of paths) {
+      try {
+        const snap = await getDoc(doc(db(), p.col, p.id));
+        if (snap.exists()) {
+          legacyData = snap.data();
+          legacySourceCol = p.col;
+          legacySourceId = p.id;
+          break;
+        }
+      } catch (e) {}
+    }
+
+    if (legacyData) {
+      let balance = legacyData.walletBalance ?? legacyData.balance ?? legacyData.rewardPoints ?? legacyData.coins ?? 0;
+      try {
+        const walletSnap = await getDoc(doc(db(), 'wallets', `cust_${cleanId}`));
+        if (walletSnap.exists()) {
+          balance = walletSnap.data().balance ?? balance;
+          await deleteDoc(doc(db(), 'wallets', `cust_${cleanId}`));
+        }
+      } catch (e) {}
+
+      try {
+        const q1 = query(collection(db(), 'orders'), where('customerId', '==', `cust_${cleanId}`));
+        const snap1 = await getDocs(q1);
+        for (const d of snap1.docs) {
+          await updateDoc(d.ref, { customerId: cleanId });
+        }
+      } catch (e) {}
+      try {
+        const q2 = query(collection(db(), 'orderHistory'), where('customerId', '==', `cust_${cleanId}`));
+        const snap2 = await getDocs(q2);
+        for (const d of snap2.docs) {
+          await updateDoc(d.ref, { customerId: cleanId });
+        }
+      } catch (e) {}
+
+      const nowStr = new Date().toISOString();
+      const verifiedStatus = legacyData.verified === true || legacyData.status === 'verified';
+      let refCode = legacyData.referralCode || '';
+      if (verifiedStatus && !refCode) {
+        refCode = await generateUniqueReferralCode();
+      }
+
+      const newProfile: CustomerProfile = {
+        id: cleanId,
+        customerId: cleanId,
+        name: legacyData.name || legacyData.fullName || `Customer_${cleanId.slice(-4)}`,
+        fullName: legacyData.fullName || legacyData.name || `Customer_${cleanId.slice(-4)}`,
+        phone: cleanId,
+        mobileNumber: cleanId,
+        loginMethod: 'phone',
+        verified: verifiedStatus,
+        walletBalance: balance,
+        loyaltyPoints: balance,
+        rewardPoints: legacyData.rewardPoints ?? legacyData.loyaltyPoints ?? balance,
+        active: true,
+        status: 'active',
+        createdAt: legacyData.createdAt || nowStr,
+        lastLogin: nowStr,
+        referralAttemptsRemaining: legacyData.referralAttemptsRemaining ?? 3,
+        referralCodeUsed: legacyData.referralCodeUsed ?? false,
+        referralLocked: legacyData.referralLocked ?? false,
+        referralCode: refCode,
+        legacyUser: false
+      };
+
+      await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId), newProfile);
+      await setDoc(profileRef, newProfile);
+      await setDoc(doc(db(), 'wallets', cleanId), { customerId: cleanId, balance: balance, createdAt: nowStr });
+      await setDoc(doc(db(), 'customerHistory', cleanId), { customerId: cleanId, createdAt: nowStr });
+
+      if (legacySourceId.startsWith('cust_') || legacySourceCol === 'legacyCustomers') {
+        try {
+          await deleteDoc(doc(db(), legacySourceCol, legacySourceId));
+        } catch (e) {}
+      }
+      return newProfile;
+    }
+
+    // 4. Default bootstrap to prevent errors
+    const defaultName = `Customer_${cleanId.slice(-4)}`;
+    const referralCode = await generateUniqueReferralCode();
+    const nowStr = new Date().toISOString();
+    const newProfile: CustomerProfile = {
+      id: cleanId,
+      customerId: cleanId,
+      name: defaultName,
+      fullName: defaultName,
+      phone: cleanId,
+      mobileNumber: cleanId,
+      loginMethod: 'phone',
+      verified: false,
+      walletBalance: 0,
+      loyaltyPoints: 0,
+      rewardPoints: 0,
+      active: true,
+      status: 'active',
+      createdAt: nowStr,
+      lastLogin: nowStr,
+      referralAttemptsRemaining: 3,
+      referralCodeUsed: false,
+      referralLocked: false,
+      referralCode: referralCode,
+      legacyUser: false
+    };
+
+    await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId), newProfile);
+    await setDoc(profileRef, newProfile);
+    await setDoc(doc(db(), 'wallets', cleanId), { customerId: cleanId, balance: 0, createdAt: nowStr });
+    await setDoc(doc(db(), 'customerHistory', cleanId), { customerId: cleanId, createdAt: nowStr });
+    return newProfile;
   } catch (error) {
-    console.warn('Direct Firestore get customer by id failed:', error);
+    console.warn('Direct Firestore get customer by id failed, using cache:', error);
     return StorageService.getAdminCustomers().find(c => c.id === customerId) || null;
   }
 };
@@ -604,9 +775,9 @@ export const generateUniqueReferralCode = async (): Promise<string> => {
   let isUnique = false;
   let code = '';
   let attempts = 0;
-  while (!isUnique && attempts < 20) {
+  while (!isUnique && attempts < 50) {
     code = '';
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       code += chars[Math.floor(Math.random() * 16)];
     }
     const q1 = query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), where('referralCode', '==', code));
@@ -619,7 +790,10 @@ export const generateUniqueReferralCode = async (): Promise<string> => {
     attempts++;
   }
   if (!isUnique) {
-    code = 'R' + Math.floor(10000 + Math.random() * 90000).toString();
+    code = '';
+    for (let i = 0; i < 5; i++) {
+      code += chars[Math.floor(Math.random() * 16)];
+    }
   }
   return code;
 };
@@ -946,7 +1120,8 @@ export const verifyServerCustomer = async (customerId: string, otp?: string): Pr
     const data = snap.data() as CustomerProfile;
     referralCode = data.referralCode || '';
   }
-  if (!referralCode) {
+  const isFiveCharHex = /^[0-9A-F]{5}$/.test(referralCode);
+  if (!referralCode || !isFiveCharHex) {
     referralCode = await generateUniqueReferralCode();
   }
 
@@ -2100,4 +2275,77 @@ export const changeAccountPassword = async (
       console.warn('Failed to update password in Firebase Auth:', err);
     }
   }
+};
+
+export const repairMissingCustomerProfiles = async (): Promise<void> => {
+  try {
+    const custSnap = await getDocs(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION));
+    const customers = custSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }) as CustomerProfile)
+      .filter(c => c.id !== '_init_placeholder');
+
+    const profSnap = await getDocs(collection(db(), 'customerProfiles'));
+    const profilesMap = new Map(profSnap.docs.map(d => [d.id, d.data()]));
+
+    for (const customer of customers) {
+      const profile = profilesMap.get(customer.id);
+      if (!profile) {
+        console.log(`Auto-repairing missing profile for customer: ${customer.id}`);
+        const newProfile: CustomerProfile = {
+          ...customer,
+          legacyUser: false
+        };
+        await setDoc(doc(db(), 'customerProfiles', customer.id), newProfile);
+        
+        const walletRef = doc(db(), 'wallets', customer.id);
+        const walletSnap = await getDoc(walletRef);
+        if (!walletSnap.exists()) {
+          await setDoc(walletRef, {
+            customerId: customer.id,
+            balance: customer.walletBalance || 0,
+            createdAt: customer.createdAt || new Date().toISOString()
+          });
+        }
+      }
+    }
+
+    for (const [profId, profData] of profilesMap.entries()) {
+      if (profId === '_init_placeholder') continue;
+      const custExists = customers.some(c => c.id === profId);
+      if (!custExists) {
+        console.log(`Auto-repairing missing customer record for profile: ${profId}`);
+        await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, profId), profData);
+      }
+    }
+  } catch (err) {
+    console.warn('Error in repairMissingCustomerProfiles:', err);
+  }
+};
+
+export const getReferredCustomers = async (referralCode: string): Promise<CustomerProfile[]> => {
+  if (!referralCode) return [];
+  const q = query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), where('referredBy', '==', referralCode));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data() as CustomerProfile);
+};
+
+export const regenerateReferralCodeForCustomer = async (customerId: string): Promise<string> => {
+  const cleanId = customerId.trim();
+  const code = await generateUniqueReferralCode();
+  
+  await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId), { referralCode: code });
+  try {
+    await updateDoc(doc(db(), 'customerProfiles', cleanId), { referralCode: code });
+  } catch (e) {}
+  
+  return code;
+};
+
+export const disableReferralCodeForCustomer = async (customerId: string): Promise<void> => {
+  const cleanId = customerId.trim();
+  
+  await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId), { referralCode: '' });
+  try {
+    await updateDoc(doc(db(), 'customerProfiles', cleanId), { referralCode: '' });
+  } catch (e) {}
 };

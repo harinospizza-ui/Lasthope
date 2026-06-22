@@ -41,6 +41,7 @@ import { AdminBackup } from './AdminBackup';
 import { AdminNotifications } from './AdminNotifications';
 import { AdminVerificationRequests } from './AdminVerificationRequests';
 import { AdminMigration } from './AdminMigration';
+import { AdminReferralManagement } from './AdminReferralManagement';
 
 interface AdminPanelProps {
   session: AdminSession | null;
@@ -131,7 +132,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<CustomerProfile[]>([]);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'orders' | 'wallets' | 'menu' | 'outlets' | 'offers' | 'dashboard' | 'settings' | 'usage' | 'backup' | 'notifications' | 'verificationRequests' | 'legacyMigration' | 'systemSettings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'wallets' | 'menu' | 'outlets' | 'offers' | 'dashboard' | 'settings' | 'usage' | 'backup' | 'notifications' | 'verificationRequests' | 'legacyMigration' | 'systemSettings' | 'referrals'>('orders');
   const [instagramUrlInput, setInstagramUrlInput] = useState('');
 
 
@@ -449,6 +450,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
             <button onClick={() => setActiveTab('backup')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'backup' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
               Backup & Restore
             </button>
+            <button onClick={() => setActiveTab('referrals')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'referrals' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
+              Referral Management
+            </button>
           </>
         )}
 
@@ -542,6 +546,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
         {activeTab === 'legacyMigration' && session.role === 'admin' && (
           <div className="mx-auto max-w-4xl px-4 mt-6">
             <AdminMigration onRefreshData={refresh} />
+          </div>
+        )}
+
+        {activeTab === 'referrals' && session.role === 'admin' && (
+          <div className="mx-auto max-w-4xl px-4 mt-6">
+            <AdminReferralManagement />
           </div>
         )}
 

@@ -228,45 +228,81 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
   const burgers = items.filter((item) => item.category === Category.BURGERS).sort(sortByPrice);
   const fries = items.filter((item) => item.category === Category.FRIES).sort(sortByPrice);
 
-  // Momos: Veg vs Soya (Allowed 5 items each, Full Plate only)
-  const allowedVegMomos = [
-    'veg steam momos',
-    'veg fried momos',
-    'veg tandoori momos',
-    'veg cheese momos',
-    'veg gravy momos'
-  ];
-  const allowedSoyaMomos = [
-    'soya steam momos',
-    'soya fried momos',
-    'soya tandoori momos',
-    'soya cheese momos',
-    'soya gravy momos'
-  ];
+  // Momos: Veg vs Soya (All varieties, Full Plate only)
+  const momos = items
+    .filter((item) => item.category === Category.MOMOS)
+    .map((item) => {
+      const newItem = { ...item };
+      if (newItem.sizes && newItem.sizes.length > 0) {
+        const fullPlate = newItem.sizes.find((s) => s.label.toLowerCase().includes('full'));
+        if (fullPlate) {
+          newItem.price = fullPlate.price;
+        } else {
+          // If no size explicitly says "full", try to find a size that is not "half"
+          const nonHalf = newItem.sizes.find((s) => !s.label.toLowerCase().includes('half'));
+          if (nonHalf) {
+            newItem.price = nonHalf.price;
+          }
+        }
+        newItem.sizes = undefined;
+      }
+      return newItem;
+    });
 
-  const momos = items.filter((item) => item.category === Category.MOMOS);
-  const vegMomos = momos.filter((item) => allowedVegMomos.includes(item.name.toLowerCase())).sort(sortByPrice);
-  const soyaMomos = momos.filter((item) => allowedSoyaMomos.includes(item.name.toLowerCase())).sort(sortByPrice);
+  const vegMomos = momos
+    .filter((item) => {
+      const nameLower = item.name.toLowerCase();
+      return !nameLower.includes('soya');
+    })
+    .sort(sortByPrice);
+
+  const soyaMomos = momos
+    .filter((item) => {
+      const nameLower = item.name.toLowerCase();
+      return nameLower.includes('soya');
+    })
+    .sort(sortByPrice);
 
   // Sides constraints: Zingli Parcel (4 pieces only), Calzone (2 pieces only)
   const sides = items
     .filter((item) => item.category === Category.SIDES)
     .filter((item) => {
       const nameLower = item.name.toLowerCase();
-      if (nameLower.includes('zingli parcel') && !nameLower.includes('4 pieces') && !nameLower.includes('4 pcs')) {
-        return false;
+      if (nameLower.includes('zingli') && nameLower.includes('parcel')) {
+        // Exclude if it explicitly mentions 2 pieces or anything not 4 pieces in the item name
+        if (nameLower.includes('2') || nameLower.includes('two') || nameLower.includes('single')) {
+          return false;
+        }
       }
-      if (nameLower.includes('calzone') && !nameLower.includes('2 pieces') && !nameLower.includes('2 pcs')) {
-        return false;
+      if (nameLower.includes('calzone')) {
+        // Exclude if it explicitly mentions 1 piece or anything not 2 pieces in the item name
+        if (nameLower.includes('1') || nameLower.includes('one') || nameLower.includes('single')) {
+          return false;
+        }
       }
       return true;
     })
     .map((item) => {
-      const nameLower = item.name.toLowerCase();
-      if (nameLower.includes('zingli parcel') || nameLower.includes('calzone')) {
-        return { ...item, sizes: undefined };
+      const newItem = { ...item };
+      const nameLower = newItem.name.toLowerCase();
+      if (nameLower.includes('zingli') && nameLower.includes('parcel')) {
+        if (newItem.sizes && newItem.sizes.length > 0) {
+          const size4 = newItem.sizes.find((s) => s.label.includes('4') || s.label.toLowerCase().includes('four'));
+          if (size4) {
+            newItem.price = size4.price;
+          }
+          newItem.sizes = undefined;
+        }
+      } else if (nameLower.includes('calzone')) {
+        if (newItem.sizes && newItem.sizes.length > 0) {
+          const size2 = newItem.sizes.find((s) => s.label.includes('2') || s.label.toLowerCase().includes('two'));
+          if (size2) {
+            newItem.price = size2.price;
+          }
+          newItem.sizes = undefined;
+        }
       }
-      return item;
+      return newItem;
     })
     .sort(sortByPrice);
 

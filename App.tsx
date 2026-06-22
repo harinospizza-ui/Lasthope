@@ -275,6 +275,14 @@ const App: React.FC = () => {
           console.warn('Failsafe menu items recovery error (non-fatal):', menuErr);
         }
 
+        // Trigger self-healing background worker
+        try {
+          const { repairMissingCustomerProfiles } = await import('./services/orderApi');
+          await repairMissingCustomerProfiles();
+        } catch (repairErr) {
+          console.warn('Failsafe repair missing customer profiles error (non-fatal):', repairErr);
+        }
+
         // Fetch settings once to get instagramUrl and current menuVersion
         const settings = await getServerSettings();
         if (settings.instagramUrl) {
@@ -290,11 +298,18 @@ const App: React.FC = () => {
           const cachedOffers = localStorage.getItem('cached_offers');
 
           if (cachedMenu && cachedOutlets && cachedOffers) {
-            console.log('Loading menu, outlets, and offers from local storage cache.');
-            setMenuItems(JSON.parse(cachedMenu));
-            setOutlets(JSON.parse(cachedOutlets));
-            setOffers(JSON.parse(cachedOffers));
-            return;
+            const parsedMenu = JSON.parse(cachedMenu) as MenuItem[];
+            const hasMomos = parsedMenu.some(item => item.category === Category.MOMOS);
+            const hasFries = parsedMenu.some(item => item.category === Category.FRIES);
+            const hasSides = parsedMenu.some(item => item.category === Category.SIDES);
+
+            if (hasMomos && hasFries && hasSides) {
+              console.log('Loading menu, outlets, and offers from local storage cache.');
+              setMenuItems(parsedMenu);
+              setOutlets(JSON.parse(cachedOutlets));
+              setOffers(JSON.parse(cachedOffers));
+              return;
+            }
           }
         }
 
@@ -350,6 +365,19 @@ const App: React.FC = () => {
   useEffect(() => {
     void requestNotificationPermission();
   }, []);
+
+  // Periodic background profile self-healing check
+  useEffect(() => {
+    if (!configLoaded) return;
+    const runRepair = async () => {
+      try {
+        const { repairMissingCustomerProfiles } = await import('./services/orderApi');
+        await repairMissingCustomerProfiles();
+      } catch (err) {}
+    };
+    const timer = setInterval(runRepair, 60000);
+    return () => clearInterval(timer);
+  }, [configLoaded]);
 
   // Periodic check for PWA updates against build version
   useEffect(() => {

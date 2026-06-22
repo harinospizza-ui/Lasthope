@@ -388,11 +388,13 @@ export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: st
     }]
   } as Order;
 
-  await setDoc(doc(db(), FIRESTORE_ORDERS_COLLECTION, orderId), nextOrder);
+  const sanitizedOrder = JSON.parse(JSON.stringify(nextOrder));
+
+  await setDoc(doc(db(), FIRESTORE_ORDERS_COLLECTION, orderId), sanitizedOrder);
 
   // Auto-update orderHistory
   try {
-    await setDoc(doc(db(), 'orderHistory', orderId), nextOrder);
+    await setDoc(doc(db(), 'orderHistory', orderId), sanitizedOrder);
   } catch (err) { }
 
   try {

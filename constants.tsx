@@ -21,7 +21,7 @@ export const OUTLET_LOCATIONS: OutletConfig[] = [
     longitude: 77.675534,
 
     // Delivery Rules
-    deliveryRadiusKm: 5,
+    deliveryRadiusKm: 7,
     freeDeliveryRadiusKm: 3,
     freeDeliveryMinimumOrder: 150,
     minimumOrderIncrementPerKm: 100,

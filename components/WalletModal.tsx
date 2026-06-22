@@ -23,7 +23,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
   onProceedToPayment,
   instagramUrl = '',
 }) => {
-  const [inputOtp, setInputOtp] = useState('');
+
   const [inputReferralCode, setInputReferralCode] = useState('');
   const [topUpAmount, setTopUpAmount] = useState('');
   const [latestTopup, setLatestTopup] = useState<WalletTransaction | null>(null);
@@ -259,75 +259,18 @@ export const WalletModal: React.FC<WalletModalProps> = ({
           </div>
         </div>
 
-        {/* OTP Verification Section */}
+        {/* Verification Status Section */}
         {!(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
-          <div className="mb-6 p-4 border border-orange-100 bg-orange-50/30 rounded-2xl">
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-550 mb-2">
-              Verify Your Account
+          <div className="mb-6 p-4 border border-orange-100 bg-orange-50/30 rounded-2xl text-center">
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-550 mb-1">
+              Account Verification Status
             </label>
-            <p className="text-[11px] text-slate-600 mb-3 font-medium">
-              Enter the 6-digit OTP shared by the Admin/Manager (via WhatsApp or SMS) to verify your profile.
-            </p>
-            <div className="relative flex items-center border border-slate-200 rounded-xl focus-within:border-red-500 bg-white p-1">
-              <input
-                type="text"
-                placeholder="Enter 6-digit OTP"
-                value={inputOtp}
-                onChange={(e) => setInputOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="w-full pl-3 pr-24 py-2 text-sm font-bold tracking-widest outline-none bg-transparent"
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  const otpVal = inputOtp.trim();
-                  if (otpVal.length !== 6) {
-                    showNotification({
-                      title: 'Invalid OTP',
-                      message: 'Please enter a 6-digit number.',
-                      type: 'warning'
-                    });
-                    return;
-                  }
-
-                  try {
-                    const result = await verifyServerCustomer(customerProfile.id, otpVal);
-                    if (result) {
-                      StorageService.markCustomerVerified(customerProfile.id);
-                      const updated = {
-                        ...customerProfile,
-                        verified: true,
-                        referralCode: result.referralCode,
-                        otp: undefined
-                      };
-                      StorageService.saveCustomerProfile(updated);
-                      onProfileChange(updated);
-
-                      showNotification({
-                        title: 'Account Verified!',
-                        message: `Your profile is verified. Code: ${result.referralCode ?? ''}`,
-                        type: 'success'
-                      });
-                      setInputOtp('');
-                    } else {
-                      showNotification({
-                        title: 'Verification Failed',
-                        message: 'Could not verify customer profile.',
-                        type: 'error'
-                      });
-                    }
-                  } catch (err: any) {
-                    showNotification({
-                      title: 'Verification Failed',
-                      message: err.message || 'OTP validation failed.',
-                      type: 'error'
-                    });
-                  }
-                }}
-                className="absolute right-1 top-1 bottom-1 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md"
-              >
-                Verify
-              </button>
+            <div className="inline-block rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2">
+              Pending Verification
             </div>
+            <p className="text-[11px] text-slate-600 font-medium">
+              Please contact the store manager or admin to verify your profile. Once verified, you will unlock referrals and rewards!
+            </p>
           </div>
         )}
 

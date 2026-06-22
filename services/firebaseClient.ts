@@ -5,7 +5,7 @@ import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: (import.meta.env.VITE_FIREBASE_API_KEY ?? 'AIzaSyD0mMY5FaNyX1yDEH6v1RnvGxVa7QKqWNI').trim(),
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY.trim(),
   authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'harinos-76252214-d8e69.firebaseapp.com').trim(),
   projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'harinos-76252214-d8e69').trim(),
   storageBucket: (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? 'harinos-76252214-d8e69.firebasestorage.app').trim(),

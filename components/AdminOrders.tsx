@@ -54,8 +54,8 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
     }
   };
 
-  const normalizePhoneForWhatsApp = (phone: string): string => {
-    const digits = phone.replace(/\D/g, '');
+  const normalizePhoneForWhatsApp = (phone?: string): string => {
+    const digits = (phone || '').replace(/\D/g, '');
     return digits.length === 10 ? `91${digits}` : digits;
   };
 

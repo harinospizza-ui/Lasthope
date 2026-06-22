@@ -178,13 +178,15 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
   // Grouping logic based on item IDs
   const pizzas = items.filter((item) => item.category === Category.PIZZA);
   const cheesePizzas = pizzas.filter((item) => item.id.startsWith('cheese_'));
-  const makhniPizzas = pizzas.filter((item) => item.id.startsWith('makhni_'));
-  const tandooriPizzas = pizzas.filter((item) => item.id.startsWith('tandoori_'));
-  const signaturePizzas = pizzas.filter((item) => item.id === 'p_hs');
+  const masalaPizzas = pizzas.filter((item) => item.id.startsWith('masala_'));
+  const vegloverOverloadPizzas = pizzas.filter((item) => item.id === 'p4_vl' || item.id === 'p3_vo');
+  const harinosSpecialPizzas = pizzas.filter((item) => item.id === 'p_hs');
 
   const burgers = items.filter((item) => item.category === Category.BURGERS);
   const fries = items.filter((item) => item.category === Category.FRIES);
   const momos = items.filter((item) => item.category === Category.MOMOS);
+  const vegMomos = momos.filter((item) => item.name.toLowerCase().includes('veg'));
+  const soyaMomos = momos.filter((item) => item.name.toLowerCase().includes('soya'));
   const sides = items.filter((item) => item.category === Category.SIDES);
   const beverages = items.filter((item) => item.category === Category.BEVERAGES);
 
@@ -230,13 +232,13 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
       onTouchStart={stopAutoScroll}
       onWheel={stopAutoScroll}
     >
-      {/* Pizzas: Cheese Series -> Makhni Series -> Tandoori Series -> Signature */}
+      {/* Pizzas: Cheese Series -> Masala Series -> Veglover & Veg Overload -> Harino's Special */}
       {pizzas.length > 0 && (
         <>
           <MenuRow title="Cheese Series" items={cheesePizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Makhni Series" items={makhniPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Tandoori Series" items={tandooriPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Harino's Signature" items={signaturePizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+          <MenuRow title="Masala Series" items={masalaPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+          <MenuRow title="Veglover & Veg Overload Pizza" items={vegloverOverloadPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+          <MenuRow title="Harino's Special Series" items={harinosSpecialPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
         </>
       )}
 
@@ -250,9 +252,12 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
         <MenuRow title="Crispy French Fries" items={fries} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
       )}
 
-      {/* Momos */}
-      {momos.length > 0 && (
-        <MenuRow title="Steamed & Fried Momos" items={momos} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+      {/* Momos: Veg vs Soya */}
+      {vegMomos.length > 0 && (
+        <MenuRow title="Veg Momos (Full Plate)" items={vegMomos} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+      )}
+      {soyaMomos.length > 0 && (
+        <MenuRow title="Soya Momos (Full Plate)" items={soyaMomos} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
       )}
 
       {/* Side Orders */}

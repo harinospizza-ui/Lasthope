@@ -776,9 +776,9 @@ export const verifyServerCustomer = async (customerId: string, otp?: string): Pr
   const profileRef = doc(db(), 'customerProfiles', cleanId);
   const verifyRef = doc(db(), 'customerVerificationRequests', cleanId);
 
-  await updateDoc(customerRef, { verified: true });
+  await updateDoc(customerRef, { verified: true, legacyUser: false });
   try {
-    await updateDoc(profileRef, { verified: true });
+    await updateDoc(profileRef, { verified: true, legacyUser: false });
   } catch (err) {}
   try {
     await updateDoc(verifyRef, {
@@ -1339,6 +1339,36 @@ export const changeStaffPassword = async (
     const authInstance = auth();
     if (authInstance.currentUser) {
       await updateAuthPassword(authInstance.currentUser, newPassword);
+    }
+  }
+};
+
+export const changeAdminPasswordWithVerification = async (
+  username: string, 
+  previousPass: string, 
+  newPassword: string
+): Promise<void> => {
+  const docRef = doc(db(), 'admins', username);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
+    throw new Error('Admin account not found in database.');
+  }
+  const data = snap.data();
+  const oldHash = await hashPasswordClient(previousPass);
+  if (data.passwordHash !== oldHash && data.password !== previousPass) {
+    throw new Error('Incorrect previous password.');
+  }
+
+  const hash = await hashPasswordClient(newPassword);
+  await updateDoc(docRef, { passwordHash: hash, password: newPassword });
+
+  // Update in Firebase Auth if it's the current user
+  const authInstance = auth();
+  if (authInstance.currentUser) {
+    try {
+      await updateAuthPassword(authInstance.currentUser, newPassword);
+    } catch (authErr) {
+      console.warn('Failed to update password in Firebase Auth:', authErr);
     }
   }
 };

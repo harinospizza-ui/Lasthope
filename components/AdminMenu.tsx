@@ -102,6 +102,12 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<Category>(Category.PIZZA);
   const [newItemImage, setNewItemImage] = useState('');
+  const sundayDhamakaCount = React.useMemo(() => {
+    if (!orders) return 0;
+    return orders.filter((order) =>
+      order.items.some((item) => item.appliedOfferId === 'offer-sunday-dhamaka' || item.sourceOfferId === 'offer-sunday-dhamaka')
+    ).length;
+  }, [orders]);
   const [newItemSpicy, setNewItemSpicy] = useState(false);
   const [newItemPopular, setNewItemPopular] = useState(false);
 
@@ -623,13 +629,6 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
       </section>
     );
   }
-
-  const sundayDhamakaCount = React.useMemo(() => {
-    if (!orders) return 0;
-    return orders.filter((order) =>
-      order.items.some((item) => item.appliedOfferId === 'offer-sunday-dhamaka' || item.sourceOfferId === 'offer-sunday-dhamaka')
-    ).length;
-  }, [orders]);
 
   if (activeTab === 'offers') {
     return (

@@ -154,11 +154,12 @@ export const extendMenuItemsWithGeneratedSeries = (items: MenuItem[]): MenuItem[
   
   // Filter out any generated items that might be cached or passed in
   const sourceItems = items.filter(
-    (item) => !item.id.startsWith('cheese_') && !item.id.startsWith('makhni_') && !item.id.startsWith('tandoori_')
+    (item) => !item.id.startsWith('cheese_') && !item.id.startsWith('masala_')
   );
 
   for (const item of sourceItems) {
-    if (item.category === Category.PIZZA && item.id !== 'p_hs') {
+    // Exclude Harino's Special (p_hs), Veggie Lover (p4_vl), and Veg Overloaded (p3_vo) from the series generator
+    if (item.category === Category.PIZZA && item.id !== 'p_hs' && item.id !== 'p4_vl' && item.id !== 'p3_vo') {
       // 1. Cheese Series version
       const cheeseId = `cheese_${item.id}`;
       extended.push({
@@ -168,27 +169,13 @@ export const extendMenuItemsWithGeneratedSeries = (items: MenuItem[]): MenuItem[
         description: `Classic mozzarella cheese base. ${item.description}`,
       });
 
-      // 2. Makhni Series version
-      const makhniId = `makhni_${item.id}`;
+      // 2. Masala Series version
+      const masalaId = `masala_${item.id}`;
       extended.push({
         ...item,
-        id: makhniId,
-        name: `${item.name.replace(" Pizza", "")} (Makhni Series)`,
-        description: `Delicious rich Makhni sauce base. ${item.description}`,
-        price: item.price + 20,
-        sizes: item.sizes?.map((sz) => ({
-          label: sz.label,
-          price: sz.label === 'Regular' ? sz.price + 20 : sz.label === 'Medium' ? sz.price + 30 : sz.label === 'Large' ? sz.price + 50 : sz.price + 20,
-        })),
-      });
-
-      // 3. Tandoori Series version
-      const tandooriId = `tandoori_${item.id}`;
-      extended.push({
-        ...item,
-        id: tandooriId,
-        name: `${item.name.replace(" Pizza", "")} (Tandoori Series)`,
-        description: `Spicy smoky Tandoori sauce base. ${item.description}`,
+        id: masalaId,
+        name: `${item.name.replace(" Pizza", "")} (Masala Series)`,
+        description: `Spicy masala sauce base. ${item.description}`,
         price: item.price + 20,
         sizes: item.sizes?.map((sz) => ({
           label: sz.label,
@@ -348,6 +335,57 @@ const App: React.FC = () => {
   useEffect(() => {
     void requestNotificationPermission();
   }, []);
+
+  // Real-time legacy user sync: detects profiles from previous versions and pushes to Firestore for admin verification
+  useEffect(() => {
+    if (!configLoaded) return;
+    
+    const syncLegacyUser = async () => {
+      const localProfile = StorageService.getCustomerProfile();
+      if (localProfile && localProfile.phone) {
+        try {
+          const { getDoc, doc, setDoc } = await import('firebase/firestore');
+          const { db } = await import('./services/firebaseClient');
+          
+          const cleanId = localProfile.phone.replace(/\D/g, '');
+          const docRef = doc(db(), 'customers', cleanId);
+          const snap = await getDoc(docRef);
+          
+          if (!snap.exists()) {
+            // First time detecting this legacy user on the new deployment:
+            // Register them in Firestore as legacy unverified so the admin can verify their profile.
+            const legacyCust: CustomerProfile = {
+              ...localProfile,
+              id: cleanId,
+              legacyUser: true,
+              verified: false, // Set to false to trigger admin verification request
+              status: 'active',
+              createdAt: localProfile.createdAt || new Date().toISOString()
+            };
+            await setDoc(docRef, legacyCust);
+            console.log('Registered legacy/previous version customer profile for admin verification:', localProfile.phone);
+          } else {
+            // Document exists, sync local verified/coins status with server
+            const serverCust = snap.data() as CustomerProfile;
+            if (serverCust.verified !== localProfile.verified || serverCust.coins !== localProfile.coins || serverCust.status !== localProfile.status) {
+              const updated = {
+                ...localProfile,
+                verified: !!serverCust.verified,
+                coins: serverCust.coins ?? localProfile.coins ?? 0,
+                status: serverCust.status ?? localProfile.status ?? 'active',
+                legacyUser: !!serverCust.legacyUser
+              };
+              StorageService.saveCustomerProfile(updated);
+            }
+          }
+        } catch (err) {
+          console.warn('Failsafe legacy user profile sync failed:', err);
+        }
+      }
+    };
+    
+    void syncLegacyUser();
+  }, [configLoaded]);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const applyAppScreen = useCallback((screen: AppScreen) => {
@@ -1255,7 +1293,7 @@ const App: React.FC = () => {
   const saveCustomerProfile = useCallback(async (profile: CustomerProfile) => {
     try {
       const remoteCustomers = await getServerCustomers();
-      const cleanPhone = (p: string) => p.replace(/\D/g, '');
+      const cleanPhone = (p?: string) => (p || '').replace(/\D/g, '');
       const targetPhone = cleanPhone(profile.phone);
 
       const existing = remoteCustomers.find(

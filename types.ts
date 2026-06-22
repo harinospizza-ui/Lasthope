@@ -179,6 +179,8 @@ export interface CustomerProfile {
   referralLocked?: boolean;
   referralAppliedAt?: string;
   status?: 'active' | 'blocked' | 'removed';
+  legacyUser?: boolean;
+  coins?: number;
 }
 
 export interface WalletTransaction {

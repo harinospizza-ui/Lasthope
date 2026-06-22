@@ -39,11 +39,11 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
   const [mergePrimaryId, setMergePrimaryId] = useState<Record<string, string>>({});
 
   const normalizePhoneForWhatsApp = (phone: string): string => {
-    const digits = phone.replace(/\D/g, '');
+    const digits = (phone || '').replace(/\D/g, '');
     return digits.length === 10 ? `91${digits}` : digits;
   };
 
-  const cleanPhoneStr = (p: string) => p.replace(/\D/g, '');
+  const cleanPhoneStr = (p: string) => (p || '').replace(/\D/g, '');
 
   // Group customers by cleaned phone number to find duplicate profiles
   const duplicatesGrouped = React.useMemo(() => {
@@ -97,14 +97,18 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
   const filteredCustomers = customers.filter((cust) => {
     const query = walletSearchQuery.toLowerCase().trim();
     if (!query) return true;
-    return cust.name.toLowerCase().includes(query) || cust.phone.includes(query);
+    const nameStr = cust.name || '';
+    const phoneStr = cust.phone || '';
+    return nameStr.toLowerCase().includes(query) || phoneStr.includes(query);
   });
 
   const pendingTransactions = transactions.filter((tx) => {
     if (tx.status !== 'pending') return false;
     const query = walletSearchQuery.toLowerCase().trim();
     if (!query) return true;
-    return tx.customerName.toLowerCase().includes(query) || tx.customerPhone.includes(query);
+    const nameStr = tx.customerName || '';
+    const phoneStr = tx.customerPhone || '';
+    return nameStr.toLowerCase().includes(query) || phoneStr.includes(query);
   });
 
   return (
@@ -202,7 +206,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
                   try {
                     const allCusts = await getServerCustomers();
-                    const cleanPhone = (p: string) => p.replace(/\D/g, '');
+                    const cleanPhone = (p: string) => (p || '').replace(/\D/g, '');
                     const duplicate = allCusts.find((c) => cleanPhone(c.phone) === cleanPhone(phoneVal));
                     if (duplicate) {
                       alert(`A customer with phone number ${phoneVal} already exists.`);
@@ -211,7 +215,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
                     const referralCode = Math.floor(65536 + Math.random() * 983039).toString(16).toUpperCase();
                     const newCust: CustomerProfile = {
-                      id: `cust_${Date.now()}`,
+                      id: phoneVal,
                       name: nameVal,
                       phone: phoneVal,
                       email: emailVal || undefined,
@@ -298,7 +302,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
                   try {
                     const allCusts = await getServerCustomers();
-                    const cleanPhone = (p: string) => p.replace(/\D/g, '');
+                    const cleanPhone = (p: string) => (p || '').replace(/\D/g, '');
                     const duplicate = allCusts.find((c) => c.id !== editingCustomer.id && cleanPhone(c.phone) === cleanPhone(phoneVal));
                     if (duplicate) {
                       alert(`Another customer with phone number ${phoneVal} already exists.`);
@@ -367,6 +371,11 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                     <span className={`rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${verified ? 'bg-green-500/20 text-green-300 border border-green-500/20' : 'bg-amber-500/20 text-amber-300 border border-amber-500/20'}`}>
                       {verified ? 'Verified' : 'Pending'}
                     </span>
+                    {customer.legacyUser && (
+                      <span className="rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest bg-purple-500/25 text-purple-300 border border-purple-500/30 animate-pulse">
+                        Legacy User (Previous Version)
+                      </span>
+                    )}
                     {customer.status === 'blocked' && (
                       <span className="rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest bg-red-500/20 text-red-300 border border-red-500/20">
                         Blocked
@@ -393,7 +402,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                       }}
                       className="rounded-xl bg-red-650 hover:bg-red-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-premium active:scale-95 cursor-pointer animate-fade-in"
                     >
-                      Verify
+                      Verify {customer.legacyUser ? "Legacy User" : ""}
                     </button>
                   )}
                   {session.role === 'admin' && (

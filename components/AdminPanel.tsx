@@ -14,6 +14,8 @@ import {
   getServerOutlets,
   getServerOffers,
   changeStaffPassword,
+  changeAdminPasswordWithVerification,
+  saveOutletToServer,
   getServerWalletTransactions,
   subscribeServerWalletTransactions,
   getServerSettings,
@@ -141,6 +143,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   const [newPassword, setNewPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+
+  // Settings Change Password Form State
+  const [prevPasswordInput, setPrevPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [passwordSuccessMsg, setPasswordSuccessMsg] = useState('');
+  const [passwordErrorMsg, setPasswordErrorMsg] = useState('');
+
+  // Settings Outlets Add Form State
+  const [isAddingSettingsOutlet, setIsAddingSettingsOutlet] = useState(false);
+  const [settingsOutletName, setSettingsOutletName] = useState('');
+  const [settingsOutletAddress, setSettingsOutletAddress] = useState('');
+  const [settingsOutletPhone, setSettingsOutletPhone] = useState('');
+  const [settingsOutletLat, setSettingsOutletLat] = useState('26.85');
+  const [settingsOutletLng, setSettingsOutletLng] = useState('75.80');
+  const [settingsOutletRadius, setSettingsOutletRadius] = useState('7');
+  const [settingsOutletFreeRadius, setSettingsOutletFreeRadius] = useState('3');
+  const [settingsOutletMinOrder, setSettingsOutletMinOrder] = useState('150');
+  const [settingsOutletIncrementPerKm, setSettingsOutletIncrementPerKm] = useState('0');
+  const [settingsOutletChargePerKm, setSettingsOutletChargePerKm] = useState('15');
+  const [settingsOutletManager, setSettingsOutletManager] = useState('');
 
   const previousOrderCount = useRef(0);
 
@@ -463,9 +486,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
           <AdminBackup session={session} />
         )}
         {activeTab === 'settings' && session.role !== 'staff' && (
-          <div className="mx-auto max-w-xl px-4 mt-6">
+          <div className="mx-auto max-w-4xl px-4 mt-6 space-y-6">
+            {/* Instagram Configuration */}
             <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-2xl">
-              <h3 className="font-display text-2xl font-bold mb-4">Application Settings</h3>
+              <h3 className="font-display text-2xl font-bold mb-4 text-glow text-white">Application Settings</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Instagram Page URL</label>
@@ -474,7 +498,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                     placeholder="https://instagram.com/harinospizza"
                     value={instagramUrlInput}
                     onChange={(e) => setInstagramUrlInput(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 font-bold text-white outline-none focus:border-red-500"
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3.5 font-bold text-white outline-none focus:border-red-500"
                   />
                   <p className="mt-1 text-[10px] text-slate-500">Provide the Instagram page URL. If empty, the Instagram social icons will be hidden.</p>
                 </div>
@@ -488,10 +512,268 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                       alert(err.message || 'Failed to save settings.');
                     }
                   }}
-                  className="w-full rounded-2xl bg-gradient-premium py-4 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_18px_35px_rgba(220,38,38,0.3)] hover:scale-[1.02] transition-transform"
+                  className="w-full rounded-2xl bg-gradient-premium py-4 text-[11px] font-black uppercase tracking-widest text-white shadow-lg shadow-red-900/30 hover:scale-[1.01] transition-transform active:scale-95"
                 >
                   Save Settings
                 </button>
+              </div>
+            </div>
+
+            {/* Password Changer Section (Admin Only) */}
+            <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-2xl">
+              <h3 className="font-display text-2xl font-bold mb-4 text-glow text-white">Change Account Password</h3>
+              {session.role === 'admin' ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Previous Password</label>
+                    <input
+                      type="password"
+                      placeholder="Enter current password"
+                      value={prevPasswordInput}
+                      onChange={(e) => setPrevPasswordInput(e.target.value)}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">New Password</label>
+                    <input
+                      type="password"
+                      placeholder="Enter new password"
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Confirm New Password</label>
+                    <input
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={confirmPasswordInput}
+                      onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
+                    />
+                  </div>
+
+                  {passwordSuccessMsg && (
+                    <div className="text-xs text-green-400 font-bold bg-green-500/10 border border-green-500/25 px-4 py-2.5 rounded-xl">
+                      {passwordSuccessMsg}
+                    </div>
+                  )}
+                  {passwordErrorMsg && (
+                    <div className="text-xs text-red-400 font-bold bg-red-500/10 border border-red-500/25 px-4 py-2.5 rounded-xl">
+                      {passwordErrorMsg}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={async () => {
+                      setPasswordSuccessMsg('');
+                      setPasswordErrorMsg('');
+                      const prevVal = prevPasswordInput.trim();
+                      const newVal = newPasswordInput.trim();
+                      const confirmVal = confirmPasswordInput.trim();
+                      
+                      if (!prevVal || !newVal || !confirmVal) {
+                        setPasswordErrorMsg('All password fields are required.');
+                        return;
+                      }
+                      if (newVal !== confirmVal) {
+                        setPasswordErrorMsg('New passwords do not match.');
+                        return;
+                      }
+                      if (newVal.length < 6) {
+                        setPasswordErrorMsg('New password must be at least 6 characters.');
+                        return;
+                      }
+
+                      try {
+                        await changeAdminPasswordWithVerification(session.username, prevVal, newVal);
+                        setPasswordSuccessMsg('Password changed successfully.');
+                        setPrevPasswordInput('');
+                        setNewPasswordInput('');
+                        setConfirmPasswordInput('');
+                      } catch (err: any) {
+                        setPasswordErrorMsg(err.message || 'Failed to update password.');
+                      }
+                    }}
+                    className="w-full rounded-2xl bg-red-600 hover:bg-red-500 py-4 text-[11px] font-black uppercase tracking-widest text-white shadow-lg active:scale-95 transition-premium"
+                  >
+                    Update Admin Password
+                  </button>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500 bg-white/5 border border-white/5 p-4 rounded-2xl font-bold">
+                  🔒 Password changes are restricted to the primary Administrator account. Neither Manager nor Staff can change credentials.
+                </div>
+              )}
+            </div>
+
+            {/* Outlets Control Section */}
+            <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-2xl">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-display text-2xl font-bold text-glow text-white">Outlets Management</h3>
+                <button
+                  onClick={() => {
+                    setIsAddingSettingsOutlet(!isAddingSettingsOutlet);
+                    // Reset fields
+                    setSettingsOutletName('');
+                    setSettingsOutletAddress('');
+                    setSettingsOutletPhone('');
+                    setSettingsOutletRadius('7');
+                    setSettingsOutletFreeRadius('3');
+                    setSettingsOutletMinOrder('150');
+                    setSettingsOutletIncrementPerKm('0');
+                    setSettingsOutletChargePerKm('15');
+                    setSettingsOutletManager('');
+                  }}
+                  className="rounded-xl bg-red-650 hover:bg-red-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+                >
+                  {isAddingSettingsOutlet ? 'Cancel' : '➕ Add Outlet'}
+                </button>
+              </div>
+
+              {/* Add Outlet Form */}
+              {isAddingSettingsOutlet && (
+                <div className="mb-6 p-5 border border-white/10 bg-white/[0.04] rounded-3xl space-y-4 animate-slide-up text-xs">
+                  <h4 className="text-sm font-bold text-red-300 uppercase tracking-widest">Create New Outlet Configuration</h4>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Outlet Name</label>
+                      <input type="text" placeholder="e.g. Malviya Nagar" value={settingsOutletName} onChange={e => setSettingsOutletName(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-red-500" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
+                      <input type="text" placeholder="e.g. 9876543210" value={settingsOutletPhone} onChange={e => setSettingsOutletPhone(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-red-500" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Manager Name</label>
+                      <input type="text" placeholder="e.g. Raj Sharma" value={settingsOutletManager} onChange={e => setSettingsOutletManager(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-red-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Address</label>
+                    <input type="text" placeholder="e.g. Plot 15, Sector 3, Jaipur" value={settingsOutletAddress} onChange={e => setSettingsOutletAddress(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-red-500" />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-5">
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Latitude</label>
+                      <input type="number" step="0.0001" value={settingsOutletLat} onChange={e => setSettingsOutletLat(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Longitude</label>
+                      <input type="number" step="0.0001" value={settingsOutletLng} onChange={e => setSettingsOutletLng(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Del. Radius (km)</label>
+                      <input type="number" value={settingsOutletRadius} onChange={e => setSettingsOutletRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Radius (km)</label>
+                      <input type="number" value={settingsOutletFreeRadius} onChange={e => setSettingsOutletFreeRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Del. Min Order (Rs)</label>
+                      <input type="number" value={settingsOutletMinOrder} onChange={e => setSettingsOutletMinOrder(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white" />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Delivery Charge Per Km (Rs)</label>
+                      <input type="number" value={settingsOutletChargePerKm} onChange={e => setSettingsOutletChargePerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Min Order Increment Per Km (Rs)</label>
+                      <input type="number" value={settingsOutletIncrementPerKm} onChange={e => setSettingsOutletIncrementPerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setIsAddingSettingsOutlet(false)}
+                      className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-white/5 text-slate-400 hover:bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const nameVal = settingsOutletName.trim();
+                        const phoneVal = settingsOutletPhone.trim();
+                        if (!nameVal || !phoneVal) {
+                          alert('Name and Phone are required.');
+                          return;
+                        }
+                        const newOutlet: OutletConfig = {
+                          id: `outlet_${Date.now()}`,
+                          enabled: true,
+                          name: nameVal,
+                          address: settingsOutletAddress.trim() || undefined,
+                          phone: phoneVal,
+                          latitude: parseFloat(settingsOutletLat) || 26.85,
+                          longitude: parseFloat(settingsOutletLng) || 75.80,
+                          deliveryRadiusKm: parseFloat(settingsOutletRadius) || 7,
+                          freeDeliveryRadiusKm: parseFloat(settingsOutletFreeRadius) || 3,
+                          freeDeliveryMinimumOrder: parseFloat(settingsOutletMinOrder) || 150,
+                          minimumOrderIncrementPerKm: parseFloat(settingsOutletIncrementPerKm) || 0,
+                          deliveryChargePerKm: parseFloat(settingsOutletChargePerKm) || 15,
+                          managerName: settingsOutletManager.trim() || undefined,
+                        };
+                        try {
+                          await saveOutletToServer(newOutlet);
+                          alert('Outlet created successfully.');
+                          setIsAddingSettingsOutlet(false);
+                          refresh();
+                        } catch {
+                          alert('Failed to save outlet.');
+                        }
+                      }}
+                      className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-green-700 hover:bg-green-600 text-white"
+                    >
+                      Create Outlet
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Outlets Listing & Open/Close Toggle */}
+              <div className="space-y-3">
+                {outlets.map((outlet) => {
+                  return (
+                    <div key={outlet.id} className="flex justify-between items-center p-4 border border-white/5 bg-white/[0.02] rounded-2xl">
+                      <div>
+                        <span className="text-sm font-bold text-white block">{outlet.name}</span>
+                        <span className="text-[10px] text-slate-400 font-semibold">{outlet.phone} {outlet.address ? `• ${outlet.address}` : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-bold uppercase tracking-widest ${outlet.enabled ? 'text-green-400' : 'text-red-400'}`}>
+                          {outlet.enabled ? '🟢 OPEN' : '🔴 CLOSED'}
+                        </span>
+                        <button
+                          onClick={async () => {
+                            const updated = { ...outlet, enabled: !outlet.enabled };
+                            try {
+                              await saveOutletToServer(updated);
+                              refresh();
+                            } catch {
+                              alert('Failed to update outlet status.');
+                            }
+                          }}
+                          className={`rounded-xl px-3 py-1.5 text-[9px] font-black uppercase tracking-widest border transition-premium ${
+                            outlet.enabled
+                              ? 'bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/25'
+                              : 'bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/25'
+                          }`}
+                        >
+                          {outlet.enabled ? 'Close Outlet' : 'Open Outlet'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {outlets.length === 0 && (
+                  <div className="text-xs text-slate-500 bg-white/5 border border-white/5 p-4 rounded-2xl font-bold text-center">
+                    No outlets configured yet.
+                  </div>
+                )}
               </div>
             </div>
           </div>

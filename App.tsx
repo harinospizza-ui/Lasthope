@@ -298,17 +298,39 @@ const App: React.FC = () => {
           const cachedOffers = localStorage.getItem('cached_offers');
 
           if (cachedMenu && cachedOutlets && cachedOffers) {
-            const parsedMenu = JSON.parse(cachedMenu) as MenuItem[];
-            const hasMomos = parsedMenu.some(item => item.category === Category.MOMOS);
-            const hasFries = parsedMenu.some(item => item.category === Category.FRIES);
-            const hasSides = parsedMenu.some(item => item.category === Category.SIDES);
+            try {
+              const parsedMenu = JSON.parse(cachedMenu) as MenuItem[];
+              const parsedOutlets = JSON.parse(cachedOutlets) as OutletConfig[];
+              const parsedOffers = JSON.parse(cachedOffers) as OfferCard[];
 
-            if (hasMomos && hasFries && hasSides) {
-              console.log('Loading menu, outlets, and offers from local storage cache.');
-              setMenuItems(parsedMenu);
-              setOutlets(JSON.parse(cachedOutlets));
-              setOffers(JSON.parse(cachedOffers));
-              return;
+              const hasMomos = parsedMenu.some(item => item.category === Category.MOMOS);
+              const hasFries = parsedMenu.some(item => item.category === Category.FRIES);
+              const hasSides = parsedMenu.some(item => item.category === Category.SIDES);
+
+              // Validate that outlets has at least one active (enabled) outlet
+              const hasActiveOutlets = Array.isArray(parsedOutlets) && 
+                parsedOutlets.length > 0 && 
+                parsedOutlets.some(o => o && o.enabled === true);
+
+              if (hasMomos && hasFries && hasSides && hasActiveOutlets) {
+                console.log('Loading menu, outlets, and offers from local storage cache.');
+                setMenuItems(parsedMenu);
+                setOutlets(parsedOutlets);
+                setOffers(parsedOffers);
+                return;
+              } else {
+                console.warn('Cache validation failed (corrupt/inactive outlets or missing categories). Clearing cache...');
+                localStorage.removeItem('cached_outlets');
+                localStorage.removeItem('cached_menu_items');
+                localStorage.removeItem('cached_offers');
+                localStorage.removeItem('cached_menu_version');
+              }
+            } catch (err) {
+              console.warn('Error parsing cache data, clearing cache...', err);
+              localStorage.removeItem('cached_outlets');
+              localStorage.removeItem('cached_menu_items');
+              localStorage.removeItem('cached_offers');
+              localStorage.removeItem('cached_menu_version');
             }
           }
         }

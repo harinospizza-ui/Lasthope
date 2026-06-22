@@ -15,6 +15,8 @@ import {
   getServerOffers,
   changeStaffPassword,
   changeAdminPasswordWithVerification,
+  changeAccountPassword,
+  deleteOutletFromServer,
   saveOutletToServer,
   getServerWalletTransactions,
   subscribeServerWalletTransactions,
@@ -38,6 +40,7 @@ import { AdminUsage } from './AdminUsage';
 import { AdminBackup } from './AdminBackup';
 import { AdminNotifications } from './AdminNotifications';
 import { AdminVerificationRequests } from './AdminVerificationRequests';
+import { AdminMigration } from './AdminMigration';
 
 interface AdminPanelProps {
   session: AdminSession | null;
@@ -128,7 +131,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<CustomerProfile[]>([]);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'orders' | 'wallets' | 'menu' | 'outlets' | 'offers' | 'dashboard' | 'settings' | 'usage' | 'backup' | 'notifications' | 'verificationRequests'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'wallets' | 'menu' | 'outlets' | 'offers' | 'dashboard' | 'settings' | 'usage' | 'backup' | 'notifications' | 'verificationRequests' | 'legacyMigration' | 'systemSettings'>('orders');
   const [instagramUrlInput, setInstagramUrlInput] = useState('');
 
 
@@ -151,8 +154,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   const [passwordSuccessMsg, setPasswordSuccessMsg] = useState('');
   const [passwordErrorMsg, setPasswordErrorMsg] = useState('');
 
+  // SYSTEM SETTINGS Password State
+  const [selectedTargetRole, setSelectedTargetRole] = useState<'Admin_Harinos' | 'Manager_Harinos' | 'Staff_Harinos'>('Admin_Harinos');
+  const [targetCurrentPassword, setTargetCurrentPassword] = useState('');
+  const [targetNewPassword, setTargetNewPassword] = useState('');
+  const [targetConfirmPassword, setTargetConfirmPassword] = useState('');
+  const [systemPasswordSuccessMsg, setSystemPasswordSuccessMsg] = useState('');
+  const [systemPasswordErrorMsg, setSystemPasswordErrorMsg] = useState('');
+
   // Settings Outlets Add Form State
   const [isAddingSettingsOutlet, setIsAddingSettingsOutlet] = useState(false);
+  const [editingOutlet, setEditingOutlet] = useState<OutletConfig | null>(null);
   const [settingsOutletName, setSettingsOutletName] = useState('');
   const [settingsOutletAddress, setSettingsOutletAddress] = useState('');
   const [settingsOutletPhone, setSettingsOutletPhone] = useState('');
@@ -184,13 +196,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
       if (forceAll || activeTab === 'menu') {
         void getServerMenuItems().then((items) => setMenuItems(items)).catch(() => {});
       }
-      if (forceAll || activeTab === 'outlets') {
+      if (forceAll || activeTab === 'outlets' || activeTab === 'systemSettings') {
         void getServerOutlets().then((list) => setOutlets(list)).catch(() => {});
       }
       if (forceAll || activeTab === 'offers') {
         void getServerOffers().then((list) => setOffers(list)).catch(() => {});
       }
-      if (forceAll || activeTab === 'settings') {
+      if (forceAll || activeTab === 'settings' || activeTab === 'systemSettings') {
         void getServerSettings().then((settings) => setInstagramUrlInput(settings.instagramUrl || '')).catch(() => {});
       }
     }
@@ -422,6 +434,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
         )}
         {session.role === 'admin' && (
           <>
+            <button onClick={() => setActiveTab('legacyMigration')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'legacyMigration' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
+              Legacy Migration
+            </button>
+            <button onClick={() => setActiveTab('systemSettings')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'systemSettings' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
+              SYSTEM SETTINGS
+            </button>
             <button onClick={() => setActiveTab('notifications')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'notifications' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
               Push Notifications
             </button>
@@ -518,95 +536,114 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                 </button>
               </div>
             </div>
+          </div>
+        )}
 
+        {activeTab === 'legacyMigration' && session.role === 'admin' && (
+          <div className="mx-auto max-w-4xl px-4 mt-6">
+            <AdminMigration onRefreshData={refresh} />
+          </div>
+        )}
+
+        {activeTab === 'systemSettings' && session.role === 'admin' && (
+          <div className="mx-auto max-w-4xl px-4 mt-6 space-y-6">
             {/* Password Changer Section (Admin Only) */}
             <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-2xl">
               <h3 className="font-display text-2xl font-bold mb-4 text-glow text-white">Change Account Password</h3>
-              {session.role === 'admin' ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Previous Password</label>
-                    <input
-                      type="password"
-                      placeholder="Enter current password"
-                      value={prevPasswordInput}
-                      onChange={(e) => setPrevPasswordInput(e.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">New Password</label>
-                    <input
-                      type="password"
-                      placeholder="Enter new password"
-                      value={newPasswordInput}
-                      onChange={(e) => setNewPasswordInput(e.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Confirm New Password</label>
-                    <input
-                      type="password"
-                      placeholder="Confirm new password"
-                      value={confirmPasswordInput}
-                      onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
-                    />
-                  </div>
-
-                  {passwordSuccessMsg && (
-                    <div className="text-xs text-green-400 font-bold bg-green-500/10 border border-green-500/25 px-4 py-2.5 rounded-xl">
-                      {passwordSuccessMsg}
-                    </div>
-                  )}
-                  {passwordErrorMsg && (
-                    <div className="text-xs text-red-400 font-bold bg-red-500/10 border border-red-500/25 px-4 py-2.5 rounded-xl">
-                      {passwordErrorMsg}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={async () => {
-                      setPasswordSuccessMsg('');
-                      setPasswordErrorMsg('');
-                      const prevVal = prevPasswordInput.trim();
-                      const newVal = newPasswordInput.trim();
-                      const confirmVal = confirmPasswordInput.trim();
-                      
-                      if (!prevVal || !newVal || !confirmVal) {
-                        setPasswordErrorMsg('All password fields are required.');
-                        return;
-                      }
-                      if (newVal !== confirmVal) {
-                        setPasswordErrorMsg('New passwords do not match.');
-                        return;
-                      }
-                      if (newVal.length < 6) {
-                        setPasswordErrorMsg('New password must be at least 6 characters.');
-                        return;
-                      }
-
-                      try {
-                        await changeAdminPasswordWithVerification(session.username, prevVal, newVal);
-                        setPasswordSuccessMsg('Password changed successfully.');
-                        setPrevPasswordInput('');
-                        setNewPasswordInput('');
-                        setConfirmPasswordInput('');
-                      } catch (err: any) {
-                        setPasswordErrorMsg(err.message || 'Failed to update password.');
-                      }
-                    }}
-                    className="w-full rounded-2xl bg-red-600 hover:bg-red-500 py-4 text-[11px] font-black uppercase tracking-widest text-white shadow-lg active:scale-95 transition-premium"
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Target Account</label>
+                  <select
+                    value={selectedTargetRole}
+                    onChange={(e) => setSelectedTargetRole(e.target.value as any)}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
                   >
-                    Update Admin Password
-                  </button>
+                    <option value="Admin_Harinos">Admin (Admin_Harinos)</option>
+                    <option value="Manager_Harinos">Manager (Manager_Harinos)</option>
+                    <option value="Staff_Harinos">Staff (Staff_Harinos)</option>
+                  </select>
                 </div>
-              ) : (
-                <div className="text-xs text-slate-500 bg-white/5 border border-white/5 p-4 rounded-2xl font-bold">
-                  🔒 Password changes are restricted to the primary Administrator account. Neither Manager nor Staff can change credentials.
+                
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Current Password of Target Account</label>
+                  <input
+                    type="password"
+                    placeholder="Enter current password"
+                    value={targetCurrentPassword}
+                    onChange={(e) => setTargetCurrentPassword(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
+                  />
                 </div>
-              )}
+                
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Enter new password"
+                    value={targetNewPassword}
+                    onChange={(e) => setTargetNewPassword(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Confirm New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={targetConfirmPassword}
+                    onChange={(e) => setTargetConfirmPassword(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-red-500 font-bold"
+                  />
+                </div>
+
+                {systemPasswordSuccessMsg && (
+                  <div className="text-xs text-green-400 font-bold bg-green-500/10 border border-green-500/25 px-4 py-2.5 rounded-xl">
+                    {systemPasswordSuccessMsg}
+                  </div>
+                )}
+                {systemPasswordErrorMsg && (
+                  <div className="text-xs text-red-400 font-bold bg-red-500/10 border border-red-500/25 px-4 py-2.5 rounded-xl">
+                    {systemPasswordErrorMsg}
+                  </div>
+                )}
+
+                <button
+                  onClick={async () => {
+                    setSystemPasswordSuccessMsg('');
+                    setSystemPasswordErrorMsg('');
+                    const currentVal = targetCurrentPassword.trim();
+                    const newVal = targetNewPassword.trim();
+                    const confirmVal = targetConfirmPassword.trim();
+                    
+                    if (!currentVal || !newVal || !confirmVal) {
+                      setSystemPasswordErrorMsg('All password fields are required.');
+                      return;
+                    }
+                    if (newVal !== confirmVal) {
+                      setSystemPasswordErrorMsg('New passwords do not match.');
+                      return;
+                    }
+                    if (newVal.length < 6) {
+                      setSystemPasswordErrorMsg('New password must be at least 6 characters.');
+                      return;
+                    }
+
+                    try {
+                      await changeAccountPassword(session.username, selectedTargetRole, currentVal, newVal);
+                      setSystemPasswordSuccessMsg(`Password for ${selectedTargetRole} updated successfully!`);
+                      setTargetCurrentPassword('');
+                      setTargetNewPassword('');
+                      setTargetConfirmPassword('');
+                    } catch (err: any) {
+                      setSystemPasswordErrorMsg(err.message || 'Failed to update password.');
+                    }
+                  }}
+                  className="w-full rounded-2xl bg-red-600 hover:bg-red-500 py-4 text-[11px] font-black uppercase tracking-widest text-white shadow-lg active:scale-95 transition-premium"
+                >
+                  Update password for {selectedTargetRole}
+                </button>
+              </div>
             </div>
 
             {/* Outlets Control Section */}
@@ -615,6 +652,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                 <h3 className="font-display text-2xl font-bold text-glow text-white">Outlets Management</h3>
                 <button
                   onClick={() => {
+                    setEditingOutlet(null);
                     setIsAddingSettingsOutlet(!isAddingSettingsOutlet);
                     // Reset fields
                     setSettingsOutletName('');
@@ -629,14 +667,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                   }}
                   className="rounded-xl bg-red-650 hover:bg-red-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
                 >
-                  {isAddingSettingsOutlet ? 'Cancel' : '➕ Add Outlet'}
+                  {isAddingSettingsOutlet || editingOutlet ? 'Cancel' : '➕ Add Outlet'}
                 </button>
               </div>
 
-              {/* Add Outlet Form */}
-              {isAddingSettingsOutlet && (
+              {/* Add/Edit Outlet Form */}
+              {(isAddingSettingsOutlet || editingOutlet) && (
                 <div className="mb-6 p-5 border border-white/10 bg-white/[0.04] rounded-3xl space-y-4 animate-slide-up text-xs">
-                  <h4 className="text-sm font-bold text-red-300 uppercase tracking-widest">Create New Outlet Configuration</h4>
+                  <h4 className="text-sm font-bold text-red-300 uppercase tracking-widest">
+                    {editingOutlet ? `Edit Outlet: ${editingOutlet.name}` : 'Create New Outlet Configuration'}
+                  </h4>
                   <div className="grid gap-4 sm:grid-cols-3">
                     <div>
                       <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Outlet Name</label>
@@ -689,7 +729,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                   </div>
                   <div className="flex gap-2 justify-end">
                     <button
-                      onClick={() => setIsAddingSettingsOutlet(false)}
+                      onClick={() => {
+                        setIsAddingSettingsOutlet(false);
+                        setEditingOutlet(null);
+                      }}
                       className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-white/5 text-slate-400 hover:bg-white/10"
                     >
                       Cancel
@@ -703,8 +746,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                           return;
                         }
                         const newOutlet: OutletConfig = {
-                          id: `outlet_${Date.now()}`,
-                          enabled: true,
+                          id: editingOutlet ? editingOutlet.id : `outlet_${Date.now()}`,
+                          enabled: editingOutlet ? editingOutlet.enabled : true,
                           name: nameVal,
                           address: settingsOutletAddress.trim() || undefined,
                           phone: phoneVal,
@@ -719,8 +762,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                         };
                         try {
                           await saveOutletToServer(newOutlet);
-                          alert('Outlet created successfully.');
+                          alert(editingOutlet ? 'Outlet updated successfully.' : 'Outlet created successfully.');
                           setIsAddingSettingsOutlet(false);
+                          setEditingOutlet(null);
                           refresh();
                         } catch {
                           alert('Failed to save outlet.');
@@ -728,13 +772,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                       }}
                       className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-green-700 hover:bg-green-600 text-white"
                     >
-                      Create Outlet
+                      {editingOutlet ? 'Update Outlet' : 'Create Outlet'}
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Outlets Listing & Open/Close Toggle */}
+              {/* Outlets Listing & Open/Close Toggle, Edit, and Remove */}
               <div className="space-y-3">
                 {outlets.map((outlet) => {
                   return (
@@ -743,8 +787,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                         <span className="text-sm font-bold text-white block">{outlet.name}</span>
                         <span className="text-[10px] text-slate-400 font-semibold">{outlet.phone} {outlet.address ? `• ${outlet.address}` : ''}</span>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[10px] font-bold uppercase tracking-widest ${outlet.enabled ? 'text-green-400' : 'text-red-400'}`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold uppercase tracking-widest mr-2 ${outlet.enabled ? 'text-green-400' : 'text-red-400'}`}>
                           {outlet.enabled ? '🟢 OPEN' : '🔴 CLOSED'}
                         </span>
                         <button
@@ -763,14 +807,51 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
                               : 'bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/25'
                           }`}
                         >
-                          {outlet.enabled ? 'Close Outlet' : 'Open Outlet'}
+                          {outlet.enabled ? 'Close' : 'Open'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingOutlet(outlet);
+                            setIsAddingSettingsOutlet(false);
+                            setSettingsOutletName(outlet.name);
+                            setSettingsOutletAddress(outlet.address || '');
+                            setSettingsOutletPhone(outlet.phone);
+                            setSettingsOutletLat(String(outlet.latitude));
+                            setSettingsOutletLng(String(outlet.longitude));
+                            setSettingsOutletRadius(String(outlet.deliveryRadiusKm));
+                            setSettingsOutletFreeRadius(String(outlet.freeDeliveryRadiusKm));
+                            setSettingsOutletMinOrder(String(outlet.freeDeliveryMinimumOrder));
+                            setSettingsOutletIncrementPerKm(String(outlet.minimumOrderIncrementPerKm || 0));
+                            setSettingsOutletChargePerKm(String(outlet.deliveryChargePerKm));
+                            setSettingsOutletManager(outlet.managerName || '');
+                          }}
+                          className="rounded-xl px-3 py-1.5 text-[9px] font-black uppercase tracking-widest border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 bg-blue-500/10"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Are you sure you want to remove outlet "${outlet.name}"? This cannot be undone.`)) {
+                              return;
+                            }
+                            try {
+                              await deleteOutletFromServer(outlet.id);
+                              alert('Outlet deleted successfully.');
+                              refresh();
+                            } catch {
+                              alert('Failed to delete outlet.');
+                            }
+                          }}
+                          className="rounded-xl px-3 py-1.5 text-[9px] font-black uppercase tracking-widest border border-red-650/40 text-red-400 hover:bg-red-650/25 bg-red-650/10"
+                        >
+                          Remove
                         </button>
                       </div>
                     </div>
                   );
                 })}
                 {outlets.length === 0 && (
-                  <div className="text-xs text-slate-500 bg-white/5 border border-white/5 p-4 rounded-2xl font-bold text-center">
+                  <div className="text-xs text-slate-550 bg-white/5 border border-white/5 p-4 rounded-2xl font-bold text-center">
                     No outlets configured yet.
                   </div>
                 )}
@@ -785,28 +866,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
         <div className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950/80 p-4">
           <div className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl">
             <h3 className="text-xl font-display font-bold mb-4">Change Password</h3>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">New Password</label>
-            <input
-              type="password"
-              placeholder="Enter new password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500 mb-2 font-bold"
-            />
-            {passwordMessage && <div className="text-xs font-bold text-green-400 my-2">{passwordMessage}</div>}
-            {passwordError && <div className="text-xs font-bold text-red-400 my-2">{passwordError}</div>}
+            <div className="text-xs text-slate-400 mb-4 font-bold bg-white/5 border border-white/5 p-4 rounded-2xl">
+              🔒 Password changes are restricted to the primary Administrator account. Neither Manager nor Staff can change credentials.
+            </div>
             <div className="flex gap-2 justify-end mt-4">
               <button
                 onClick={() => setIsChangePasswordOpen(false)}
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-slate-300"
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdatePassword}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white"
-              >
-                Change
+                Close
               </button>
             </div>
           </div>

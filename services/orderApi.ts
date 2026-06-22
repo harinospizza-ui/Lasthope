@@ -599,6 +599,31 @@ export const getServerCustomerById = async (customerId: string): Promise<Custome
   }
 };
 
+export const generateUniqueReferralCode = async (): Promise<string> => {
+  const chars = '0123456789ABCDEF';
+  let isUnique = false;
+  let code = '';
+  let attempts = 0;
+  while (!isUnique && attempts < 20) {
+    code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars[Math.floor(Math.random() * 16)];
+    }
+    const q1 = query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), where('referralCode', '==', code));
+    const snap1 = await getDocs(q1);
+    const q2 = query(collection(db(), 'customerProfiles'), where('referralCode', '==', code));
+    const snap2 = await getDocs(q2);
+    if (snap1.empty && snap2.empty) {
+      isUnique = true;
+    }
+    attempts++;
+  }
+  if (!isUnique) {
+    code = 'R' + Math.floor(10000 + Math.random() * 90000).toString();
+  }
+  return code;
+};
+
 export const registerCustomer = async (
   phone: string,
   name: string
@@ -632,7 +657,7 @@ export const registerCustomer = async (
     };
   }
 
-  const referralCode = Math.floor(65536 + Math.random() * 983039).toString(16).toUpperCase();
+  const referralCode = await generateUniqueReferralCode();
   const nowStr = new Date().toISOString();
 
   const customerProfile: CustomerProfile = {
@@ -691,75 +716,214 @@ export const initCustomerLogin = async (
   }
 
   const cleanPhone = phone.replace(/\D/g, '');
-  const customerSnap = await getDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone));
-  
-  if (!customerSnap.exists()) {
-    const defaultName = name ? name.trim() : `Customer_${cleanPhone.slice(-4)}`;
-    const referralCode = Math.floor(65536 + Math.random() * 983039).toString(16).toUpperCase();
+  if (cleanPhone.length !== 10) {
+    throw new Error('Please enter a valid 10-digit mobile number.');
+  }
+
+  const blockedSnap = await getDoc(doc(db(), 'blocked_customers', cleanPhone));
+  if (blockedSnap.exists()) {
+    throw new Error('This mobile number is permanently blocked.');
+  }
+
+  // Step 1: Search customerProfiles collection
+  const profileRef = doc(db(), 'customerProfiles', cleanPhone);
+  const profileSnap = await getDoc(profileRef);
+
+  if (profileSnap.exists()) {
+    const customerData = profileSnap.data() as CustomerProfile;
+    if (customerData.active === false || customerData.status === 'blocked') {
+      return { success: false, exists: true, message: 'Account disabled' };
+    }
+    const updatedProfile = { ...customerData, lastLogin: new Date().toISOString() };
+    await setDoc(profileRef, updatedProfile);
+    
+    // Sync to customers collection
+    const customerRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone);
+    const customerSnap = await getDoc(customerRef);
+    if (!customerSnap.exists()) {
+      await setDoc(customerRef, updatedProfile);
+    } else {
+      await updateDoc(customerRef, { lastLogin: updatedProfile.lastLogin });
+    }
+
+    return {
+      success: true,
+      exists: true,
+      customer: updatedProfile,
+      requestId: cleanPhone,
+      message: 'Login successful!'
+    };
+  }
+
+  // Step 2: Search legacy customer collections
+  let legacyData: any = null;
+  let legacySourceCol = '';
+  let legacySourceId = '';
+
+  const paths = [
+    { col: 'customers', id: cleanPhone },
+    { col: 'customers', id: `cust_${cleanPhone}` },
+    { col: 'legacyCustomers', id: cleanPhone },
+    { col: 'legacyCustomers', id: `cust_${cleanPhone}` }
+  ];
+
+  for (const p of paths) {
+    try {
+      const snap = await getDoc(doc(db(), p.col, p.id));
+      if (snap.exists()) {
+        legacyData = snap.data();
+        legacySourceCol = p.col;
+        legacySourceId = p.id;
+        break;
+      }
+    } catch (e) {
+      console.warn(`Failed legacy lookup in ${p.col}/${p.id}:`, e);
+    }
+  }
+
+  if (legacyData) {
+    let balance = legacyData.walletBalance ?? legacyData.balance ?? legacyData.rewardPoints ?? legacyData.coins ?? 0;
+    try {
+      const walletSnap1 = await getDoc(doc(db(), 'wallets', cleanPhone));
+      if (walletSnap1.exists()) {
+        balance = walletSnap1.data().balance ?? balance;
+      } else {
+        const walletSnap2 = await getDoc(doc(db(), 'wallets', `cust_${cleanPhone}`));
+        if (walletSnap2.exists()) {
+          balance = walletSnap2.data().balance ?? balance;
+          await deleteDoc(doc(db(), 'wallets', `cust_${cleanPhone}`));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to resolve legacy wallet:', e);
+    }
+
+    // Update past orders customerId references from legacy to standardized phone number
+    try {
+      const q1 = query(collection(db(), 'orders'), where('customerId', '==', `cust_${cleanPhone}`));
+      const snap1 = await getDocs(q1);
+      for (const d of snap1.docs) {
+        await updateDoc(d.ref, { customerId: cleanPhone });
+      }
+    } catch (e) {}
+    try {
+      const q2 = query(collection(db(), 'orderHistory'), where('customerId', '==', `cust_${cleanPhone}`));
+      const snap2 = await getDocs(q2);
+      for (const d of snap2.docs) {
+        await updateDoc(d.ref, { customerId: cleanPhone });
+      }
+    } catch (e) {}
+
     const nowStr = new Date().toISOString();
+    const verifiedStatus = legacyData.verified === true || legacyData.status === 'verified';
+    let refCode = legacyData.referralCode || '';
+    if (verifiedStatus && !refCode) {
+      refCode = await generateUniqueReferralCode();
+    }
 
     const customerProfile: CustomerProfile = {
       id: cleanPhone,
       customerId: cleanPhone,
-      name: defaultName,
-      fullName: defaultName,
+      name: legacyData.name || legacyData.fullName || name?.trim() || `Customer_${cleanPhone.slice(-4)}`,
+      fullName: legacyData.fullName || legacyData.name || name?.trim() || `Customer_${cleanPhone.slice(-4)}`,
       phone: cleanPhone,
       mobileNumber: cleanPhone,
       loginMethod: 'phone',
-      verified: false,
-      walletBalance: 0,
-      loyaltyPoints: 0,
-      rewardPoints: 0,
+      verified: verifiedStatus,
+      walletBalance: balance,
+      loyaltyPoints: balance,
+      rewardPoints: legacyData.rewardPoints ?? legacyData.loyaltyPoints ?? balance,
       active: true,
       status: 'active',
-      createdAt: nowStr,
+      createdAt: legacyData.createdAt || nowStr,
       lastLogin: nowStr,
-      referralAttemptsRemaining: 3,
-      referralCodeUsed: false,
-      referralLocked: false,
-      referralCode: referralCode
+      referralAttemptsRemaining: legacyData.referralAttemptsRemaining ?? 3,
+      referralCodeUsed: legacyData.referralCodeUsed ?? false,
+      referralLocked: legacyData.referralLocked ?? false,
+      referralCode: refCode,
+      legacyUser: false
     };
 
     await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone), customerProfile);
     await setDoc(doc(db(), 'customerProfiles', cleanPhone), customerProfile);
-    await setDoc(doc(db(), 'wallets', cleanPhone), { customerId: cleanPhone, balance: 0, createdAt: nowStr });
+    await setDoc(doc(db(), 'wallets', cleanPhone), { customerId: cleanPhone, balance: balance, createdAt: nowStr });
     await setDoc(doc(db(), 'customerHistory', cleanPhone), { customerId: cleanPhone, createdAt: nowStr });
     await setDoc(doc(db(), 'customerVerificationRequests', cleanPhone), {
       requestId: cleanPhone,
       customerId: cleanPhone,
-      customerName: defaultName,
+      customerName: customerProfile.name,
       mobileNumber: cleanPhone,
       otp: 'NO_OTP',
-      status: 'pending',
+      status: verifiedStatus ? 'verified' : 'pending',
       createdAt: nowStr,
-      verifiedAt: null,
-      verifiedBy: null
+      verifiedAt: verifiedStatus ? nowStr : null,
+      verifiedBy: verifiedStatus ? 'admin' : null
     });
+
+    if (legacySourceId.startsWith('cust_') || legacySourceCol === 'legacyCustomers') {
+      try {
+        await deleteDoc(doc(db(), legacySourceCol, legacySourceId));
+      } catch (e) {}
+    }
 
     return {
       success: true,
       exists: true,
       customer: customerProfile,
       requestId: cleanPhone,
-      message: 'Account created automatically!'
+      message: 'Account restored automatically!'
     };
   }
 
-  const customerData = customerSnap.data() as CustomerProfile;
-  if (customerData.active === false || customerData.status === 'blocked') {
-    return { success: false, exists: true, message: 'Account disabled' };
-  }
+  // Step 3: Create a new customer profile automatically
+  const defaultName = name ? name.trim() : `Customer_${cleanPhone.slice(-4)}`;
+  const referralCode = await generateUniqueReferralCode();
+  const nowStr = new Date().toISOString();
 
-  const updatedProfile = { ...customerData, lastLogin: new Date().toISOString() };
-  await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone), updatedProfile);
-  await setDoc(doc(db(), 'customerProfiles', cleanPhone), updatedProfile);
+  const customerProfile: CustomerProfile = {
+    id: cleanPhone,
+    customerId: cleanPhone,
+    name: defaultName,
+    fullName: defaultName,
+    phone: cleanPhone,
+    mobileNumber: cleanPhone,
+    loginMethod: 'phone',
+    verified: false,
+    walletBalance: 0,
+    loyaltyPoints: 0,
+    rewardPoints: 0,
+    active: true,
+    status: 'active',
+    createdAt: nowStr,
+    lastLogin: nowStr,
+    referralAttemptsRemaining: 3,
+    referralCodeUsed: false,
+    referralLocked: false,
+    referralCode: referralCode
+  };
+
+  await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone), customerProfile);
+  await setDoc(doc(db(), 'customerProfiles', cleanPhone), customerProfile);
+  await setDoc(doc(db(), 'wallets', cleanPhone), { customerId: cleanPhone, balance: 0, createdAt: nowStr });
+  await setDoc(doc(db(), 'customerHistory', cleanPhone), { customerId: cleanPhone, createdAt: nowStr });
+  await setDoc(doc(db(), 'customerVerificationRequests', cleanPhone), {
+    requestId: cleanPhone,
+    customerId: cleanPhone,
+    customerName: defaultName,
+    mobileNumber: cleanPhone,
+    otp: 'NO_OTP',
+    status: 'pending',
+    createdAt: nowStr,
+    verifiedAt: null,
+    verifiedBy: null
+  });
 
   return {
     success: true,
     exists: true,
-    customer: updatedProfile,
+    customer: customerProfile,
     requestId: cleanPhone,
-    message: 'Login successful!'
+    message: 'Account created automatically!'
   };
 };
 
@@ -776,9 +940,19 @@ export const verifyServerCustomer = async (customerId: string, otp?: string): Pr
   const profileRef = doc(db(), 'customerProfiles', cleanId);
   const verifyRef = doc(db(), 'customerVerificationRequests', cleanId);
 
-  await updateDoc(customerRef, { verified: true, legacyUser: false });
+  const snap = await getDoc(customerRef);
+  let referralCode = '';
+  if (snap.exists()) {
+    const data = snap.data() as CustomerProfile;
+    referralCode = data.referralCode || '';
+  }
+  if (!referralCode) {
+    referralCode = await generateUniqueReferralCode();
+  }
+
+  await updateDoc(customerRef, { verified: true, legacyUser: false, referralCode });
   try {
-    await updateDoc(profileRef, { verified: true, legacyUser: false });
+    await updateDoc(profileRef, { verified: true, legacyUser: false, referralCode });
   } catch (err) {}
   try {
     await updateDoc(verifyRef, {
@@ -788,8 +962,8 @@ export const verifyServerCustomer = async (customerId: string, otp?: string): Pr
     });
   } catch (err) {}
 
-  const snap = await getDoc(customerRef);
-  return snap.exists() ? (snap.data() as CustomerProfile) : null;
+  const freshSnap = await getDoc(customerRef);
+  return freshSnap.exists() ? (freshSnap.data() as CustomerProfile) : null;
 };
 
 export const blockCustomerOnServer = async (customerId: string, blocked: boolean): Promise<any> => {
@@ -1676,5 +1850,254 @@ export const compressYearlySalesSummary = async (): Promise<{ success: boolean; 
   } catch (error: any) {
     console.error('Yearly summary compression failed:', error);
     throw new Error(error.message || 'Failed to compress yearly summary.');
+  }
+};
+
+export const getLegacyCustomersFromServer = async (): Promise<any[]> => {
+  const legacyList: any[] = [];
+  
+  // 1. Fetch from legacyCustomers collection
+  try {
+    const snap1 = await getDocs(collection(db(), 'legacyCustomers'));
+    snap1.forEach((docSnap) => {
+      legacyList.push({ ...docSnap.data(), id: docSnap.id, source: 'legacyCustomers' });
+    });
+  } catch (err) {
+    console.warn('Failed to fetch from legacyCustomers:', err);
+  }
+
+  // 2. Fetch from customers collection where ID starts with cust_ or legacyUser is true
+  try {
+    const snap2 = await getDocs(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION));
+    snap2.forEach((docSnap) => {
+      const id = docSnap.id;
+      const data = docSnap.data() as any;
+      if (id.startsWith('cust_') || data.legacyUser === true) {
+        const phone = id.replace('cust_', '').replace(/\D/g, '');
+        if (!legacyList.some((x) => x.phone === phone || x.mobileNumber === phone || x.id === phone)) {
+          legacyList.push({ ...data, id, source: 'customers' });
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('Failed to fetch from customers for legacy:', err);
+  }
+
+  // Map to structured objects
+  const mappedList = await Promise.all(legacyList.map(async (c) => {
+    const rawPhone = c.phone || c.mobileNumber || c.id || '';
+    const phone = rawPhone.replace('cust_', '').replace(/\D/g, '');
+    const name = c.name || c.fullName || `Customer_${phone.slice(-4)}`;
+    const verified = c.verified === true || c.status === 'verified';
+    const walletBalance = c.walletBalance ?? c.balance ?? c.rewardPoints ?? c.coins ?? 0;
+    const referralCode = c.referralCode || '';
+    
+    let ordersCount = 0;
+    try {
+      const q1 = query(collection(db(), FIRESTORE_ORDERS_COLLECTION), where('customerId', '==', phone));
+      const count1 = await getCountFromServer(q1);
+      const q2 = query(collection(db(), 'orderHistory'), where('customerId', '==', phone));
+      const count2 = await getCountFromServer(q2);
+      
+      const q1_legacy = query(collection(db(), FIRESTORE_ORDERS_COLLECTION), where('customerId', '==', 'cust_' + phone));
+      const count1_legacy = await getCountFromServer(q1_legacy);
+      const q2_legacy = query(collection(db(), 'orderHistory'), where('customerId', '==', 'cust_' + phone));
+      const count2_legacy = await getCountFromServer(q2_legacy);
+      
+      ordersCount = count1.data().count + count2.data().count + count1_legacy.data().count + count2_legacy.data().count;
+    } catch (err) {
+      console.warn('Error counting orders:', err);
+    }
+
+    return {
+      id: c.id,
+      name,
+      phone,
+      verified,
+      walletBalance,
+      referralCode,
+      ordersCount,
+      source: c.source,
+      raw: c
+    };
+  }));
+
+  return mappedList;
+};
+
+export const importLegacyCustomer = async (legacyCust: any): Promise<void> => {
+  const phone = legacyCust.phone;
+  const name = legacyCust.name;
+  const verified = legacyCust.verified;
+  const walletBalance = legacyCust.walletBalance;
+  let referralCode = legacyCust.referralCode;
+  
+  if (verified && !referralCode) {
+    referralCode = await generateUniqueReferralCode();
+  }
+  
+  const nowStr = new Date().toISOString();
+  const customerProfile: CustomerProfile = {
+    id: phone,
+    customerId: phone,
+    name,
+    fullName: name,
+    phone,
+    mobileNumber: phone,
+    loginMethod: 'phone',
+    verified,
+    walletBalance,
+    loyaltyPoints: walletBalance,
+    rewardPoints: walletBalance,
+    active: true,
+    status: 'active',
+    createdAt: legacyCust.raw?.createdAt || nowStr,
+    lastLogin: nowStr,
+    referralAttemptsRemaining: 3,
+    referralCodeUsed: legacyCust.raw?.referralCodeUsed || false,
+    referralLocked: false,
+    referralCode,
+    legacyUser: false
+  };
+
+  // Recreate profile in both collections
+  await setDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, phone), customerProfile);
+  await setDoc(doc(db(), 'customerProfiles', phone), customerProfile);
+  
+  // Wallet
+  await setDoc(doc(db(), 'wallets', phone), {
+    customerId: phone,
+    balance: walletBalance,
+    createdAt: nowStr
+  }, { merge: true });
+  
+  // History
+  await setDoc(doc(db(), 'customerHistory', phone), {
+    customerId: phone,
+    createdAt: nowStr
+  }, { merge: true });
+
+  // Verification request
+  await setDoc(doc(db(), 'customerVerificationRequests', phone), {
+    requestId: phone,
+    customerId: phone,
+    customerName: name,
+    mobileNumber: phone,
+    otp: 'NO_OTP',
+    status: verified ? 'verified' : 'pending',
+    createdAt: nowStr,
+    verifiedAt: verified ? nowStr : null,
+    verifiedBy: verified ? 'admin' : null
+  }, { merge: true });
+
+  // Update legacy orders from 'cust_phone' to 'phone'
+  try {
+    const q1 = query(collection(db(), FIRESTORE_ORDERS_COLLECTION), where('customerId', '==', 'cust_' + phone));
+    const snap1 = await getDocs(q1);
+    for (const docSnap of snap1.docs) {
+      await updateDoc(docSnap.ref, { customerId: phone });
+    }
+  } catch (e) {
+    console.warn('Failed to update customerId in orders:', e);
+  }
+  try {
+    const q2 = query(collection(db(), 'orderHistory'), where('customerId', '==', 'cust_' + phone));
+    const snap2 = await getDocs(q2);
+    for (const docSnap of snap2.docs) {
+      await updateDoc(docSnap.ref, { customerId: phone });
+    }
+  } catch (e) {
+    console.warn('Failed to update customerId in orderHistory:', e);
+  }
+
+  // Delete legacy customer document
+  if (legacyCust.id.startsWith('cust_')) {
+    try {
+      await deleteDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, legacyCust.id));
+    } catch (e) {}
+  }
+  if (legacyCust.source === 'legacyCustomers') {
+    try {
+      await deleteDoc(doc(db(), 'legacyCustomers', legacyCust.id));
+    } catch (e) {}
+  }
+};
+
+export const rejectLegacyCustomer = async (legacyCust: any): Promise<void> => {
+  if (legacyCust.source === 'legacyCustomers') {
+    await deleteDoc(doc(db(), 'legacyCustomers', legacyCust.id));
+  } else if (legacyCust.id.startsWith('cust_')) {
+    await deleteDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, legacyCust.id));
+  } else {
+    // Standard phone customer, update status
+    await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, legacyCust.id), { status: 'rejected', active: false });
+    try {
+      await updateDoc(doc(db(), 'customerProfiles', legacyCust.id), { status: 'rejected', active: false });
+    } catch (e) {}
+  }
+};
+
+export const changeAccountPassword = async (
+  requesterUsername: string,
+  targetUsername: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> => {
+  // 1. Verify requester is Admin
+  const adminDoc = await getDoc(doc(db(), 'admins', requesterUsername));
+  if (!adminDoc.exists()) {
+    throw new Error('Unauthorized: Only Admin can change passwords.');
+  }
+
+  // 2. Identify target collection
+  let targetCollection = '';
+  if (targetUsername === 'Admin_Harinos') {
+    targetCollection = 'admins';
+  } else if (targetUsername === 'Manager_Harinos') {
+    targetCollection = 'managers';
+  } else if (targetUsername === 'Staff_Harinos') {
+    targetCollection = 'staff';
+  } else {
+    const snapA = await getDoc(doc(db(), 'admins', targetUsername));
+    if (snapA.exists()) targetCollection = 'admins';
+    else {
+      const snapM = await getDoc(doc(db(), 'managers', targetUsername));
+      if (snapM.exists()) targetCollection = 'managers';
+      else {
+        const snapS = await getDoc(doc(db(), 'staff', targetUsername));
+        if (snapS.exists()) targetCollection = 'staff';
+      }
+    }
+  }
+
+  if (!targetCollection) {
+    throw new Error('Target user not found.');
+  }
+
+  const targetDocRef = doc(db(), targetCollection, targetUsername);
+  const targetSnap = await getDoc(targetDocRef);
+  if (!targetSnap.exists()) {
+    throw new Error('Target account not found.');
+  }
+
+  const targetData = targetSnap.data();
+  const currentHash = await hashPasswordClient(currentPassword);
+  
+  if (targetData.passwordHash !== currentHash && targetData.password !== currentPassword) {
+    throw new Error('Incorrect current password.');
+  }
+
+  const newHash = await hashPasswordClient(newPassword);
+  await updateDoc(targetDocRef, { passwordHash: newHash, password: newPassword });
+
+  // Update in Firebase Auth if it corresponds to the current logged in user
+  const authInstance = auth();
+  const def = DEFAULT_STAFF.find((d) => d.username === targetUsername);
+  if (def && authInstance.currentUser && authInstance.currentUser.email === def.email) {
+    try {
+      await updateAuthPassword(authInstance.currentUser, newPassword);
+    } catch (err) {
+      console.warn('Failed to update password in Firebase Auth:', err);
+    }
   }
 };

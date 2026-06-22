@@ -146,6 +146,18 @@ export const WalletModal: React.FC<WalletModalProps> = ({
             )}
           </div>
           <span className="text-xs text-slate-500 font-bold">📞 {customerProfile.phone}</span>
+          {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
+            <div className="mt-3 grid grid-cols-2 gap-2 w-full text-center">
+              <div className="rounded-2xl border border-orange-150 bg-orange-50/20 p-2 shadow-sm">
+                <div className="text-[8px] font-black uppercase tracking-wider text-orange-850">Referrals</div>
+                <div className="mt-0.5 text-xs font-bold text-slate-800">{customerProfile.referralCount ?? 0} Count</div>
+              </div>
+              <div className="rounded-2xl border border-orange-150 bg-orange-50/20 p-2 shadow-sm">
+                <div className="text-[8px] font-black uppercase tracking-wider text-orange-850">Referral Earnings</div>
+                <div className="mt-0.5 text-xs font-bold text-emerald-600">Rs {(customerProfile.referralEarnings ?? 0).toFixed(0)}</div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-3xl p-5 mb-4 text-center shadow-inner">

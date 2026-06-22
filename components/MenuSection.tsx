@@ -179,17 +179,97 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
   const sortByPrice = (a: MenuItem, b: MenuItem) => a.price - b.price;
 
   const pizzas = items.filter((item) => item.category === Category.PIZZA);
-  const cheesePizzas = pizzas.filter((item) => item.id.startsWith('cheese_')).sort(sortByPrice);
-  const masalaPizzas = pizzas.filter((item) => item.id.startsWith('masala_')).sort(sortByPrice);
-  const vegloverOverloadPizzas = pizzas.filter((item) => !item.id.startsWith('cheese_') && !item.id.startsWith('masala_') && item.id !== 'p_hs').sort(sortByPrice);
-  const harinosSpecialPizzas = pizzas.filter((item) => item.id === 'p_hs').sort(sortByPrice);
+
+  // 1. Cheese Series (contains "Cheese" but not Makhni, Tandoori, or Masala)
+  const cheesePizzas = pizzas.filter((item) => 
+    (item.id.startsWith('cheese_') || item.name.toLowerCase().includes('cheese')) && 
+    !item.name.toLowerCase().includes('makhni') && 
+    !item.name.toLowerCase().includes('tandoori') && 
+    !item.name.toLowerCase().includes('masala') && 
+    !item.name.toLowerCase().includes('teekha') && 
+    !item.name.toLowerCase().includes('ultimate') && 
+    !item.name.toLowerCase().includes('twist')
+  ).sort(sortByPrice);
+
+  // 2. Masala Series (contains Masala keywords but not Makhni or Tandoori)
+  const masalaPizzas = pizzas.filter((item) => 
+    (item.id.startsWith('masala_') || 
+     item.name.toLowerCase().includes('masala') || 
+     item.name.toLowerCase().includes('teekha') || 
+     item.name.toLowerCase().includes('ultimate') || 
+     item.name.toLowerCase().includes('twist')) && 
+    !item.name.toLowerCase().includes('makhni') && 
+    !item.name.toLowerCase().includes('tandoori')
+  ).sort(sortByPrice);
+
+  // 3. Veg Special Series (Veg Lover, Veg Overloaded, Mighty Crunch, Chilli Shot)
+  const vegSpecialPizzas = pizzas.filter((item) => 
+    item.id !== 'p_hs' &&
+    !item.id.startsWith('makhni_') && !item.name.toLowerCase().includes('makhni') &&
+    !item.id.startsWith('tandoori_') && !item.name.toLowerCase().includes('tandoori') &&
+    !item.id.startsWith('masala_') && !item.name.toLowerCase().includes('masala') && !item.name.toLowerCase().includes('teekha') && !item.name.toLowerCase().includes('ultimate') && !item.name.toLowerCase().includes('twist') &&
+    !item.id.startsWith('cheese_') && !item.name.toLowerCase().includes('cheese')
+  ).sort(sortByPrice);
+
+  // 4. Makhni Series
+  const makhniPizzas = pizzas.filter((item) => 
+    item.id.startsWith('makhni_') || item.name.toLowerCase().includes('makhni')
+  ).sort(sortByPrice);
+
+  // 5. Tandoori Series
+  const tandooriPizzas = pizzas.filter((item) => 
+    (item.id.startsWith('tandoori_') || item.name.toLowerCase().includes('tandoori')) && 
+    !item.name.toLowerCase().includes('makhni')
+  ).sort(sortByPrice);
+
+  // 6. Harino's Signature Series
+  const signaturePizzas = pizzas.filter((item) => item.id === 'p_hs').sort(sortByPrice);
 
   const burgers = items.filter((item) => item.category === Category.BURGERS).sort(sortByPrice);
   const fries = items.filter((item) => item.category === Category.FRIES).sort(sortByPrice);
+
+  // Momos: Veg vs Soya (Allowed 5 items each, Full Plate only)
+  const allowedVegMomos = [
+    'veg steam momos',
+    'veg fried momos',
+    'veg tandoori momos',
+    'veg cheese momos',
+    'veg gravy momos'
+  ];
+  const allowedSoyaMomos = [
+    'soya steam momos',
+    'soya fried momos',
+    'soya tandoori momos',
+    'soya cheese momos',
+    'soya gravy momos'
+  ];
+
   const momos = items.filter((item) => item.category === Category.MOMOS);
-  const soyaMomos = momos.filter((item) => item.name.toLowerCase().includes('soya')).sort(sortByPrice);
-  const vegMomos = momos.filter((item) => !item.name.toLowerCase().includes('soya')).sort(sortByPrice);
-  const sides = items.filter((item) => item.category === Category.SIDES).sort(sortByPrice);
+  const vegMomos = momos.filter((item) => allowedVegMomos.includes(item.name.toLowerCase())).sort(sortByPrice);
+  const soyaMomos = momos.filter((item) => allowedSoyaMomos.includes(item.name.toLowerCase())).sort(sortByPrice);
+
+  // Sides constraints: Zingli Parcel (4 pieces only), Calzone (2 pieces only)
+  const sides = items
+    .filter((item) => item.category === Category.SIDES)
+    .filter((item) => {
+      const nameLower = item.name.toLowerCase();
+      if (nameLower.includes('zingli parcel') && !nameLower.includes('4 pieces') && !nameLower.includes('4 pcs')) {
+        return false;
+      }
+      if (nameLower.includes('calzone') && !nameLower.includes('2 pieces') && !nameLower.includes('2 pcs')) {
+        return false;
+      }
+      return true;
+    })
+    .map((item) => {
+      const nameLower = item.name.toLowerCase();
+      if (nameLower.includes('zingli parcel') || nameLower.includes('calzone')) {
+        return { ...item, sizes: undefined };
+      }
+      return item;
+    })
+    .sort(sortByPrice);
+
   const beverages = items.filter((item) => item.category === Category.BEVERAGES).sort(sortByPrice);
 
   // Auto-scrolling Vertical + Horizontal Effect
@@ -234,13 +314,15 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
       onTouchStart={stopAutoScroll}
       onWheel={stopAutoScroll}
     >
-      {/* Pizzas: Cheese Series -> Masala Series -> Veglover & Veg Overload -> Harino's Special */}
+      {/* Pizzas: Cheese -> Masala -> Veg Special -> Makhni -> Tandoori -> Signature */}
       {pizzas.length > 0 && (
         <>
           <MenuRow title="Cheese Series" items={cheesePizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
           <MenuRow title="Masala Series" items={masalaPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Veglover & Veg Overload Pizza" items={vegloverOverloadPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Harino's Special Series" items={harinosSpecialPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+          <MenuRow title="Veg Special Series" items={vegSpecialPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+          <MenuRow title="Makhni Series" items={makhniPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+          <MenuRow title="Tandoori Series" items={tandooriPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
+          <MenuRow title="Harino's Signature Series" items={signaturePizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
         </>
       )}
 

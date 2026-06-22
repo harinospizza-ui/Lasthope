@@ -67,9 +67,7 @@ const Header: React.FC<HeaderProps> = ({
       return;
     }
 
-    if (needsIosInstructions) {
-      setShowInstallHelp((current) => !current);
-    }
+    setShowInstallHelp((current) => !current);
   };
 
   const handleLogoClick = (e: React.MouseEvent) => {
@@ -142,7 +140,7 @@ const Header: React.FC<HeaderProps> = ({
           </button>
 
           <div className="flex items-center space-x-3">
-            {!isInstalled && canPromptInstall && (
+            {!isInstalled && (
               <button
                 onClick={handleInstall}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale ${
@@ -203,9 +201,13 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
-      {showInstallHelp && needsIosInstructions && (
+      {showInstallHelp && (
         <div className="bg-slate-900 text-white text-center py-2 px-4 text-xs border-t border-white/10 animate-fade-in">
-          iPhone / iPad Users: Open this site in <span className="font-bold">Safari</span>, tap <span className="font-bold">Share</span> and select <span className="font-bold">Add to Home Screen</span>.
+          {needsIosInstructions ? (
+            <>iPhone / iPad Users: Open this site in <span className="font-bold">Safari</span>, tap <span className="font-bold">Share</span> and select <span className="font-bold">Add to Home Screen</span>.</>
+          ) : (
+            <>To install Harino's: Click your browser's menu/share button and select <span className="font-bold">Add to Home Screen</span> or <span className="font-bold">Install</span>.</>
+          )}
         </div>
       )}
     </nav>

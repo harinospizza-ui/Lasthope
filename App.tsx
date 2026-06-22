@@ -154,36 +154,49 @@ export const extendMenuItemsWithGeneratedSeries = (items: MenuItem[]): MenuItem[
   
   // Filter out any generated items that might be cached or passed in
   const sourceItems = items.filter(
-    (item) => !item.id.startsWith('cheese_') && !item.id.startsWith('masala_')
+    (item) => 
+      !item.id.startsWith('cheese_') && 
+      !item.id.startsWith('masala_') &&
+      !item.id.startsWith('makhni_') &&
+      !item.id.startsWith('tandoori_')
   );
 
   for (const item of sourceItems) {
-    // Exclude Harino's Special (p_hs), Veggie Lover (p4_vl), and Veg Overloaded (p3_vo) from the series generator
-    if (item.category === Category.PIZZA && item.id !== 'p_hs' && item.id !== 'p4_vl' && item.id !== 'p3_vo') {
-      // 1. Cheese Series version
-      const cheeseId = `cheese_${item.id}`;
-      extended.push({
-        ...item,
-        id: cheeseId,
-        name: `${item.name.replace(" Pizza", "")} (Cheese Series)`,
-        description: `Classic mozzarella cheese base. ${item.description}`,
-      });
+    extended.push(item);
 
-      // 2. Masala Series version
-      const masalaId = `masala_${item.id}`;
-      extended.push({
-        ...item,
-        id: masalaId,
-        name: `${item.name.replace(" Pizza", "")} (Masala Series)`,
-        description: `Spicy masala sauce base. ${item.description}`,
-        price: item.price + 20,
-        sizes: item.sizes?.map((sz) => ({
-          label: sz.label,
-          price: sz.label === 'Regular' ? sz.price + 20 : sz.label === 'Medium' ? sz.price + 30 : sz.label === 'Large' ? sz.price + 50 : sz.price + 20,
-        })),
-      });
-    } else {
-      extended.push(item);
+    // Exclude Harino's Special (p_hs) from the series generator
+    if (item.category === Category.PIZZA && item.id !== 'p_hs') {
+      // 1. Makhni Series version
+      if (!item.name.toLowerCase().includes('makhni')) {
+        const makhniId = `makhni_${item.id}`;
+        extended.push({
+          ...item,
+          id: makhniId,
+          name: `${item.name.replace(" Pizza", "").split(" (")[0]} Makhni Pizza`,
+          description: `Rich and creamy makhni gravy base. ${item.description}`,
+          price: item.price + 30,
+          sizes: item.sizes?.map((sz) => ({
+            label: sz.label,
+            price: sz.label === 'Regular' ? sz.price + 30 : sz.label === 'Medium' ? sz.price + 45 : sz.label === 'Large' ? sz.price + 60 : sz.price + 30,
+          })),
+        });
+      }
+
+      // 2. Tandoori Series version
+      if (!item.name.toLowerCase().includes('tandoori')) {
+        const tandooriId = `tandoori_${item.id}`;
+        extended.push({
+          ...item,
+          id: tandooriId,
+          name: `${item.name.replace(" Pizza", "").split(" (")[0]} Tandoori Pizza`,
+          description: `Smoky tandoori sauce base. ${item.description}`,
+          price: item.price + 25,
+          sizes: item.sizes?.map((sz) => ({
+            label: sz.label,
+            price: sz.label === 'Regular' ? sz.price + 25 : sz.label === 'Medium' ? sz.price + 35 : sz.label === 'Large' ? sz.price + 50 : sz.price + 25,
+          })),
+        });
+      }
     }
   }
 
@@ -228,6 +241,8 @@ const App: React.FC = () => {
   const customerProfileRef = useRef(customerProfile);
   customerProfileRef.current = customerProfile;
 
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [newVersionString, setNewVersionString] = useState('');
   const [menuItems, setMenuItems] = useState<MenuItem[]>(extendMenuItemsWithGeneratedSeries(MENU_ITEMS));
   const [outlets, setOutlets] = useState<OutletConfig[]>(OUTLET_LOCATIONS);
   const [offers, setOffers] = useState<OfferCard[]>(OFFER_CARDS);
@@ -334,6 +349,34 @@ const App: React.FC = () => {
   // Request notification permission on app load
   useEffect(() => {
     void requestNotificationPermission();
+  }, []);
+
+  // Periodic check for PWA updates against build version
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+
+    const checkVersion = async () => {
+      try {
+        const res = await fetch('/version.json?t=' + Date.now(), {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const serverVersion = data.version;
+          const currentVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
+          if (serverVersion && currentVersion && serverVersion !== currentVersion) {
+            setNewVersionString(serverVersion);
+            setShowUpdateModal(true);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to check version:', err);
+      }
+    };
+
+    void checkVersion();
+    const interval = setInterval(checkVersion, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Real-time legacy user sync: detects profiles from previous versions and pushes to Firestore for admin verification
@@ -1787,6 +1830,55 @@ const App: React.FC = () => {
           onSessionChange={setAdminSession}
           onClose={() => setIsAdminPanelOpen(false)}
         />
+      )}
+
+      {showUpdateModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setShowUpdateModal(false)} />
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-slate-900 text-white shadow-2xl p-6 md:p-8">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.2),_transparent_50%)]" />
+            <div className="relative text-center">
+              <span className="text-5xl mb-4 block">🚀</span>
+              <h3 className="text-2xl font-display font-black tracking-tight text-white mb-2">New version available</h3>
+              <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                Update to the latest version of Harino's App for new menu items, improved speed, and new features.
+              </p>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if ('caches' in window) {
+                        const keys = await caches.keys();
+                        await Promise.all(keys.map(key => caches.delete(key)));
+                      }
+                      if ('serviceWorker' in navigator) {
+                        const registrations = await navigator.serviceWorker.getRegistrations();
+                        for (const registration of registrations) {
+                          await registration.update();
+                        }
+                      }
+                    } catch (e) {
+                      console.warn(e);
+                    } finally {
+                      window.location.reload();
+                    }
+                  }}
+                  className="cta-glow flex-1 rounded-2xl bg-red-600 py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg active:scale-95 transition-all"
+                >
+                  Update Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUpdateModal(false)}
+                  className="flex-1 rounded-2xl border border-white/10 bg-white/5 py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white/70 hover:text-white transition-all"
+                >
+                  Later
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

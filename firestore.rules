@@ -157,5 +157,31 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdminOrManager();
     }
+
+    // Legacy Customers Rules
+    match /legacyCustomers/{customerId} {
+      allow read, write: if true;
+    }
+
+    // Blocked Customers Rules
+    match /blocked_customers/{phone} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Yearly Summaries Rules
+    match /yearlySummaries/{summaryId} {
+      allow read, write: if isAdminOrManager();
+    }
+
+    // Customer Verification Rules
+    match /customerVerification/{customerId} {
+      allow read, write: if true;
+    }
+
+    // Analytics Rules
+    match /analytics/{analyticsId} {
+      allow read, write: if true;
+    }
   }
 }

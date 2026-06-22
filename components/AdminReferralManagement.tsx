@@ -139,7 +139,7 @@ export const AdminReferralManagement: React.FC = () => {
                   <tr key={c.id} className="hover:bg-white/[0.01] transition-colors">
                     <td className="p-4">
                       <div className="font-bold text-sm text-white">{c.name}</div>
-                      <div className="text-slate-400 text-[10px] mt-0.5">Ph: {c.phone}</div>
+                      <div className="text-slate-400 text-[10px] mt-0.5">Ph: {c.phone?.split('-')[0]}</div>
                     </td>
                     <td className="p-4">
                       {c.referralCode ? (
@@ -222,7 +222,7 @@ export const AdminReferralManagement: React.FC = () => {
                   <div key={u.id} className="flex justify-between items-center p-3 rounded-xl border border-white/5 bg-white/[0.02]">
                     <div>
                       <div className="font-bold text-xs text-white">{u.name}</div>
-                      <div className="text-[10px] text-slate-400">Ph: {u.phone}</div>
+                      <div className="text-[10px] text-slate-400">Ph: {u.phone?.split('-')[0]}</div>
                     </div>
                     <div className="text-right">
                       <div className="text-[10px] text-slate-550 font-bold">Joined</div>

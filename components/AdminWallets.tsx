@@ -43,7 +43,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
     return digits.length === 10 ? `91${digits}` : digits;
   };
 
-  const cleanPhoneStr = (p: string) => (p || '').replace(/\D/g, '');
+  const cleanPhoneStr = (p: string) => (p || '').split('-')[0].replace(/\D/g, '');
 
   // Group customers by cleaned phone number to find duplicate profiles
   const duplicatesGrouped = React.useMemo(() => {
@@ -206,7 +206,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
                   try {
                     const allCusts = await getServerCustomers();
-                    const cleanPhone = (p: string) => (p || '').replace(/\D/g, '');
+                    const cleanPhone = (p: string) => (p || '').split('-')[0].replace(/\D/g, '');
                     const duplicate = allCusts.find((c) => cleanPhone(c.phone) === cleanPhone(phoneVal));
                     if (duplicate) {
                       alert(`A customer with phone number ${phoneVal} already exists.`);
@@ -302,7 +302,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
                   try {
                     const allCusts = await getServerCustomers();
-                    const cleanPhone = (p: string) => (p || '').replace(/\D/g, '');
+                    const cleanPhone = (p: string) => (p || '').split('-')[0].replace(/\D/g, '');
                     const duplicate = allCusts.find((c) => c.id !== editingCustomer.id && cleanPhone(c.phone) === cleanPhone(phoneVal));
                     if (duplicate) {
                       alert(`Another customer with phone number ${phoneVal} already exists.`);
@@ -382,7 +382,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400 mt-1 font-semibold">Ph: {customer.phone} {customer.email ? `• ${customer.email}` : ''}</div>
+                  <div className="text-xs text-slate-400 mt-1 font-semibold">Ph: {customer.phone?.split('-')[0]} {customer.email ? `• ${customer.email}` : ''}</div>
                   {customer.referralCode && (
                     <div className="text-[10px] text-red-400 mt-1 font-bold">Referral Code: {customer.referralCode}</div>
                   )}
@@ -650,7 +650,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
             <div key={cust.id} className="rounded-2xl bg-white/[0.05] p-4 flex flex-col justify-between border border-white/5 shadow-2xl">
               <div>
                 <div className="font-bold text-lg text-white">{cust.name}</div>
-                <div className="text-xs text-slate-400 font-semibold">Ph: {cust.phone}</div>
+                <div className="text-xs text-slate-400 font-semibold">Ph: {cust.phone?.split('-')[0]}</div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                   <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 text-center text-orange-200 font-bold">
                     👛 Rs {(cust.walletBalance ?? 0).toFixed(0)}

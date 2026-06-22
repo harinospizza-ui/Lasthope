@@ -546,27 +546,49 @@ export const saveCustomerToServer = async (profile: CustomerProfile): Promise<vo
 };
 
 export const deleteCustomerFromServer = async (customerId: string): Promise<void> => {
-  const cleanId = customerId.trim();
-  await deleteDoc(doc(db(), 'customers', cleanId));
-  await deleteDoc(doc(db(), 'customerProfiles', cleanId));
-  await deleteDoc(doc(db(), 'wallets', cleanId));
-  await deleteDoc(doc(db(), 'customerVerificationRequests', cleanId));
-  await deleteDoc(doc(db(), 'customerVerification', cleanId));
-  await deleteDoc(doc(db(), 'customerHistory', cleanId));
+  const rawId = customerId.trim();
+  const cleanId = rawId.split('-')[0].trim().replace(/\D/g, '').slice(0, 10);
   
-  const txQuery = query(collection(db(), 'wallet_transactions'), where('customerId', '==', cleanId));
-  const txSnap = await getDocs(txQuery);
-  for (const docDoc of txSnap.docs) {
-    await deleteDoc(docDoc.ref);
-  }
-  
-  const txQuery2 = query(collection(db(), 'walletTransactions'), where('customerId', '==', cleanId));
-  const txSnap2 = await getDocs(txQuery2);
-  for (const docDoc of txSnap2.docs) {
-    await deleteDoc(docDoc.ref);
+  const safeDelete = async (col: string, docId: string) => {
+    try {
+      await deleteDoc(doc(db(), col, docId));
+    } catch (error) {
+      console.warn(`Failsafe delete failed for ${col}/${docId}:`, error);
+    }
+  };
+
+  const idsToDelete = Array.from(new Set([rawId, cleanId])).filter(Boolean);
+
+  for (const docId of idsToDelete) {
+    await safeDelete('customers', docId);
+    await safeDelete('customerProfiles', docId);
+    await safeDelete('wallets', docId);
+    await safeDelete('customerVerificationRequests', docId);
+    await safeDelete('customerVerification', docId);
+    await safeDelete('customerHistory', docId);
+    
+    try {
+      const txQuery = query(collection(db(), 'wallet_transactions'), where('customerId', '==', docId));
+      const txSnap = await getDocs(txQuery);
+      for (const docDoc of txSnap.docs) {
+        try {
+          await deleteDoc(docDoc.ref);
+        } catch (e) {}
+      }
+    } catch (e) {}
+    
+    try {
+      const txQuery2 = query(collection(db(), 'walletTransactions'), where('customerId', '==', docId));
+      const txSnap2 = await getDocs(txQuery2);
+      for (const docDoc of txSnap2.docs) {
+        try {
+          await deleteDoc(docDoc.ref);
+        } catch (e) {}
+      }
+    } catch (e) {}
   }
 
-  const localCusts = StorageService.getAdminCustomers().filter((c) => c.id !== cleanId);
+  const localCusts = StorageService.getAdminCustomers().filter((c) => c.id !== rawId && c.id !== cleanId);
   StorageService.saveAdminCustomers(localCusts);
 };
 
@@ -607,7 +629,10 @@ export const getServerCustomers = async (): Promise<CustomerProfile[]> => {
 
 export const getServerCustomerById = async (customerId: string): Promise<CustomerProfile | null> => {
   try {
-    const cleanId = customerId.trim();
+    let cleanId = customerId.trim();
+    if (cleanId && cleanId !== '_init_placeholder' && !cleanId.startsWith('staff_') && !cleanId.startsWith('admin_') && !cleanId.startsWith('manager_')) {
+      cleanId = cleanId.split('-')[0].trim().replace(/\D/g, '').slice(0, 10);
+    }
     if (!cleanId || cleanId === '_init_placeholder') return null;
 
     // 1. Search customerProfiles
@@ -889,7 +914,7 @@ export const initCustomerLogin = async (
     throw new Error("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
   }
 
-  const cleanPhone = phone.replace(/\D/g, '');
+  const cleanPhone = phone.split('-')[0].replace(/\D/g, '').slice(0, 10);
   if (cleanPhone.length !== 10) {
     throw new Error('Please enter a valid 10-digit mobile number.');
   }
@@ -908,7 +933,23 @@ export const initCustomerLogin = async (
     if (customerData.active === false || customerData.status === 'blocked') {
       return { success: false, exists: true, message: 'Account disabled' };
     }
-    const updatedProfile = { ...customerData, lastLogin: new Date().toISOString() };
+    
+    // Auto-update default names with customer's entered name
+    let updatedName = customerData.name || '';
+    if (name && name.trim() && (!updatedName || updatedName.startsWith('Customer_'))) {
+      updatedName = name.trim();
+    }
+    let updatedFullName = customerData.fullName || '';
+    if (name && name.trim() && (!updatedFullName || updatedFullName.startsWith('Customer_'))) {
+      updatedFullName = name.trim();
+    }
+
+    const updatedProfile = { 
+      ...customerData, 
+      name: updatedName,
+      fullName: updatedFullName,
+      lastLogin: new Date().toISOString() 
+    };
     await setDoc(profileRef, updatedProfile);
     
     // Sync to customers collection
@@ -917,7 +958,11 @@ export const initCustomerLogin = async (
     if (!customerSnap.exists()) {
       await setDoc(customerRef, updatedProfile);
     } else {
-      await updateDoc(customerRef, { lastLogin: updatedProfile.lastLogin });
+      await updateDoc(customerRef, { 
+        name: updatedProfile.name,
+        fullName: updatedProfile.fullName,
+        lastLogin: updatedProfile.lastLogin 
+      });
     }
 
     return {

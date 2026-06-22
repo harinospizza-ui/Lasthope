@@ -28,6 +28,36 @@ export const WalletModal: React.FC<WalletModalProps> = ({
   const [topUpAmount, setTopUpAmount] = useState('');
   const [latestTopup, setLatestTopup] = useState<WalletTransaction | null>(null);
 
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState(customerProfile.name || '');
+
+  useEffect(() => {
+    if (customerProfile?.name) {
+      setTempName(customerProfile.name);
+    }
+  }, [customerProfile?.name]);
+
+  const handleSaveName = async () => {
+    if (!tempName.trim()) {
+      alert('Name cannot be empty.');
+      return;
+    }
+    const updated = {
+      ...customerProfile,
+      name: tempName.trim(),
+      fullName: tempName.trim()
+    };
+    try {
+      await saveCustomerToServer(updated);
+      StorageService.saveCustomerProfile(updated);
+      onProfileChange(updated);
+      setIsEditingName(false);
+      showNotification({ title: 'Success', message: 'Name updated successfully!', type: 'success' });
+    } catch (err: any) {
+      alert(err.message || 'Failed to save name.');
+    }
+  };
+
   useEffect(() => {
     if (!isOpen || !customerProfile?.id) return;
     
@@ -165,13 +195,48 @@ export const WalletModal: React.FC<WalletModalProps> = ({
             </div>
           )}
 
-          <div className="mt-3 flex items-center gap-1.5">
-            <span className="font-display font-black text-xl text-slate-900">{customerProfile.name}</span>
-            {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
-              <span className="inline-flex items-center justify-center bg-blue-500 text-white rounded-full w-4.5 h-4.5 text-[9px] font-black">✓</span>
-            )}
-          </div>
-          <span className="text-xs text-slate-500 font-bold">📞 {customerProfile.phone}</span>
+          {isEditingName ? (
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                type="text"
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                className="px-3 py-1 rounded-xl border border-slate-350 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:border-red-500 w-36 shadow-inner"
+                placeholder="Enter name"
+                maxLength={30}
+              />
+              <button
+                onClick={handleSaveName}
+                className="bg-green-600 hover:bg-green-500 text-white text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg transition-all"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setTempName(customerProfile.name || '');
+                  setIsEditingName(false);
+                }}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 flex items-center justify-center gap-1.5">
+              <span className="font-display font-black text-xl text-slate-900">{customerProfile.name}</span>
+              {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
+                <span className="inline-flex items-center justify-center bg-blue-500 text-white rounded-full w-4.5 h-4.5 text-[9px] font-black">✓</span>
+              )}
+              <button
+                onClick={() => setIsEditingName(true)}
+                className="text-slate-400 hover:text-red-500 text-xs ml-1 focus:outline-none cursor-pointer"
+                title="Edit Name"
+              >
+                ✏️
+              </button>
+            </div>
+          )}
+          <span className="text-xs text-slate-500 font-bold">📞 {customerProfile.phone?.split('-')[0]}</span>
           {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
             <div className="mt-3 grid grid-cols-2 gap-2 w-full text-center">
               <div className="rounded-2xl border border-orange-150 bg-orange-50/20 p-2 shadow-sm">

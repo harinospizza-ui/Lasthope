@@ -70,7 +70,32 @@ export const StorageService = {
     StorageService.saveAdminSession({ ...session, lastActivityTime: new Date().toISOString() });
   },
   saveCustomerProfile: (profile: CustomerProfile): void => writeJson(KEYS.CUSTOMER_PROFILE, profile),
-  getCustomerProfile: (): CustomerProfile | null => readJson<CustomerProfile | null>(KEYS.CUSTOMER_PROFILE, null),
+  getCustomerProfile: (): CustomerProfile | null => {
+    const profile = readJson<CustomerProfile | null>(KEYS.CUSTOMER_PROFILE, null);
+    if (profile) {
+      let changed = false;
+      if (profile.phone && profile.phone.includes('-')) {
+        profile.phone = profile.phone.split('-')[0];
+        changed = true;
+      }
+      if (profile.mobileNumber && profile.mobileNumber.includes('-')) {
+        profile.mobileNumber = profile.mobileNumber.split('-')[0];
+        changed = true;
+      }
+      if (profile.id && profile.id.includes('-')) {
+        profile.id = profile.id.split('-')[0];
+        changed = true;
+      }
+      if (profile.customerId && profile.customerId.includes('-')) {
+        profile.customerId = profile.customerId.split('-')[0];
+        changed = true;
+      }
+      if (changed) {
+        writeJson(KEYS.CUSTOMER_PROFILE, profile);
+      }
+    }
+    return profile;
+  },
   getVerifiedCustomers: (): Record<string, boolean> => readJson<Record<string, boolean>>(KEYS.VERIFIED_CUSTOMERS, {}),
   markCustomerVerified: (customerId: string): void => {
     const verified = StorageService.getVerifiedCustomers();

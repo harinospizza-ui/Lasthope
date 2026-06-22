@@ -128,16 +128,323 @@ ${order.rewardPointsRedeemed ? `<div class="row"><span>Points Paid</span><b>-Rs 
 <div class="center">Thank you! Come again!<br>Because Hari Knows</div>
 </body></html>`;
 
+const a4InvoiceHtml = (order: Order): string => {
+  const displayId = getDisplayOrderId(order.id);
+  const orderDate = new Date(order.receivedAt ?? order.date).toLocaleString();
+
+  const itemRows = order.items.map(item => {
+    const sizeStr = item.selectedSize ? ` (${item.selectedSize})` : '';
+    const name = `${item.name}${sizeStr}`;
+    return `
+      <tr>
+        <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 13px; vertical-align: top;">
+          <div style="font-weight: bold; color: #333;">${name}</div>
+          ${item.description ? `<div style="font-size: 11px; color: #777; margin-top: 2px;">${item.description}</div>` : ''}
+        </td>
+        <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; color: #555; vertical-align: top;">Rs ${Math.round(item.discountedPrice ?? item.price)}</td>
+        <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; color: #555; vertical-align: top;">${item.quantity}</td>
+        <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; font-weight: bold; color: #333; vertical-align: top;">Rs ${Math.round(item.totalPrice)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const subtotal = Math.round(order.total - (order.deliveryFee ?? 0) + (order.walletAmountRedeemed ?? 0) + (order.rewardPointsRedeemed ?? 0));
+  const deliveryFeeRow = order.deliveryFee 
+    ? `<tr>
+         <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Delivery Fee</td>
+         <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #333;">Rs ${Math.round(order.deliveryFee)}</td>
+       </tr>`
+    : '';
+  const walletRow = order.walletAmountRedeemed
+    ? `<tr>
+         <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Wallet Redeemed</td>
+         <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #2e7d32;">-Rs ${Math.round(order.walletAmountRedeemed)}</td>
+       </tr>`
+    : '';
+  const pointsRow = order.rewardPointsRedeemed
+    ? `<tr>
+         <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Coins Redeemed</td>
+         <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #2e7d32;">-Rs ${Math.round(order.rewardPointsRedeemed)}</td>
+       </tr>`
+    : '';
+
+  const grandTotal = Math.round(order.total);
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Invoice - #${displayId}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body {
+          font-family: 'Segoe UI', Roboto, -apple-system, sans-serif;
+          color: #333;
+          margin: 0;
+          padding: 20px;
+          background: #fff;
+        }
+        .invoice-container {
+          max-width: 800px;
+          margin: 0 auto;
+          background: #fff;
+          padding: 20px;
+        }
+        .header-table {
+          width: 100%;
+          border-bottom: 3px solid #e53935;
+          padding-bottom: 20px;
+          margin-bottom: 25px;
+        }
+        .logo-title {
+          font-size: 28px;
+          font-weight: 800;
+          color: #e53935;
+          margin: 0;
+          letter-spacing: 1px;
+        }
+        .logo-subtitle {
+          font-size: 12px;
+          color: #666;
+          margin: 4px 0 0 0;
+        }
+        .invoice-heading {
+          font-size: 26px;
+          font-weight: 800;
+          color: #333;
+          margin: 0;
+          text-align: right;
+        }
+        .invoice-meta {
+          font-size: 13px;
+          color: #666;
+          margin: 5px 0 0 0;
+          text-align: right;
+        }
+        .details-table {
+          width: 100%;
+          margin-bottom: 30px;
+        }
+        .details-column {
+          width: 50%;
+          vertical-align: top;
+        }
+        .details-card {
+          background: #f8f9fa;
+          border: 1px solid #eef0f2;
+          border-radius: 12px;
+          padding: 15px;
+          margin-right: 10px;
+          min-height: 120px;
+        }
+        .details-card-right {
+          background: #f8f9fa;
+          border: 1px solid #eef0f2;
+          border-radius: 12px;
+          padding: 15px;
+          margin-left: 10px;
+          min-height: 120px;
+        }
+        .card-title {
+          font-size: 13px;
+          font-weight: bold;
+          text-transform: uppercase;
+          color: #e53935;
+          margin: 0 0 10px 0;
+          border-bottom: 1px dashed rgba(229, 57, 53, 0.2);
+          padding-bottom: 4px;
+        }
+        .card-text {
+          font-size: 13px;
+          line-height: 1.6;
+          color: #495057;
+          margin: 0;
+        }
+        .items-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 30px;
+        }
+        .items-table th {
+          background: #e53935;
+          color: #fff;
+          font-weight: bold;
+          text-transform: uppercase;
+          font-size: 11px;
+          letter-spacing: 0.5px;
+          padding: 12px 10px;
+          border: none;
+        }
+        .summary-table {
+          width: 320px;
+          margin-left: auto;
+          border-collapse: collapse;
+        }
+        .grand-total-row {
+          border-top: 2px solid #e53935;
+          font-weight: 800;
+          font-size: 16px;
+          color: #e53935;
+        }
+        .footer {
+          margin-top: 50px;
+          text-align: center;
+          border-top: 1px solid #eef0f2;
+          padding-top: 20px;
+          font-size: 12px;
+          color: #868e96;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        <!-- Logo and invoice heading -->
+        <table class="header-table" style="width: 100%;">
+          <tr>
+            <td style="text-align: left; vertical-align: middle;">
+              <h1 class="logo-title">HARINO'S PIZZA</h1>
+              <p class="logo-subtitle">${order.outletName ?? 'Harino\'s Pizza Outlet'}</p>
+            </td>
+            <td style="text-align: right; vertical-align: middle;">
+              <h2 class="invoice-heading">INVOICE</h2>
+              <p class="invoice-meta">Order ID: <strong>#${displayId}</strong></p>
+              <p class="invoice-meta">Date: ${orderDate}</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Billed to & Order details -->
+        <table class="details-table" style="width: 100%;">
+          <tr>
+            <td class="details-column">
+              <div class="details-card">
+                <h3 class="card-title">Billed To</h3>
+                <p class="card-text">
+                  <strong>Name:</strong> ${order.customerName ?? 'Customer'}<br>
+                  <strong>Phone:</strong> ${order.customerPhone ?? 'N/A'}<br>
+                  <strong>Email:</strong> ${order.customerEmail ?? 'N/A'}
+                </p>
+              </div>
+            </td>
+            <td class="details-column">
+              <div class="details-card-right">
+                <h3 class="card-title">Order Info</h3>
+                <p class="card-text">
+                  <strong>Type:</strong> ${order.orderType.toUpperCase()}<br>
+                  <strong>Payment:</strong> ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}<br>
+                  <strong>Address:</strong> ${order.outletAddress ?? 'Outlet Address'}
+                </p>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Items Table -->
+        <table class="items-table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th style="text-align: left; border-top-left-radius: 8px; border-bottom-left-radius: 8px;">Item Description</th>
+              <th style="text-align: right; width: 100px;">Price</th>
+              <th style="text-align: right; width: 80px;">Qty</th>
+              <th style="text-align: right; width: 120px; border-top-right-radius: 8px; border-bottom-right-radius: 8px;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRows}
+          </tbody>
+        </table>
+
+        <!-- Totals Summary -->
+        <table class="summary-table">
+          <tr>
+            <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Subtotal</td>
+            <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #333;">Rs ${subtotal}</td>
+          </tr>
+          ${deliveryFeeRow}
+          ${walletRow}
+          ${pointsRow}
+          <tr class="grand-total-row">
+            <td style="padding: 12px 10px; text-align: left;">Grand Total</td>
+            <td style="padding: 12px 10px; text-align: right;">Rs ${grandTotal}</td>
+          </tr>
+        </table>
+
+        <!-- Footer -->
+        <div class="footer">
+          <p style="margin: 0; font-weight: bold;">Thank you for dining with Harino's Pizza!</p>
+          <p style="margin: 5px 0 0 0; font-style: italic;">Because Hari Knows</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 const printOrderReceipt = (order: Order) => {
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(receiptHtml(order));
-  win.document.close();
-  win.focus();
-  window.setTimeout(() => {
-    win.print();
-    win.close();
-  }, 250);
+  const displayId = getDisplayOrderId(order.id);
+  const scriptId = 'html2pdf-cdn-script';
+  let script = document.getElementById(scriptId) as HTMLScriptElement;
+
+  const runHtml2Pdf = () => {
+    const element = document.createElement('div');
+    element.innerHTML = a4InvoiceHtml(order);
+    
+    const opt = {
+      margin:       [10, 10, 10, 10], // top, left, bottom, right in mm
+      filename:     `Order_${displayId}_Bill.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    (window as any).html2pdf().from(element).set(opt).save();
+  };
+
+  const fallbackPrint = () => {
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(a4InvoiceHtml(order));
+    win.document.close();
+    win.focus();
+    window.setTimeout(() => {
+      win.print();
+      win.close();
+    }, 500);
+  };
+
+  if (!(window as any).html2pdf) {
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      script.integrity = 'sha512-GsLlZN/3F2ErC5IfS51RR359xOPgq19cV50fGRoUX30jOb3JzuUMxlKCgizUXyURvuVEcKxpUMt5PRCxQN161Q==';
+      script.crossOrigin = 'anonymous';
+      script.onload = () => {
+        runHtml2Pdf();
+      };
+      script.onerror = () => {
+        console.error('Failed to load html2pdf from CDN, falling back to print dialog.');
+        fallbackPrint();
+      };
+      document.body.appendChild(script);
+    } else {
+      let checkCount = 0;
+      const interval = setInterval(() => {
+        checkCount++;
+        if ((window as any).html2pdf) {
+          clearInterval(interval);
+          runHtml2Pdf();
+        } else if (checkCount > 50) {
+          clearInterval(interval);
+          fallbackPrint();
+        }
+      }, 100);
+    }
+  } else {
+    runHtml2Pdf();
+  }
 };
 
 export const getDisplayOrderId = (orderId: string): string => {
@@ -220,6 +527,9 @@ const App: React.FC = () => {
   const [view, setView] = useState<'menu' | 'orders'>('menu');
   const [pastOrders, setPastOrders] = useState<Order[]>(StorageService.getPastOrders());
   const [latestOrder, setLatestOrder] = useState<Order | null>(null);
+  const [dismissedOrderId, setDismissedOrderId] = useState<string | null>(() => {
+    return localStorage.getItem('dismissed_tracker_order_id') || null;
+  });
   const [isStoreOpen, setIsStoreOpen] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
   const [nearestOutletMatch, setNearestOutletMatch] = useState<OutletMatch | null>(null);
@@ -694,8 +1004,26 @@ const App: React.FC = () => {
   }, [configLoaded, adminSession]);
 
   const activeOrder = useMemo(() => {
-    return pastOrders.find((order) => order.status !== 'done' && order.status !== 'cancelled');
-  }, [pastOrders]);
+    const latest = pastOrders[0];
+    if (!latest) return null;
+    if (dismissedOrderId === latest.id) return null;
+
+    if (latest.status !== 'done' && latest.status !== 'cancelled') {
+      return latest;
+    }
+
+    try {
+      const orderTime = new Date(latest.date).getTime();
+      const now = new Date().getTime();
+      const ageHours = (now - orderTime) / (1000 * 60 * 60);
+      if (ageHours < 24) {
+        return latest;
+      }
+    } catch (e) {
+      // Fallback
+    }
+    return null;
+  }, [pastOrders, dismissedOrderId]);
 
   const trackedOrderId = activeOrder?.id || latestOrder?.id;
 
@@ -1386,6 +1714,8 @@ const App: React.FC = () => {
     StorageService.saveOrder(placedOrder);
     setPastOrders((currentOrders) => [placedOrder, ...currentOrders].slice(0, 3));
     setLatestOrder(placedOrder);
+    setDismissedOrderId(null);
+    localStorage.removeItem('dismissed_tracker_order_id');
     setShowOrderSuccess(true);
     replaceAppScreen('success');
     setCart([]);
@@ -1485,40 +1815,94 @@ const App: React.FC = () => {
               <div className="max-w-md mx-auto px-4 mt-6">
                 <div className="rounded-3xl border border-red-200 bg-white/95 backdrop-blur-md p-6 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl">
                   {/* Neon border decoration */}
-                  <div className="absolute top-0 left-0 w-2 h-full bg-red-650 bg-red-600" />
+                  <div className={`absolute top-0 left-0 w-2 h-full ${
+                    activeOrder.status === 'cancelled'
+                      ? 'bg-red-500'
+                      : activeOrder.status === 'done'
+                        ? 'bg-emerald-500'
+                        : 'bg-red-600'
+                  }`} />
 
                   <div className="flex justify-between items-start mb-4 pl-3">
                     <div>
                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">Active Order Tracker</span>
                       <h4 className="text-lg font-display font-bold text-slate-900 mt-0.5">Order #{activeOrder.id}</h4>
                     </div>
-                    <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-red-100 text-red-750 text-red-700 border border-red-200/50">
-                      {(activeOrder.status ?? 'new').replace(/_/g, ' ').toUpperCase()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                        activeOrder.status === 'cancelled'
+                          ? 'bg-red-50 text-red-600 border-red-200'
+                          : activeOrder.status === 'done'
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                            : 'bg-red-100 text-red-700 border-red-200/50'
+                      }`}>
+                        {activeOrder.status === 'cancelled' 
+                          ? 'CANCELLED' 
+                          : activeOrder.status === 'done' 
+                            ? 'COMPLETE' 
+                            : (activeOrder.status ?? 'new').replace(/_/g, ' ').toUpperCase()}
+                      </span>
+                      {(activeOrder.status === 'done' || activeOrder.status === 'cancelled') && (
+                        <button
+                          onClick={() => {
+                            setDismissedOrderId(activeOrder.id);
+                            localStorage.setItem('dismissed_tracker_order_id', activeOrder.id);
+                          }}
+                          className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 text-xs font-bold transition-all"
+                          title="Dismiss Tracker"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="pl-3 mb-5">
                     {/* Visual Progress Steps */}
                     <div className="flex items-center justify-between mt-4 relative">
                       <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-100 -translate-y-1/2 z-0" />
-                      {['new', 'preparing', 'ready', 'out_for_delivery', 'done'].map((step, idx) => {
-                        const statusOrder = ['new', 'preparing', 'ready', 'out_for_delivery', 'done'];
-                        const currentIdx = statusOrder.indexOf(activeOrder.status ?? 'new');
-                        const isCompleted = statusOrder.indexOf(step) <= currentIdx;
-                        const isCurrent = step === (activeOrder.status ?? 'new');
+                      {['placed', 'preparing', 'ready', 'complete'].map((step, idx) => {
+                        const status = activeOrder.status ?? 'new';
+                        
+                        let currentStepIndex = 0;
+                        if (status === 'new') {
+                          currentStepIndex = 0;
+                        } else if (status === 'preparing') {
+                          currentStepIndex = 1;
+                        } else if (status === 'ready' || status === 'out_for_delivery') {
+                          currentStepIndex = 2;
+                        } else if (status === 'done' || status === 'cancelled') {
+                          currentStepIndex = 3;
+                        }
+
+                        const isCompleted = idx <= currentStepIndex;
+                        const isCurrent = idx === currentStepIndex;
+
+                        let labelText = '';
+                        const isCancelledStep = status === 'cancelled' && idx === 3;
+                        
+                        if (idx === 0) labelText = 'Placed';
+                        else if (idx === 1) labelText = 'Preparing';
+                        else if (idx === 2) labelText = 'Ready';
+                        else if (idx === 3) {
+                          labelText = status === 'cancelled' ? 'Cancelled' : 'Complete';
+                        }
 
                         return (
                           <div key={step} className="flex flex-col items-center z-10 relative">
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all ${isCurrent
-                                ? 'bg-red-600 text-white ring-4 ring-red-100 scale-110 shadow-lg shadow-red-200'
-                                : isCompleted
-                                  ? 'bg-emerald-500 text-white'
-                                  : 'bg-slate-100 text-slate-400 border border-slate-200'
-                              }`}>
-                              {idx + 1}
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all ${
+                              isCancelledStep
+                                ? 'bg-red-500 text-white ring-4 ring-red-100 scale-110 shadow-lg shadow-red-200'
+                                : isCurrent
+                                  ? 'bg-red-600 text-white ring-4 ring-red-100 scale-110 shadow-lg shadow-red-200'
+                                  : isCompleted
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-slate-100 text-slate-400 border border-slate-200'
+                            }`}>
+                              {isCancelledStep ? '✕' : idx + 1}
                             </div>
                             <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 mt-1.5 whitespace-nowrap hidden sm:inline">
-                              {step.replace(/_/g, ' ')}
+                              {labelText}
                             </span>
                           </div>
                         );
@@ -1526,9 +1910,28 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
+                  {activeOrder.status === 'cancelled' && (
+                    <div className="pl-3 mb-4 p-3 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2">
+                      <span className="text-red-500 text-sm mt-0.5">⚠️</span>
+                      <div>
+                        <span className="text-[10px] font-black text-red-700 block uppercase tracking-wider">Cancellation Reason</span>
+                        <p className="text-xs font-semibold text-red-600 mt-0.5 leading-relaxed">
+                          {activeOrder.cancellationReason || 'No reason specified by administration.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="pl-3 flex flex-col sm:flex-row gap-3 items-center justify-between pt-2 border-t border-slate-100">
-                    <div className="text-[10px] font-bold text-slate-650 text-slate-600">
-                      {activeOrder.estimatedTime ? `Estimated Time: ${activeOrder.estimatedTime}` : 'Fresh ingredients are being prepared.'}
+                    <div className="text-[10px] font-bold text-slate-600">
+                      {activeOrder.status === 'cancelled' 
+                        ? 'This order was cancelled by the store.' 
+                        : activeOrder.status === 'done'
+                          ? 'Order complete! Enjoy your meal!'
+                          : activeOrder.estimatedTime 
+                            ? `Estimated Time: ${activeOrder.estimatedTime}` 
+                            : 'Fresh ingredients are being prepared.'
+                      }
                     </div>
                     <button
                       onClick={() => printOrderReceipt(activeOrder)}

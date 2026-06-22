@@ -1667,7 +1667,8 @@ export const getServerOutlets = async (): Promise<OutletConfig[]> => {
       }
       list.push(healedOutlet);
     }
-
+console.log('OUTLETS FROM FIREBASE:', list);
+console.log('OUTLETS COUNT:', list.length);
     if (list.length === 0) {
       console.log('[OUTLET HEALING] No outlets found in Firestore. Seeding default configuration...');
       try {

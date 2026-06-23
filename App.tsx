@@ -1039,6 +1039,19 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!configLoaded || !trackedOrderId) return;
+    const handleCancellationRefreshes = (orderStatus: string) => {
+      if (orderStatus === 'cancelled' && customerProfile?.id) {
+        void import('./services/orderApi').then(({ getServerCustomerById }) => {
+          getServerCustomerById(customerProfile.id).then((fresh) => {
+            if (fresh) {
+              setCustomerProfile(fresh);
+              StorageService.saveCustomerProfile(fresh);
+            }
+          }).catch(() => undefined);
+        });
+      }
+    };
+
     const unsubscribe = subscribeServerOrder(
       trackedOrderId,
       (order) => {
@@ -1048,6 +1061,9 @@ const App: React.FC = () => {
         );
         if (latestOrder?.id === order.id) {
           setLatestOrder(order);
+        }
+        if (order.status) {
+          handleCancellationRefreshes(order.status);
         }
       },
       () => undefined,
@@ -1063,6 +1079,9 @@ const App: React.FC = () => {
             if (latestOrder?.id === updatedOrder.id) {
               setLatestOrder(updatedOrder);
             }
+            if (updatedOrder.status) {
+              handleCancellationRefreshes(updatedOrder.status);
+            }
           })
           .catch(() => undefined);
       });
@@ -1071,7 +1090,7 @@ const App: React.FC = () => {
       unsubscribe?.();
       window.clearInterval(statusPoll);
     };
-  }, [configLoaded, trackedOrderId, latestOrder?.id]);
+  }, [configLoaded, trackedOrderId, latestOrder?.id, customerProfile?.id]);
 
   useEffect(() => {
     if (!configLoaded || !customerProfile?.id) return;
@@ -1867,67 +1886,61 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="pl-3 mb-5">
-                    {/* Visual Progress Steps */}
-                    <div className="flex items-center justify-between mt-4 relative">
-                      <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-100 -translate-y-1/2 z-0" />
-                      {['placed', 'preparing', 'ready', 'complete'].map((step, idx) => {
-                        const status = activeOrder.status ?? 'new';
-                        
-                        let currentStepIndex = 0;
-                        if (status === 'new') {
-                          currentStepIndex = 0;
-                        } else if (status === 'preparing') {
-                          currentStepIndex = 1;
-                        } else if (status === 'ready' || status === 'out_for_delivery') {
-                          currentStepIndex = 2;
-                        } else if (status === 'done' || status === 'cancelled') {
-                          currentStepIndex = 3;
-                        }
+                  {activeOrder.status === 'cancelled' ? (
+                    <div className="pl-3 mb-5 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 shadow-sm">
+                      <span className="text-red-500 text-base mt-0.5">⚠️</span>
+                      <div className="flex-1">
+                        <span className="text-[10px] font-black text-red-700 block uppercase tracking-wider">Cancellation Reason</span>
+                        <p className="text-sm font-semibold text-red-600 mt-1 leading-relaxed">
+                          {activeOrder.cancellationReason || 'No reason specified by administration.'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pl-3 mb-5">
+                      {/* Visual Progress Steps */}
+                      <div className="flex items-center justify-between mt-4 relative">
+                        <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-100 -translate-y-1/2 z-0" />
+                        {['placed', 'preparing', 'ready', 'complete'].map((step, idx) => {
+                          const status = activeOrder.status ?? 'new';
+                          
+                          let currentStepIndex = 0;
+                          if (status === 'new') {
+                            currentStepIndex = 0;
+                          } else if (status === 'preparing') {
+                            currentStepIndex = 1;
+                          } else if (status === 'ready' || status === 'out_for_delivery') {
+                            currentStepIndex = 2;
+                          } else if (status === 'done') {
+                            currentStepIndex = 3;
+                          }
 
-                        const isCompleted = idx <= currentStepIndex;
-                        const isCurrent = idx === currentStepIndex;
+                          const isCompleted = idx <= currentStepIndex;
+                          const isCurrent = idx === currentStepIndex;
 
-                        let labelText = '';
-                        const isCancelledStep = status === 'cancelled' && idx === 3;
-                        
-                        if (idx === 0) labelText = 'Placed';
-                        else if (idx === 1) labelText = 'Preparing';
-                        else if (idx === 2) labelText = 'Ready';
-                        else if (idx === 3) {
-                          labelText = status === 'cancelled' ? 'Cancelled' : 'Complete';
-                        }
+                          let labelText = '';
+                          if (idx === 0) labelText = 'Placed';
+                          else if (idx === 1) labelText = 'Preparing';
+                          else if (idx === 2) labelText = 'Ready';
+                          else if (idx === 3) labelText = 'Complete';
 
-                        return (
-                          <div key={step} className="flex flex-col items-center z-10 relative">
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all ${
-                              isCancelledStep
-                                ? 'bg-red-500 text-white ring-4 ring-red-100 scale-110 shadow-lg shadow-red-200'
-                                : isCurrent
+                          return (
+                            <div key={step} className="flex flex-col items-center z-10 relative">
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all ${
+                                isCurrent
                                   ? 'bg-red-600 text-white ring-4 ring-red-100 scale-110 shadow-lg shadow-red-200'
                                   : isCompleted
                                     ? 'bg-emerald-500 text-white'
                                     : 'bg-slate-100 text-slate-400 border border-slate-200'
-                            }`}>
-                              {isCancelledStep ? '✕' : idx + 1}
+                              }`}>
+                                {idx + 1}
+                              </div>
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 mt-1.5 whitespace-nowrap hidden sm:inline">
+                                {labelText}
+                              </span>
                             </div>
-                            <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 mt-1.5 whitespace-nowrap hidden sm:inline">
-                              {labelText}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {activeOrder.status === 'cancelled' && (
-                    <div className="pl-3 mb-4 p-3 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2">
-                      <span className="text-red-500 text-sm mt-0.5">⚠️</span>
-                      <div>
-                        <span className="text-[10px] font-black text-red-700 block uppercase tracking-wider">Cancellation Reason</span>
-                        <p className="text-xs font-semibold text-red-600 mt-0.5 leading-relaxed">
-                          {activeOrder.cancellationReason || 'No reason specified by administration.'}
-                        </p>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

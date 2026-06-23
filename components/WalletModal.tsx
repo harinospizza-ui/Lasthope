@@ -251,11 +251,30 @@ export const WalletModal: React.FC<WalletModalProps> = ({
           )}
         </div>
 
-        <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-3xl p-5 mb-4 text-center shadow-inner">
-          <div className="text-[10px] font-black uppercase tracking-widest text-orange-800 mb-1">Wallet Balance</div>
-          <span className="text-3xl font-display font-black text-orange-950">Rs {(customerProfile.walletBalance ?? 0).toFixed(2)}</span>
-          <div className="mt-2 text-[9px] font-black uppercase tracking-[0.2em] text-orange-850">
-            Coins: {customerProfile.rewardPoints ?? 0} (Rs {((customerProfile.rewardPoints ?? 0) * 0.1).toFixed(2)})
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {/* Wallet Balance Box */}
+          <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-4 text-center shadow-sm relative overflow-hidden flex flex-col justify-center min-h-[100px]">
+            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-orange-800 mb-1">
+              <span>💰</span>
+              <span>Wallet Balance</span>
+            </div>
+            <span className="text-xl font-display font-black text-orange-950 block">
+              Rs {(customerProfile.walletBalance ?? 0).toFixed(2)}
+            </span>
+          </div>
+
+          {/* Coins Balance Box */}
+          <div className="bg-gradient-to-br from-amber-50 to-yellow-50/70 border border-yellow-100 rounded-2xl p-4 text-center shadow-sm relative overflow-hidden flex flex-col justify-center min-h-[100px]">
+            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-amber-850 mb-1">
+              <span>🪙</span>
+              <span>Coins Balance</span>
+            </div>
+            <span className="text-xl font-display font-black text-amber-900 block">
+              {customerProfile.rewardPoints ?? 0}
+            </span>
+            <span className="text-[9px] font-bold text-amber-800/80 mt-0.5 block">
+              Worth Rs {((customerProfile.rewardPoints ?? 0) * 0.1).toFixed(2)}
+            </span>
           </div>
         </div>
 

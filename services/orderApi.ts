@@ -521,9 +521,115 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
   }
 
   if (status === 'cancelled') {
-    await deleteDoc(orderRef);
+    // 1. Process customer wallet and coins refund
+    if (orderData.customerPhone) {
+      const cleanPhone = orderData.customerPhone.replace(/\D/g, '');
+      const custRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone);
+      const custSnap = await getDoc(custRef);
+      if (custSnap.exists()) {
+        const custData = custSnap.data() as CustomerProfile;
+        
+        const walletRefund = orderData.walletAmountRedeemed ?? 0;
+        const coinsRefundValue = orderData.rewardPointsRedeemed ?? 0; // Rs value of coins redeemed
+        const coinsRefundPoints = Math.round(coinsRefundValue * 10);
+        const coinsEarnedPoints = orderData.rewardPointsEarned ?? 0;
+
+        let walletBalance = custData.walletBalance ?? 0;
+        let rewardPoints = custData.rewardPoints ?? 0;
+
+        if (walletRefund > 0) {
+          walletBalance += walletRefund;
+        }
+        if (coinsRefundPoints > 0) {
+          rewardPoints += coinsRefundPoints;
+        }
+        if (coinsEarnedPoints > 0) {
+          rewardPoints = Math.max(0, rewardPoints - coinsEarnedPoints);
+        }
+
+        const updatedFields = {
+          walletBalance,
+          rewardPoints,
+          coins: rewardPoints
+        };
+        
+        await updateDoc(custRef, updatedFields);
+        try {
+          await updateDoc(doc(db(), 'customerProfiles', cleanPhone), updatedFields);
+        } catch (err) { }
+        try {
+          await setDoc(doc(db(), 'wallets', cleanPhone), { customerId: cleanPhone, balance: walletBalance }, { merge: true });
+        } catch (err) { }
+
+        const localCusts = StorageService.getAdminCustomers();
+        const cIdx = localCusts.findIndex(c => c.id === cleanPhone);
+        if (cIdx >= 0) {
+          localCusts[cIdx] = {
+            ...localCusts[cIdx],
+            ...updatedFields
+          };
+          StorageService.saveAdminCustomers(localCusts);
+        }
+
+        // Log wallet transactions for audit
+        if (walletRefund > 0) {
+          const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const walletTx: WalletTransaction = {
+            id: txId,
+            customerId: cleanPhone,
+            customerName: custData.name || orderData.customerName || 'Customer',
+            customerPhone: orderData.customerPhone,
+            amount: walletRefund,
+            type: 'credit',
+            status: 'completed',
+            createdAt: new Date().toISOString()
+          };
+          const localTxs = StorageService.getAdminTransactions().filter(t => t.id !== txId);
+          StorageService.saveAdminTransactions([walletTx, ...localTxs]);
+          await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId), walletTx, { merge: true });
+        }
+
+        if (coinsRefundPoints > 0) {
+          const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const coinsTx: WalletTransaction = {
+            id: txId,
+            customerId: cleanPhone,
+            customerName: custData.name || orderData.customerName || 'Customer',
+            customerPhone: orderData.customerPhone,
+            amount: coinsRefundValue,
+            type: 'reward',
+            status: 'completed',
+            createdAt: new Date().toISOString()
+          };
+          const localTxs = StorageService.getAdminTransactions().filter(t => t.id !== txId);
+          StorageService.saveAdminTransactions([coinsTx, ...localTxs]);
+          await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId), coinsTx, { merge: true });
+        }
+      }
+    }
+
+    // 2. Update order document with status: 'cancelled' and details
+    const auditTrail = orderData.auditTrail || [];
+    auditTrail.push({
+      timestamp: new Date().toISOString(),
+      updatedBy: callerName,
+      action: 'ORDER_CANCELLED',
+      previousStatus: orderData.status,
+      newStatus: 'cancelled',
+      reason: reason || ''
+    });
+
+    const cancelledUpdate = {
+      status: 'cancelled' as OrderStatus,
+      cancellationReason: reason || '',
+      cancelledBy: callerName,
+      statusUpdatedAt: new Date().toISOString(),
+      auditTrail
+    };
+
+    await updateDoc(orderRef, cancelledUpdate);
     try {
-      await deleteDoc(doc(db(), 'orderHistory', cleanId));
+      await updateDoc(doc(db(), 'orderHistory', cleanId), cancelledUpdate);
     } catch (err) { }
 
     const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -532,12 +638,22 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
       timestamp: new Date().toISOString(),
       action: 'ORDER_CANCELLED',
       username: callerName,
-      details: `Permanently deleted order: ${cleanId}, Reason: ${reason || ''}`
+      details: `Cancelled order: ${cleanId}, Reason: ${reason || ''}`
     });
+
+    const localOrders = StorageService.getAdminOrders();
+    const idx = localOrders.findIndex((o) => o.id === cleanId);
+    if (idx >= 0) {
+      localOrders[idx] = {
+        ...localOrders[idx],
+        ...cancelledUpdate
+      };
+      StorageService.saveAdminOrders(localOrders);
+    }
 
     try {
       const { notifyCustomerStatusChange } = await import('./notificationService');
-      void notifyCustomerStatusChange({ ...orderData, status }, status);
+      void notifyCustomerStatusChange({ ...orderData, ...cancelledUpdate }, 'cancelled');
     } catch (err) {
       console.warn('FCM status notify failed:', err);
     }

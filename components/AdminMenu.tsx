@@ -1,22 +1,20 @@
 import React, { useState } from 'react';
-import { MenuItem, Category, AdminSession, OutletConfig, OfferCard, Order } from '../types';
-import { saveMenuItemToServer, saveOutletToServer, saveOfferToServer, deleteOutletFromServer } from '../services/orderApi';
+import { MenuItem, Category, AdminSession, OfferCard, Order } from '../types';
+import { saveMenuItemToServer, saveOfferToServer, deleteOfferFromServer } from '../services/orderApi';
 import { MENU_ITEMS } from '../constants';
 
 interface AdminMenuProps {
   session: AdminSession;
   menuItems: MenuItem[];
-  outlets: OutletConfig[];
   offers: OfferCard[];
   onRefresh: () => void;
-  activeTab: 'menu' | 'outlets' | 'offers';
+  activeTab: 'menu' | 'offers';
   orders?: Order[];
 }
 
 export const AdminMenu: React.FC<AdminMenuProps> = ({
   session,
   menuItems,
-  outlets,
   offers,
   onRefresh,
   activeTab,
@@ -24,6 +22,90 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 }) => {
   // Menu Item Form State
   const [isAddingItem, setIsAddingItem] = useState(false);
+
+  // Offer Form State
+  const [editingOffer, setEditingOffer] = useState<OfferCard | null>(null);
+  const [isAddingOffer, setIsAddingOffer] = useState(false);
+  const [offerId, setOfferId] = useState('');
+  const [offerTitle, setOfferTitle] = useState('');
+  const [offerImage, setOfferImage] = useState('');
+  const [offerDisplayText, setOfferDisplayText] = useState('');
+  const [offerPercentage, setOfferPercentage] = useState('');
+  const [offerCondition, setOfferCondition] = useState('');
+  const [offerAdditionalItem, setOfferAdditionalItem] = useState('');
+  const [offerAdditionalItemImage, setOfferAdditionalItemImage] = useState('');
+  const [offerNotifyCustomers, setOfferNotifyCustomers] = useState(false);
+
+  const startEditOffer = (offer: OfferCard) => {
+    setEditingOffer(offer);
+    setIsAddingOffer(false);
+    setOfferId(offer.id);
+    setOfferTitle(offer.offerTitle);
+    setOfferImage(offer.image);
+    setOfferDisplayText(offer.displayText);
+    setOfferPercentage(offer.offerPercentage !== undefined ? String(offer.offerPercentage) : '');
+    setOfferCondition(offer.condition);
+    setOfferAdditionalItem(offer.additionalItem || '');
+    setOfferAdditionalItemImage(offer.additionalItemImage || '');
+    setOfferNotifyCustomers(!!offer.notifyCustomers);
+  };
+
+  const startAddOffer = () => {
+    setIsAddingOffer(true);
+    setEditingOffer(null);
+    setOfferId('');
+    setOfferTitle('');
+    setOfferImage('');
+    setOfferDisplayText('');
+    setOfferPercentage('');
+    setOfferCondition('');
+    setOfferAdditionalItem('');
+    setOfferAdditionalItemImage('');
+    setOfferNotifyCustomers(false);
+  };
+
+  const saveOffer = async () => {
+    if (!offerId.trim() || !offerTitle.trim() || !offerCondition.trim()) {
+      alert('Please fill out ID, Title and Condition.');
+      return;
+    }
+
+    const percentageVal = offerPercentage.trim() !== '' ? parseFloat(offerPercentage) : undefined;
+
+    const offer: OfferCard = {
+      id: offerId.trim(),
+      enabled: editingOffer ? editingOffer.enabled : true,
+      image: offerImage.trim(),
+      offerTitle: offerTitle.trim(),
+      displayText: offerDisplayText.trim(),
+      offerPercentage: percentageVal,
+      condition: offerCondition.trim(),
+      additionalItem: offerAdditionalItem.trim() || undefined,
+      additionalItemImage: offerAdditionalItemImage.trim() || undefined,
+      notifyCustomers: offerNotifyCustomers
+    };
+
+    try {
+      await saveOfferToServer(offer);
+      alert(editingOffer ? 'Offer updated successfully.' : 'Offer added successfully.');
+      setEditingOffer(null);
+      setIsAddingOffer(false);
+      onRefresh();
+    } catch (err) {
+      alert('Failed to save offer.');
+    }
+  };
+
+  const handleDeleteOffer = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this offer card?')) return;
+    try {
+      await deleteOfferFromServer(id);
+      alert('Offer deleted successfully.');
+      onRefresh();
+    } catch (err) {
+      alert('Failed to delete offer.');
+    }
+  };
 
   const auditWarnings = React.useMemo(() => {
     const warnings: string[] = [];
@@ -66,36 +148,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     return warnings;
   }, [menuItems]);
 
-  // Outlet Form State
-  const [editingOutlet, setEditingOutlet] = useState<OutletConfig | null>(null);
-  const [isAddingOutlet, setIsAddingOutlet] = useState(false);
-  const [outletName, setOutletName] = useState('');
-  const [outletAddress, setOutletAddress] = useState('');
-  const [outletPhone, setOutletPhone] = useState('');
-  const [outletLat, setOutletLat] = useState('26.85');
-  const [outletLng, setOutletLng] = useState('75.80');
-  const [outletRadius, setOutletRadius] = useState('7');
-  const [outletFreeRadius, setOutletFreeRadius] = useState('3');
-  const [outletMinOrder, setOutletMinOrder] = useState('150');
-  const [outletIncrementPerKm, setOutletIncrementPerKm] = useState('0');
-  const [outletChargePerKm, setOutletChargePerKm] = useState('15');
-  const [outletManager, setOutletManager] = useState('');
 
-  const startEditOutlet = (outlet: OutletConfig) => {
-    setEditingOutlet(outlet);
-    setIsAddingOutlet(false);
-    setOutletName(outlet.name);
-    setOutletAddress(outlet.address || '');
-    setOutletPhone(outlet.phone);
-    setOutletLat(String(outlet.latitude));
-    setOutletLng(String(outlet.longitude));
-    setOutletRadius(String(outlet.deliveryRadiusKm));
-    setOutletFreeRadius(String(outlet.freeDeliveryRadiusKm));
-    setOutletMinOrder(String(outlet.freeDeliveryMinimumOrder));
-    setOutletIncrementPerKm(String(outlet.minimumOrderIncrementPerKm));
-    setOutletChargePerKm(String(outlet.deliveryChargePerKm));
-    setOutletManager(outlet.managerName || '');
-  };
   const [newItemId, setNewItemId] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
@@ -150,11 +203,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     onRefresh();
   };
 
-  const toggleOutletEnabled = async (outlet: OutletConfig) => {
-    const updated = { ...outlet, enabled: !outlet.enabled };
-    await saveOutletToServer(updated);
-    onRefresh();
-  };
+
 
   const toggleOfferEnabled = async (offer: OfferCard) => {
     const updated = { ...offer, enabled: !offer.enabled };
@@ -179,114 +228,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
             </ul>
           </div>
         )}
-             {/* Add Menu Item Panel */}
-        {session.role === 'admin' && (
-          <div className="mb-6 rounded-3xl border border-white/10 bg-white/[0.02] p-5 shadow-lg">
-            <button
-              onClick={() => setIsAddingItem(!isAddingItem)}
-              className="w-full text-left font-display font-bold text-lg flex justify-between items-center outline-none"
-            >
-              <span>➕ Add New Menu Item</span>
-              <span className="text-slate-400">{isAddingItem ? 'Close' : 'Expand'}</span>
-            </button>
-            
-            {isAddingItem && (
-              <div className="mt-5 space-y-4 max-w-xl">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Item ID (must start with p1_ for pizzas)</label>
-                    <input value={newItemId} onChange={e => setNewItemId(e.target.value)} placeholder="p1_onion" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-550 mb-2">Item Name</label>
-                    <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Double Cheese Margherita" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Description</label>
-                  <textarea value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} placeholder="Double loaded cheese with herbs" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500 h-20" />
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Category</label>
-                    <select value={newItemCategory} onChange={e => setNewItemCategory(e.target.value as any)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500">
-                      {Object.values(Category).map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Base Price (Rs)</label>
-                    <input type="number" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} placeholder="199" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Image URL</label>
-                    <input value={newItemImage} onChange={e => setNewItemImage(e.target.value)} placeholder="/icon-192.png" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
-                  </div>
-                </div>
-
-                <div className="flex gap-6 pt-2">
-                  <label className="flex items-center gap-2 font-bold cursor-pointer">
-                    <input type="checkbox" checked={newItemSpicy} onChange={e => setNewItemSpicy(e.target.checked)} className="w-4 h-4 rounded text-red-600 focus:ring-0 bg-transparent border-white/20" />
-                    <span>Spicy</span>
-                  </label>
-                  <label className="flex items-center gap-2 font-bold cursor-pointer">
-                    <input type="checkbox" checked={newItemPopular} onChange={e => setNewItemPopular(e.target.checked)} className="w-4 h-4 rounded text-red-600 focus:ring-0 bg-transparent border-white/20" />
-                    <span>Popular / Bestseller</span>
-                  </label>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!newItemId.trim() || !newItemName.trim() || !newItemPrice.trim()) {
-                      alert('Please fill out Name, ID and Base Price.');
-                      return;
-                    }
-                    
-                    const priceNum = parseFloat(newItemPrice);
-                    const sizes = newItemCategory === Category.PIZZA ? [
-                      { label: 'Regular', price: priceNum },
-                      { label: 'Medium', price: priceNum + 100 },
-                      { label: 'Large', price: priceNum + 200 }
-                    ] : undefined;
-
-                    const item: MenuItem = {
-                      id: newItemId,
-                      name: newItemName,
-                      description: newItemDesc,
-                      price: priceNum,
-                      category: newItemCategory,
-                      image: newItemImage || '/icon-192.png',
-                      vegetarian: true,
-                      spicy: newItemSpicy,
-                      popular: newItemPopular,
-                      available: true,
-                      sizes
-                    };
-
-                    try {
-                      await saveMenuItemToServer(item);
-                      alert('Menu item added successfully.');
-                      setNewItemId('');
-                      setNewItemName('');
-                      setNewItemDesc('');
-                      setNewItemPrice('');
-                      setNewItemImage('');
-                      setIsAddingItem(false);
-                      onRefresh();
-                    } catch (err) {
-                      alert('Failed to save menu item.');
-                    }
-                  }}
-                  className="bg-red-650 hover:bg-red-500 text-white rounded-2xl px-6 py-3.5 text-xs font-black uppercase tracking-widest transition-premium"
-                >
-                  Save Item
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="grid gap-4 md:grid-cols-2">
           {sortedMenuItems.map((item) => (
@@ -356,320 +298,252 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     );
   }
 
-  if (activeTab === 'outlets') {
+
+
+  if (activeTab === 'offers') {
     return (
-      <section className="relative mx-auto max-w-6xl p-4 animate-fade-in">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-display text-2xl font-bold">Outlets Configuration</h3>
-          {session.role === 'admin' && (
+      <section className="relative mx-auto max-w-6xl p-4 animate-fade-in text-white">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="font-display text-2xl font-bold">Offers & Discount Rules</h3>
+          {session.role === 'admin' && !isAddingOffer && !editingOffer && (
             <button
-              onClick={() => {
-                setIsAddingOutlet(true);
-                setEditingOutlet(null);
-                setOutletName('');
-                setOutletAddress('');
-                setOutletPhone('');
-                setOutletLat('26.85');
-                setOutletLng('75.80');
-                setOutletRadius('7');
-                setOutletFreeRadius('3');
-                setOutletMinOrder('150');
-                setOutletIncrementPerKm('0');
-                setOutletChargePerKm('15');
-                setOutletManager('');
-              }}
-              className="rounded-xl bg-red-650 hover:bg-red-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+              onClick={startAddOffer}
+              className="rounded-xl bg-red-650 hover:bg-red-700 text-white font-bold px-4 py-2.5 text-xs uppercase tracking-wider transition-premium active:scale-95 shadow-lg shadow-red-900/20"
             >
-              ➕ Add Outlet
+              ➕ Add Offer Card
             </button>
           )}
         </div>
 
-        {/* Add Outlet Form */}
-        {isAddingOutlet && (
-          <div className="mb-6 p-5 border border-white/10 bg-white/[0.04] rounded-3xl space-y-4 animate-slide-up">
-            <h4 className="text-lg font-display font-bold text-red-300">Create New Outlet</h4>
-            <div className="grid gap-4 sm:grid-cols-3">
+        {/* Add/Edit Offer Form */}
+        {(isAddingOffer || editingOffer) && (
+          <div className="mb-8 p-6 border border-white/10 bg-white/[0.02] rounded-3xl space-y-4 animate-slide-up">
+            <h4 className="text-lg font-display font-bold text-red-300">
+              {editingOffer ? `Edit Offer: ${editingOffer.offerTitle}` : 'Create New Offer Card'}
+            </h4>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Outlet Name</label>
-                <input type="text" placeholder="e.g. Malviya Nagar" value={outletName} onChange={e => setOutletName(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Offer ID</label>
+                <input
+                  type="text"
+                  disabled={!!editingOffer}
+                  value={offerId}
+                  onChange={(e) => setOfferId(e.target.value)}
+                  placeholder="e.g., offer-midweek-treat"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-red-500 font-semibold disabled:opacity-50"
+                />
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
-                <input type="text" placeholder="e.g. 9829012345" value={outletPhone} onChange={e => setOutletPhone(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-555 mb-2">Offer Title</label>
+                <input
+                  type="text"
+                  value={offerTitle}
+                  onChange={(e) => setOfferTitle(e.target.value)}
+                  placeholder="e.g., Buy 1 Get 1 Free on Burgers"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-red-500 font-semibold"
+                />
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Manager Name</label>
-                <input type="text" placeholder="e.g. Rajesh Kumar" value={outletManager} onChange={e => setOutletManager(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Address</label>
-              <input type="text" placeholder="e.g. Plot 15, Sector 5, Malviya Nagar" value={outletAddress} onChange={e => setOutletAddress(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-5">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Latitude</label>
-                <input type="number" step="0.0001" value={outletLat} onChange={e => setOutletLat(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Longitude</label>
-                <input type="number" step="0.0001" value={outletLng} onChange={e => setOutletLng(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Del. Radius (km)</label>
-                <input type="number" value={outletRadius} onChange={e => setOutletRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Radius (km)</label>
-                <input type="number" value={outletFreeRadius} onChange={e => setOutletFreeRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Del. Min Order (Rs)</label>
-                <input type="number" value={outletMinOrder} onChange={e => setOutletMinOrder(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Primary Image URL</label>
+                <input
+                  type="text"
+                  value={offerImage}
+                  onChange={(e) => setOfferImage(e.target.value)}
+                  placeholder="e.g., /images/vegover.jpeg"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-red-500 font-semibold"
+                />
               </div>
             </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Delivery Charge Per Km (Rs)</label>
-                <input type="number" value={outletChargePerKm} onChange={e => setOutletChargePerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Display Text / Subtitle</label>
+                <input
+                  type="text"
+                  value={offerDisplayText}
+                  onChange={(e) => setOfferDisplayText(e.target.value)}
+                  placeholder="e.g., Special limited time deals"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-red-500 font-semibold"
+                />
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Min Order Increment Per Km (Rs)</label>
-                <input type="number" value={outletIncrementPerKm} onChange={e => setOutletIncrementPerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Condition (Rule text)</label>
+                <input
+                  type="text"
+                  value={offerCondition}
+                  onChange={(e) => setOfferCondition(e.target.value)}
+                  placeholder="e.g., Apply on Burgers when cart total is Rs 249 or more."
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-red-500 font-semibold"
+                />
               </div>
             </div>
-            <div className="flex gap-2 justify-end">
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Discount Percentage (optional)</label>
+                <input
+                  type="number"
+                  value={offerPercentage}
+                  onChange={(e) => setOfferPercentage(e.target.value)}
+                  placeholder="e.g., 10"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-red-500 font-semibold"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-555 mb-2">Additional Item (optional bonus)</label>
+                <input
+                  type="text"
+                  value={offerAdditionalItem}
+                  onChange={(e) => setOfferAdditionalItem(e.target.value)}
+                  placeholder="e.g., Tikka Burger"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-red-500 font-semibold"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-555 mb-2">Additional Item Image URL (optional)</label>
+                <input
+                  type="text"
+                  value={offerAdditionalItemImage}
+                  onChange={(e) => setOfferAdditionalItemImage(e.target.value)}
+                  placeholder="e.g., /images/tikkaburgar.jpeg"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-red-500 font-semibold"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 py-2">
+              <input
+                type="checkbox"
+                id="notifyCustomers"
+                checked={offerNotifyCustomers}
+                onChange={(e) => setOfferNotifyCustomers(e.target.checked)}
+                className="w-4.5 h-4.5 rounded text-red-600 focus:ring-0 bg-transparent border-white/20 cursor-pointer"
+              />
+              <label htmlFor="notifyCustomers" className="text-xs font-bold text-slate-300 cursor-pointer select-none">
+                🔔 Notify customers on browser when this offer is enabled
+              </label>
+            </div>
+
+            <div className="flex gap-3 pt-2">
               <button
-                onClick={() => setIsAddingOutlet(false)}
-                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-white/5 text-slate-400 hover:bg-white/10"
+                onClick={saveOffer}
+                className="rounded-xl bg-red-650 hover:bg-red-700 text-white font-bold px-5 py-2.5 text-xs uppercase tracking-wider transition-premium active:scale-95"
               >
-                Cancel
+                {editingOffer ? 'Save Changes' : 'Create Offer'}
               </button>
               <button
-                onClick={async () => {
-                  if (!outletName.trim() || !outletPhone.trim()) {
-                    alert('Name and Phone are required.');
-                    return;
-                  }
-                  const newOutlet: OutletConfig = {
-                    id: `outlet_${Date.now()}`,
-                    enabled: true,
-                    name: outletName.trim(),
-                    address: outletAddress.trim() || undefined,
-                    phone: outletPhone.trim(),
-                    latitude: parseFloat(outletLat) || 26.85,
-                    longitude: parseFloat(outletLng) || 75.80,
-                    deliveryRadiusKm: parseFloat(outletRadius) || 7,
-                    freeDeliveryRadiusKm: parseFloat(outletFreeRadius) || 3,
-                    freeDeliveryMinimumOrder: parseFloat(outletMinOrder) || 150,
-                    minimumOrderIncrementPerKm: parseFloat(outletIncrementPerKm) || 0,
-                    deliveryChargePerKm: parseFloat(outletChargePerKm) || 15,
-                    managerName: outletManager.trim() || undefined,
-                  };
-                  try {
-                    await saveOutletToServer(newOutlet);
-                    alert('Outlet created successfully.');
-                    setIsAddingOutlet(false);
-                    onRefresh();
-                  } catch {
-                    alert('Failed to save outlet.');
-                  }
+                onClick={() => {
+                  setEditingOffer(null);
+                  setIsAddingOffer(false);
                 }}
-                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-green-700 hover:bg-green-600 text-white"
+                className="rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold px-5 py-2.5 text-xs uppercase tracking-wider transition-premium active:scale-95"
               >
-                Create Outlet
+                Cancel
               </button>
             </div>
           </div>
         )}
 
-        {/* Edit Outlet Form */}
-        {editingOutlet && (
-          <div className="mb-6 p-5 border border-white/10 bg-white/[0.04] rounded-3xl space-y-4 animate-slide-up">
-            <h4 className="text-lg font-display font-bold text-red-300">Edit Outlet: {editingOutlet.name}</h4>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Outlet Name</label>
-                <input type="text" value={outletName} onChange={e => setOutletName(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
-                <input type="text" value={outletPhone} onChange={e => setOutletPhone(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Manager Name</label>
-                <input type="text" value={outletManager} onChange={e => setOutletManager(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Address</label>
-              <input type="text" value={outletAddress} onChange={e => setOutletAddress(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-5">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Latitude</label>
-                <input type="number" step="0.0001" value={outletLat} onChange={e => setOutletLat(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Longitude</label>
-                <input type="number" step="0.0001" value={outletLng} onChange={e => setOutletLng(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Del. Radius (km)</label>
-                <input type="number" value={outletRadius} onChange={e => setOutletRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Radius (km)</label>
-                <input type="number" value={outletFreeRadius} onChange={e => setOutletFreeRadius(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Free Del. Min Order (Rs)</label>
-                <input type="number" value={outletMinOrder} onChange={e => setOutletMinOrder(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Delivery Charge Per Km (Rs)</label>
-                <input type="number" value={outletChargePerKm} onChange={e => setOutletChargePerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Min Order Increment Per Km (Rs)</label>
-                <input type="number" value={outletIncrementPerKm} onChange={e => setOutletIncrementPerKm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
-              </div>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setEditingOutlet(null)}
-                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-white/5 text-slate-400 hover:bg-white/10"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (!outletName.trim() || !outletPhone.trim()) {
-                    alert('Name and Phone are required.');
-                    return;
-                  }
-                  const updated: OutletConfig = {
-                    ...editingOutlet,
-                    name: outletName.trim(),
-                    address: outletAddress.trim() || undefined,
-                    phone: outletPhone.trim(),
-                    latitude: parseFloat(outletLat) || 26.85,
-                    longitude: parseFloat(outletLng) || 75.80,
-                    deliveryRadiusKm: parseFloat(outletRadius) || 7,
-                    freeDeliveryRadiusKm: parseFloat(outletFreeRadius) || 3,
-                    freeDeliveryMinimumOrder: parseFloat(outletMinOrder) || 150,
-                    minimumOrderIncrementPerKm: parseFloat(outletIncrementPerKm) || 0,
-                    deliveryChargePerKm: parseFloat(outletChargePerKm) || 15,
-                    managerName: outletManager.trim() || undefined,
-                  };
-                  try {
-                    await saveOutletToServer(updated);
-                    alert('Outlet updated successfully.');
-                    setEditingOutlet(null);
-                    onRefresh();
-                  } catch {
-                    alert('Failed to update outlet.');
-                  }
-                }}
-                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase bg-green-700 hover:bg-green-600 text-white"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-2">
-          {outlets.map((outlet) => (
-            <div key={outlet.id} className={`rounded-3xl p-5 border border-white/10 shadow-2xl glass-card transition-premium flex flex-col justify-between ${!outlet.enabled ? 'opacity-40 grayscale-[20%]' : ''}`}>
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-lg font-display font-bold">{outlet.name}</span>
-                  <button
-                    disabled={session.role !== 'admin'}
-                    onClick={() => toggleOutletEnabled(outlet)}
-                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
-                      session.role !== 'admin' ? 'opacity-65 cursor-not-allowed' : ''
-                    } ${
-                      outlet.enabled ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/45 animate-fade-in' : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/45 animate-fade-in'
-                    }`}
-                  >
-                    {outlet.enabled ? 'Live' : 'Inactive'}
-                  </button>
-                </div>
-                <p className="text-xs text-slate-400 font-medium mb-3">📍 Address: {outlet.address || 'Not specified'}</p>
-                <div className="text-xs text-slate-350 space-y-1 font-semibold mb-4">
-                  <div>Phone: <span className="text-white font-bold">{outlet.phone}</span></div>
-                  {outlet.managerName && <div>Manager: <span className="text-white font-bold">{outlet.managerName}</span></div>}
-                  <div>Coords: <span className="text-white/80">{outlet.latitude}, {outlet.longitude}</span></div>
-                  <div>Radius: <span className="text-red-400 font-bold">{outlet.deliveryRadiusKm} Km</span> (Free under {outlet.freeDeliveryRadiusKm} Km)</div>
-                  <div>Min Order Free Delivery: <span className="text-green-400 font-bold">Rs {outlet.freeDeliveryMinimumOrder}</span></div>
-                  <div>Charges: <span className="text-orange-400 font-bold">Rs {outlet.deliveryChargePerKm}/km</span> (+ Rs {outlet.minimumOrderIncrementPerKm}/km min order step)</div>
-                </div>
-              </div>
-              {session.role === 'admin' && (
-                <div className="mt-2 pt-3 border-t border-white/10 flex gap-2">
-                  <button
-                    onClick={() => startEditOutlet(outlet)}
-                    className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
-                  >
-                    ✏️ Edit
-                  </button>
-                  <button
-                    onClick={async () => {
-                      if (confirm(`Are you sure you want to DELETE the outlet "${outlet.name}"? This action cannot be undone.`)) {
-                        try {
-                          await deleteOutletFromServer(outlet.id);
-                          alert('Outlet deleted successfully.');
-                          onRefresh();
-                        } catch (err: any) {
-                          alert(err.message || 'Failed to delete outlet.');
-                        }
-                      }
-                    }}
-                    className="rounded-xl bg-red-850 hover:bg-red-700 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
-                  >
-                    🗑️ Delete
-                  </button>
+        {/* Offers Grid */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {offers.map((offer) => (
+            <div
+              key={offer.id}
+              className={`rounded-3xl border border-white/10 shadow-2xl glass-card transition-premium flex flex-col justify-between overflow-hidden ${
+                !offer.enabled ? 'opacity-45 grayscale-[20%]' : ''
+              }`}
+            >
+              {/* Image banner */}
+              {offer.image && (
+                <div className="h-36 w-full relative overflow-hidden bg-slate-900/50">
+                  <img
+                    src={offer.image}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent" />
                 </div>
               )}
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  }
 
-  if (activeTab === 'offers') {
-    return (
-      <section className="relative mx-auto max-w-6xl p-4 animate-fade-in">
-        <h3 className="mb-4 font-display text-2xl font-bold">Offers & Disount Rules</h3>
-        <div className="grid gap-4 md:grid-cols-2">
-          {offers.map((offer) => (
-            <div key={offer.id} className={`rounded-3xl p-5 border border-white/10 shadow-2xl glass-card transition-premium ${!offer.enabled ? 'opacity-40 grayscale-[20%]' : ''}`}>
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-lg font-display font-bold">{offer.offerTitle}</span>
-                <button
-                  disabled={session.role !== 'admin'}
-                  onClick={() => toggleOfferEnabled(offer)}
-                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
-                    session.role !== 'admin' ? 'opacity-65 cursor-not-allowed' : ''
-                  } ${
-                    offer.enabled ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/40' : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/40'
-                  }`}
-                >
-                  {offer.enabled ? 'Enabled' : 'Disabled'}
-                </button>
-              </div>
-              <p className="text-xs text-slate-400 font-medium mb-3">💬 Display: {offer.displayText}</p>
-              <div className="text-xs text-slate-300 space-y-1 font-semibold">
-                <div>Condition: <span className="text-red-400 font-bold">{offer.condition}</span></div>
-                {offer.id === 'offer-sunday-dhamaka' && (
-                  <div className="mt-2 text-emerald-400 font-bold">
-                    🎉 Total Sunday Dhamaka Orders: {sundayDhamakaCount}
+              <div className="p-5 flex-1 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-lg font-display font-extrabold text-white">{offer.offerTitle}</span>
+                    <button
+                      disabled={session.role !== 'admin'}
+                      onClick={() => {
+                        const updated = { ...offer, enabled: !offer.enabled };
+                        saveOfferToServer(updated).then(() => onRefresh());
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
+                        session.role !== 'admin' ? 'opacity-65 cursor-not-allowed' : ''
+                      } ${
+                        offer.enabled
+                          ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/40'
+                          : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/40'
+                      }`}
+                    >
+                      {offer.enabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-400 font-semibold mb-4 italic">"{offer.displayText}"</p>
+
+                  <div className="space-y-2 mb-4 text-xs font-semibold">
+                    <div className="flex items-center gap-1.5 text-slate-300">
+                      <span className="text-red-400">⚡ Rule:</span>
+                      <span className="text-white font-bold">{offer.condition}</span>
+                    </div>
+
+                    {offer.offerPercentage !== undefined && (
+                      <div className="flex items-center gap-1.5 text-slate-300">
+                        <span className="text-emerald-400">🏷️ Discount:</span>
+                        <span className="text-emerald-300 font-black">{offer.offerPercentage}% Off</span>
+                      </div>
+                    )}
+
+                    {offer.additionalItem && (
+                      <div className="flex items-center gap-2 mt-2 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
+                        {offer.additionalItemImage && (
+                          <img
+                            src={offer.additionalItemImage}
+                            className="w-10 h-10 rounded-lg object-cover"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        )}
+                        <div>
+                          <div className="text-[9px] font-black text-amber-400 uppercase tracking-wider">Free Gift Item</div>
+                          <div className="text-xs text-white font-bold">{offer.additionalItem}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mt-1.5">
+                      {offer.notifyCustomers ? '🔔 Broadcast active on enable' : '🔕 No auto broadcast'}
+                    </div>
+
+                    {offer.id === 'offer-sunday-dhamaka' && (
+                      <div className="mt-2 text-emerald-400 font-bold text-xs bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-2 inline-block">
+                        🎉 Total Sunday Dhamaka Orders: {sundayDhamakaCount}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {session.role === 'admin' && (
+                  <div className="flex gap-2.5 pt-3 border-t border-white/5 mt-2">
+                    <button
+                      onClick={() => startEditOffer(offer)}
+                      className="rounded-lg bg-white/5 hover:bg-white/10 text-white font-bold px-3 py-1.5 text-[9px] uppercase tracking-wider transition-premium"
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteOffer(offer.id)}
+                      className="rounded-lg bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 text-red-300 font-bold px-3 py-1.5 text-[9px] uppercase tracking-wider transition-premium"
+                    >
+                      🗑️ Delete
+                    </button>
                   </div>
                 )}
               </div>

@@ -5,6 +5,9 @@ export const AdminNotifications: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<NotificationDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof window !== 'undefined' ? (Notification?.permission || 'default') : 'default'
+  );
 
   const fetchStats = async () => {
     try {
@@ -38,8 +41,7 @@ export const AdminNotifications: React.FC = () => {
   const removedToday = todayStats.removedTokens || 0;
 
   // Firebase Quota Estimation Calculations
-  // Every FCM dispatch writes 1 log transaction to notification_stats & reads token documents
-  const estimatedReads = sentToday + failedToday + totalDevices; 
+  const estimatedReads = sentToday + failedToday + totalDevices;
   const estimatedWrites = (sentToday > 0 || failedToday > 0) ? 1 : 0;
   const estimatedDeletes = removedToday;
 
@@ -50,7 +52,7 @@ export const AdminNotifications: React.FC = () => {
   const avgRemoved = statsList.length ? statsList.reduce((acc, s) => acc + (s.removedTokens || 0), 0) / statsList.length : removedToday;
 
   const projectedReads = (avgSent + avgFailed + totalDevices) * 30;
-  const projectedWrites = 30; // 1 log increment per day
+  const projectedWrites = 30;
   const projectedDeletes = avgRemoved * 30;
 
   // Cost estimates: Reads $0.06/100k, Writes $0.18/100k, Deletes $0.02/100k
@@ -74,6 +76,87 @@ export const AdminNotifications: React.FC = () => {
         </button>
       </div>
 
+      {/* Browser Notification Controls */}
+      <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-2xl mb-6 text-white text-left">
+        <h3 className="font-display text-xl font-bold mb-2 text-white">Browser Push Notification Controls</h3>
+        <p className="text-slate-400 text-xs font-medium mb-4">Request authorization and test desktop push alerts for Orders and Offers directly in this browser.</p>
+        
+        <div className="flex flex-wrap items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 mb-4">
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Browser Permission Status</div>
+            <div className="mt-1 text-sm font-bold flex items-center gap-2">
+              <span className={`inline-block w-2.5 h-2.5 rounded-full ${
+                notificationPermission === 'granted' ? 'bg-green-500' : notificationPermission === 'denied' ? 'bg-red-500' : 'bg-amber-500'
+              }`} />
+              <span className="capitalize">{notificationPermission}</span>
+            </div>
+          </div>
+          
+          {notificationPermission !== 'granted' && (
+            <button
+              onClick={async () => {
+                if ('Notification' in window) {
+                  const res = await Notification.requestPermission();
+                  setNotificationPermission(res);
+                  alert(`Notification permission: ${res}`);
+                } else {
+                  alert('This browser does not support notifications.');
+                }
+              }}
+              className="rounded-xl bg-gradient-premium py-2.5 px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-red-900/30 hover:scale-[1.01] transition-transform active:scale-95"
+            >
+              🔔 Request Permission
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
+            <h4 className="text-xs font-black uppercase tracking-widest text-red-300 mb-2">🍕 Order Notifications</h4>
+            <p className="text-[11px] text-slate-400 font-medium mb-3">Simulate a browser desktop alert when a customer places a new pizza order.</p>
+            <button
+              onClick={() => {
+                if (Notification.permission !== 'granted') {
+                  alert('Please grant notification permission first.');
+                  return;
+                }
+                new Notification('🍕 New Order Received', {
+                  body: 'Order #HRN-892 from Rahul Sharma - Rs 549 (Dine-In)',
+                  icon: '/icon-192.png',
+                  badge: '/icon-192.png',
+                  tag: 'order-simulation-test',
+                });
+              }}
+              className="w-full rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 py-2.5 text-[10px] font-black uppercase tracking-widest transition-premium"
+            >
+              Simulate Order Alert
+            </button>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
+            <h4 className="text-xs font-black uppercase tracking-widest text-amber-300 mb-2">🎉 Offer Notifications</h4>
+            <p className="text-[11px] text-slate-400 font-medium mb-3">Simulate a browser desktop alert when a new discount code or offer goes live.</p>
+            <button
+              onClick={() => {
+                if (Notification.permission !== 'granted') {
+                  alert('Please grant notification permission first.');
+                  return;
+                }
+                new Notification('🎉 New Offer Released', {
+                  body: 'Midweek Dhamaka: Get 20% off on all Medium Pizzas! Use code: MIDWEEK20',
+                  icon: '/icon-192.png',
+                  badge: '/icon-192.png',
+                  tag: 'offer-simulation-test',
+                });
+              }}
+              className="w-full rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 py-2.5 text-[10px] font-black uppercase tracking-widest transition-premium"
+            >
+              Simulate Offer Alert
+            </button>
+          </div>
+        </div>
+      </div>
+
       {loading ? (
         <div className="flex h-64 items-center justify-center text-slate-400 font-bold">Loading dashboard data...</div>
       ) : error ? (
@@ -81,7 +164,7 @@ export const AdminNotifications: React.FC = () => {
       ) : (
         <div className="space-y-6">
           {/* Key Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
             {/* Registered Devices */}
             <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/65 p-6 shadow-xl backdrop-blur-xl">
               <div className="absolute top-0 left-0 h-1.5 w-full bg-blue-500" />
@@ -116,7 +199,7 @@ export const AdminNotifications: React.FC = () => {
           </div>
 
           {/* Quota & Cost Impact */}
-          <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-2xl">
+          <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-2xl text-left">
             <h3 className="font-display text-xl font-bold mb-4 text-white">Estimated Firestore Quota Impact (FCM Pipeline)</h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
               <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
@@ -143,7 +226,7 @@ export const AdminNotifications: React.FC = () => {
           </div>
 
           {/* Historical Logs List */}
-          <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-xl backdrop-blur-xl">
+          <div className="rounded-[2.25rem] border border-white/10 bg-slate-950/85 p-6 shadow-xl backdrop-blur-xl text-left">
             <h3 className="font-display text-lg font-bold mb-4 text-white">FCM Delivery Log History</h3>
             <div className="max-h-64 overflow-y-auto pr-1 space-y-3">
               {statsList.map((doc, idx) => (

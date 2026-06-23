@@ -552,6 +552,7 @@ const App: React.FC = () => {
   customerProfileRef.current = customerProfile;
 
   const lastProfileUpdateRef = useRef<number>(0);
+  const lastNotifiedStatusRef = useRef<Record<string, string>>({});
   const updateLocalCustomerProfile = useCallback((profile: CustomerProfile | null) => {
     setCustomerProfile(profile);
     if (profile) {
@@ -1052,6 +1053,40 @@ const App: React.FC = () => {
       }
     };
 
+    const handleBrowserNotification = (order: Order) => {
+      if (!order.status || !order.id) return;
+      const lastStatus = lastNotifiedStatusRef.current[order.id];
+      if (lastStatus && lastStatus !== order.status) {
+        const titleMap: Record<string, string> = {
+          new: '🍕 Order Placed',
+          preparing: '👨‍🍳 Preparing Your Order',
+          ready: '✅ Order Ready!',
+          out_for_delivery: '🚗 Out for Delivery',
+          done: '🎉 Order Complete',
+          cancelled: '❌ Order Cancelled'
+        };
+        const msgMap: Record<string, string> = {
+          new: 'Your order has been received by Harino\'s.',
+          preparing: 'The kitchen has started preparing your fresh pizza!',
+          ready: 'Your order is hot and ready for pickup!',
+          out_for_delivery: 'Our delivery partner is on the way to your location.',
+          done: 'Thank you for ordering from Harino\'s! Enjoy your meal.',
+          cancelled: 'Your order has been cancelled by the store.'
+        };
+        const title = titleMap[order.status] || 'Order Status Update';
+        const body = msgMap[order.status] || `Your order status is now ${order.status}`;
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(title, {
+            body,
+            icon: '/icon-192.png',
+            badge: '/icon-192.png',
+            tag: `order-status-${order.id}`
+          });
+        }
+      }
+      lastNotifiedStatusRef.current[order.id] = order.status;
+    };
+
     const unsubscribe = subscribeServerOrder(
       trackedOrderId,
       (order) => {
@@ -1064,6 +1099,7 @@ const App: React.FC = () => {
         }
         if (order.status) {
           handleCancellationRefreshes(order.status);
+          handleBrowserNotification(order);
         }
       },
       () => undefined,
@@ -1081,6 +1117,7 @@ const App: React.FC = () => {
             }
             if (updatedOrder.status) {
               handleCancellationRefreshes(updatedOrder.status);
+              handleBrowserNotification(updatedOrder);
             }
           })
           .catch(() => undefined);

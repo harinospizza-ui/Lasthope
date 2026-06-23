@@ -32,6 +32,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [activeSection, setActiveSection] = useState<'management' | 'topups' | 'ledger'>('management');
 
   // New States for Phase 4
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
@@ -127,8 +128,49 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
         />
       </div>
 
-      {/* Customer Verification Section */}
-      <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 mb-6">
+      {/* Side-by-side section buttons */}
+      <div className="grid grid-cols-3 gap-2.5 mb-6">
+        <button
+          onClick={() => setActiveSection('management')}
+          className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+            activeSection === 'management'
+              ? 'bg-gradient-premium border-red-500/30 text-white shadow-lg'
+              : 'bg-white/[0.03] border-white/5 text-slate-400 hover:text-white'
+          }`}
+        >
+          👤 Customer Management
+        </button>
+        <button
+          onClick={() => setActiveSection('topups')}
+          className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all relative ${
+            activeSection === 'topups'
+              ? 'bg-gradient-premium border-red-500/30 text-white shadow-lg'
+              : 'bg-white/[0.03] border-white/5 text-slate-400 hover:text-white'
+          }`}
+        >
+          ⏱️ Pending Top-ups
+          {pendingTransactions.length > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-slate-950">
+              {pendingTransactions.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveSection('ledger')}
+          className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+            activeSection === 'ledger'
+              ? 'bg-gradient-premium border-red-500/30 text-white shadow-lg'
+              : 'bg-white/[0.03] border-white/5 text-slate-400 hover:text-white'
+          }`}
+        >
+          📊 Balance Ledger
+        </button>
+      </div>
+
+      {activeSection === 'management' && (
+        <>
+          {/* Customer Verification Section */}
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h4 className="font-display font-bold text-lg text-red-300">Customer Management</h4>
           {session.role === 'admin' && (
@@ -569,9 +611,12 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
           </div>
         </div>
       )}
+        </>
+      )}
 
       {/* Pending Top-ups Approval Section */}
-      <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 mb-6">
+      {activeSection === 'topups' && (
+        <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 mb-6">
         <h4 className="font-display font-bold text-lg mb-4 text-amber-300">Pending Wallet Top-up Approvals</h4>
         <div className="grid gap-3">
           {pendingTransactions.map((tx) => (
@@ -641,9 +686,11 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
           )}
         </div>
       </div>
+      )}
 
       {/* Adjust Ledger */}
-      <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5">
+      {activeSection === 'ledger' && (
+        <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5">
         <h4 className="font-display font-bold text-lg mb-4">Adjust Balance Ledger</h4>
         <div className="grid gap-4 md:grid-cols-2">
           {filteredCustomers.map((cust) => (
@@ -751,6 +798,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
           ))}
         </div>
       </div>
+      )}
     </section>
   );
 };

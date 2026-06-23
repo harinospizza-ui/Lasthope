@@ -1928,6 +1928,18 @@ export const saveOfferToServer = async (offer: OfferCard): Promise<void> => {
   }
 };
 
+export const deleteOfferFromServer = async (offerId: string): Promise<void> => {
+  const localList = StorageService.getAdminOffers().filter((o) => o.id !== offerId);
+  StorageService.saveAdminOffers(localList);
+
+  try {
+    await deleteDoc(doc(db(), FIRESTORE_OFFERS_COLLECTION, offerId));
+  } catch (error) {
+    console.warn('Direct Firestore delete offer failed:', error);
+    throw error;
+  }
+};
+
 export const seedOffersToServer = async (offers: OfferCard[]): Promise<void> => {
   StorageService.saveAdminOffers(offers);
 

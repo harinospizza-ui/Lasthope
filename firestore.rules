@@ -86,13 +86,13 @@ service cloud.firestore {
 
     match /managers/{username} {
       allow read: if true;
-      allow write: if isAdmin() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
+      allow write: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
       allow delete: if isAdmin();
     }
 
     match /staff/{username} {
       allow read: if true;
-      allow write: if isAdminOrManager() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
+      allow write: if isStaffUser() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
       allow delete: if isAdminOrManager();
     }
 

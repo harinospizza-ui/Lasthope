@@ -551,6 +551,17 @@ const App: React.FC = () => {
   const customerProfileRef = useRef(customerProfile);
   customerProfileRef.current = customerProfile;
 
+  const lastProfileUpdateRef = useRef<number>(0);
+  const updateLocalCustomerProfile = useCallback((profile: CustomerProfile | null) => {
+    setCustomerProfile(profile);
+    if (profile) {
+      StorageService.saveCustomerProfile(profile);
+    } else {
+      localStorage.removeItem('harinos_customer_profile');
+    }
+    lastProfileUpdateRef.current = Date.now();
+  }, []);
+
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [newVersionString, setNewVersionString] = useState('');
   const [menuItems, setMenuItems] = useState<MenuItem[]>(extendMenuItemsWithGeneratedSeries(MENU_ITEMS));
@@ -786,8 +797,7 @@ const App: React.FC = () => {
                 status: serverCust.status ?? localProfile.status ?? 'active',
                 legacyUser: !!serverCust.legacyUser
               };
-              StorageService.saveCustomerProfile(updated);
-              setCustomerProfile(updated);
+               updateLocalCustomerProfile(updated);
             }
           }
         } catch (err) {
@@ -1071,10 +1081,13 @@ const App: React.FC = () => {
       try {
         const fresh = await getServerCustomerById(customerProfile.id);
         if (fresh && isMounted) {
+          // If the profile was updated locally within the last 5 seconds, ignore server polling to prevent race conditions
+          if (Date.now() - lastProfileUpdateRef.current < 5000) {
+            return;
+          }
           if (fresh.status === 'blocked' || fresh.status === 'removed') {
             alert('Your account has been deactivated or blocked by an administrator. You will be logged out.');
-            localStorage.removeItem('harinos_customer_profile');
-            setCustomerProfile(null);
+            updateLocalCustomerProfile(null);
             return;
           }
           const oldBalance = customerProfileRef.current?.walletBalance ?? 0;
@@ -1663,6 +1676,7 @@ const App: React.FC = () => {
       if (usePoints && pointsDiscount > 0) {
         const pointsDeducted = Math.round(pointsDiscount * 10);
         updatedProfile.rewardPoints = Math.max(0, (updatedProfile.rewardPoints ?? 0) - pointsDeducted);
+        updatedProfile.coins = updatedProfile.rewardPoints; // Sync coins with rewardPoints
         // Log transaction
         const tx: WalletTransaction = {
           id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1680,21 +1694,19 @@ const App: React.FC = () => {
       const pointsEarned = subtotal > 200 ? Math.floor(subtotal / 10) : 0;
       if (pointsEarned > 0) {
         updatedProfile.rewardPoints = (updatedProfile.rewardPoints ?? 0) + pointsEarned;
-        // Log transaction
-        const tx: WalletTransaction = {
-          id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          customerId: customerProfile.id,
-          customerName: customerProfile.name,
-          customerPhone: customerProfile.phone,
-          amount: pointsEarned * 0.1,
-          type: 'reward',
-          status: 'completed',
-          createdAt: new Date().toISOString()
-        };
-        void saveWalletTransactionToServer(tx).catch(console.error);
+        updatedProfile.coins = updatedProfile.rewardPoints; // Sync coins with rewardPoints
+        // No WalletTransaction is created for coins earned, ensuring only coins are credited without cash wallet changes.
       }
 
-      saveCustomerProfile(updatedProfile);
+      // Sync state and localStorage immediately synchronously to prevent stale server overrides
+      updateLocalCustomerProfile(updatedProfile);
+
+      // Save to server asynchronously but await it to ensure DB writes finish
+      try {
+        await saveCustomerToServer(updatedProfile);
+      } catch (err) {
+        console.error('Failed to sync updated customer profile to server:', err);
+      }
     }
 
     setUseWallet(false);
@@ -1740,8 +1752,7 @@ const App: React.FC = () => {
           phone: profile.phone.trim() || existing.phone,
           avatar: profile.avatar || existing.avatar,
         };
-        StorageService.saveCustomerProfile(mergedProfile);
-        setCustomerProfile(mergedProfile);
+        updateLocalCustomerProfile(mergedProfile);
         void saveCustomerToServer(mergedProfile).catch(() => undefined);
         if (!customerProfile) {
           alert(`Welcome back, ${mergedProfile.name}! Loaded your existing wallet balance of Rs ${(mergedProfile.walletBalance ?? 0).toFixed(2)} and ${mergedProfile.rewardPoints ?? 0} reward points.`);
@@ -1752,8 +1763,7 @@ const App: React.FC = () => {
       console.error('Error fetching existing customer profile:', err);
     }
 
-    StorageService.saveCustomerProfile(profile);
-    setCustomerProfile(profile);
+    updateLocalCustomerProfile(profile);
     void saveCustomerToServer(profile).catch(() => undefined);
   }, [customerProfile]);
 
@@ -2180,10 +2190,7 @@ const App: React.FC = () => {
           isOpen={isWalletModalOpen}
           onClose={() => setIsWalletModalOpen(false)}
           customerProfile={customerProfile}
-          onProfileChange={(updated) => {
-            setCustomerProfile(updated);
-            StorageService.saveCustomerProfile(updated);
-          }}
+          onProfileChange={updateLocalCustomerProfile}
           showNotification={showNotification}
           onProceedToPayment={(amount) => {
             setTopUpAmount(String(amount));

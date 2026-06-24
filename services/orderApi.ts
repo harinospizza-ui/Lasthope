@@ -1638,22 +1638,16 @@ export const authenticateAdminViaApi = async (username: string, password: string
   }
 
   const def = DEFAULT_STAFF.find(d => d.username === username);
+  let shouldCreateDoc = false;
+  let shouldUpdatePasswordHash = false;
+  let hashToSave = '';
+
   if (!userDoc) {
     if (def && password === def.password) {
-      const hash = await hashPasswordClient(password);
-      userDoc = {
-        uid: username,
-        username: username,
-        role: def.role,
-        passwordHash: hash,
-        outletId: null,
-        active: true,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
-      await setDoc(doc(db(), def.collection, username), userDoc);
       role = def.role as any;
       collectionName = def.collection;
+      shouldCreateDoc = true;
+      hashToSave = await hashPasswordClient(password);
     } else {
       throw new Error('Invalid credentials.');
     }
@@ -1665,10 +1659,12 @@ export const authenticateAdminViaApi = async (username: string, password: string
       isPasswordCorrect = true;
     } else if (userDoc.password === password || userDoc.passwordHash === password) {
       isPasswordCorrect = true;
-      await updateDoc(doc(db(), collectionName, username), { passwordHash: hash });
+      shouldUpdatePasswordHash = true;
+      hashToSave = hash;
     } else if (def && password === def.password) {
       isPasswordCorrect = true;
-      await updateDoc(doc(db(), collectionName, username), { passwordHash: hash });
+      shouldUpdatePasswordHash = true;
+      hashToSave = hash;
     }
 
     if (!isPasswordCorrect) {
@@ -1685,6 +1681,7 @@ export const authenticateAdminViaApi = async (username: string, password: string
     throw new Error('System error: invalid role configuration.');
   }
 
+  // Authenticate with Firebase Auth FIRST so that subsequent firestore writes are authorized
   let userCredential;
   try {
     userCredential = await signInWithEmailAndPassword(auth(), currentRoleDef.email, currentRoleDef.dbPass);
@@ -1694,6 +1691,22 @@ export const authenticateAdminViaApi = async (username: string, password: string
     } else {
       throw err;
     }
+  }
+
+  if (shouldCreateDoc) {
+    userDoc = {
+      uid: username,
+      username: username,
+      role: role,
+      passwordHash: hashToSave,
+      outletId: null,
+      active: true,
+      createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString()
+    };
+    await setDoc(doc(db(), collectionName, username), userDoc);
+  } else if (shouldUpdatePasswordHash) {
+    await updateDoc(doc(db(), collectionName, username), { passwordHash: hashToSave });
   }
 
   await updateDoc(doc(db(), collectionName, username), { lastLogin: new Date().toISOString() });

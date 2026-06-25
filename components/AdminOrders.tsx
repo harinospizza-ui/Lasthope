@@ -250,7 +250,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-2">
-                        {session.role !== 'staff' && (() => {
+                        {(() => {
                           const isCancelled = order.status === 'cancelled';
                           return (
                             <>
@@ -275,13 +275,15 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                               >
                                 Done
                               </button>
-                              <button
-                                onClick={() => handleCancelClick(order.id)}
-                                disabled={isCancelled}
-                                className={`rounded-xl bg-red-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium ${isCancelled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-red-650'}`}
-                              >
-                                Cancel
-                              </button>
+                              {session.role !== 'staff' && (
+                                <button
+                                  onClick={() => handleCancelClick(order.id)}
+                                  disabled={isCancelled}
+                                  className={`rounded-xl bg-red-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium ${isCancelled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-red-650'}`}
+                                >
+                                  Cancel
+                                </button>
+                              )}
                             </>
                           );
                         })()}

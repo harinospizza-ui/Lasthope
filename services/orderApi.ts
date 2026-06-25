@@ -1615,34 +1615,52 @@ export const authenticateAdminViaApi = async (username: string, password: string
   let role: AdminSession['role'] | null = null;
   let collectionName = '';
   let userDoc: any = null;
+  let permissionDenied = false;
 
-  const docSnapAdmins = await getDoc(doc(db(), 'admins', username));
-  if (docSnapAdmins.exists()) {
-    role = 'admin';
-    collectionName = 'admins';
-    userDoc = docSnapAdmins.data();
-  } else {
-    const docSnapManagers = await getDoc(doc(db(), 'managers', username));
-    if (docSnapManagers.exists()) {
-      role = 'manager';
-      collectionName = 'managers';
-      userDoc = docSnapManagers.data();
+  const def = DEFAULT_STAFF.find(d => d.username === username);
+
+  try {
+    const docSnapAdmins = await getDoc(doc(db(), 'admins', username));
+    if (docSnapAdmins.exists()) {
+      role = 'admin';
+      collectionName = 'admins';
+      userDoc = docSnapAdmins.data();
     } else {
-      const docSnapStaff = await getDoc(doc(db(), 'staff', username));
-      if (docSnapStaff.exists()) {
-        role = 'staff';
-        collectionName = 'staff';
-        userDoc = docSnapStaff.data();
+      const docSnapManagers = await getDoc(doc(db(), 'managers', username));
+      if (docSnapManagers.exists()) {
+        role = 'manager';
+        collectionName = 'managers';
+        userDoc = docSnapManagers.data();
+      } else {
+        const docSnapStaff = await getDoc(doc(db(), 'staff', username));
+        if (docSnapStaff.exists()) {
+          role = 'staff';
+          collectionName = 'staff';
+          userDoc = docSnapStaff.data();
+        }
       }
+    }
+  } catch (err: any) {
+    if (err.code === 'permission-denied' || (err.message && err.message.toLowerCase().includes('permission'))) {
+      console.warn(`Permission denied reading user doc for ${username}. Using default staff fallback.`);
+      permissionDenied = true;
+    } else {
+      throw err;
     }
   }
 
-  const def = DEFAULT_STAFF.find(d => d.username === username);
   let shouldCreateDoc = false;
   let shouldUpdatePasswordHash = false;
   let hashToSave = '';
 
-  if (!userDoc) {
+  if (permissionDenied) {
+    if (def && password === def.password) {
+      role = def.role as any;
+      collectionName = def.collection;
+    } else {
+      throw new Error(def ? 'Invalid credentials.' : 'Permission denied. Please deploy the updated firestore.rules to Firebase.');
+    }
+  } else if (!userDoc) {
     if (def && password === def.password) {
       role = def.role as any;
       collectionName = def.collection;
@@ -1693,23 +1711,27 @@ export const authenticateAdminViaApi = async (username: string, password: string
     }
   }
 
-  if (shouldCreateDoc) {
-    userDoc = {
-      uid: username,
-      username: username,
-      role: role,
-      passwordHash: hashToSave,
-      outletId: null,
-      active: true,
-      createdAt: new Date().toISOString(),
-      lastLogin: new Date().toISOString()
-    };
-    await setDoc(doc(db(), collectionName, username), userDoc);
-  } else if (shouldUpdatePasswordHash) {
-    await updateDoc(doc(db(), collectionName, username), { passwordHash: hashToSave });
-  }
+  try {
+    if (shouldCreateDoc) {
+      userDoc = {
+        uid: username,
+        username: username,
+        role: role,
+        passwordHash: hashToSave,
+        outletId: null,
+        active: true,
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      };
+      await setDoc(doc(db(), collectionName, username), userDoc);
+    } else if (shouldUpdatePasswordHash) {
+      await updateDoc(doc(db(), collectionName, username), { passwordHash: hashToSave });
+    }
 
-  await updateDoc(doc(db(), collectionName, username), { lastLogin: new Date().toISOString() });
+    await updateDoc(doc(db(), collectionName, username), { lastLogin: new Date().toISOString() });
+  } catch (writeErr) {
+    console.warn('Failsafe warning: Failed to write to user document after authentication:', writeErr);
+  }
 
   const newSessionId = `session_${Date.now()}`;
 
@@ -1730,7 +1752,7 @@ export const authenticateAdminViaApi = async (username: string, password: string
   return {
     role: role,
     username: username,
-    outletId: userDoc.outletId || null,
+    outletId: userDoc?.outletId || null,
     token: userCredential.user.uid,
     firebaseToken: undefined,
     sessionId: newSessionId

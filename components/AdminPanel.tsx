@@ -250,6 +250,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
         token: user.token,
         firebaseToken: user.firebaseToken,
         sessionId: user.sessionId,
+        passwordHash: user.passwordHash,
         loginTime: new Date().toISOString(),
         lastActivityTime: new Date().toISOString(),
       };

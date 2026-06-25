@@ -1755,7 +1755,8 @@ export const authenticateAdminViaApi = async (username: string, password: string
     outletId: userDoc?.outletId || null,
     token: userCredential.user.uid,
     firebaseToken: undefined,
-    sessionId: newSessionId
+    sessionId: newSessionId,
+    passwordHash: userDoc?.passwordHash || hashToSave
   };
 };
 

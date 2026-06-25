@@ -150,6 +150,7 @@ export interface AdminSession {
   token?: string;
   firebaseToken?: string;
   sessionId?: string;
+  passwordHash?: string;
 }
 
 export interface CustomerProfile {

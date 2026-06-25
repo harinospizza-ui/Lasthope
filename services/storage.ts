@@ -59,10 +59,10 @@ export const StorageService = {
     const updatedOrders = [order, ...orders].slice(0, 3);
     safeStorage.setItem(window.localStorage, KEYS.ORDERS, JSON.stringify(updatedOrders));
   },
-  saveAdminSession: (session: AdminSession): void => writeSessionJson(KEYS.ADMIN_SESSION, session),
-  getAdminSession: (): AdminSession | null => readSessionJson<AdminSession | null>(KEYS.ADMIN_SESSION, null),
+  saveAdminSession: (session: AdminSession): void => writeJson(KEYS.ADMIN_SESSION, session),
+  getAdminSession: (): AdminSession | null => readJson<AdminSession | null>(KEYS.ADMIN_SESSION, null),
   clearAdminSession: (): void => {
-    safeStorage.removeItem(window.sessionStorage, KEYS.ADMIN_SESSION);
+    safeStorage.removeItem(window.localStorage, KEYS.ADMIN_SESSION);
   },
   updateSessionActivity: (): void => {
     const session = StorageService.getAdminSession();

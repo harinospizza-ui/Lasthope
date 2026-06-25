@@ -947,6 +947,7 @@ const App: React.FC = () => {
  
     let isMounted = true;
     let unsubscribe: (() => void) | undefined;
+    let unsubscribeUser: (() => void) | undefined;
  
     const setupSessionListener = async () => {
       try {
@@ -959,6 +960,7 @@ const App: React.FC = () => {
  
         if (!isMounted) return;
  
+        // 1. Single device sync for Admin & Manager
         if (adminSession.role === 'admin' || adminSession.role === 'manager') {
           const docRef = doc(db(), 'userSessions', adminSession.username);
           unsubscribe = onSnapshot(docRef, (docSnap) => {
@@ -979,6 +981,25 @@ const App: React.FC = () => {
             console.error('Session sync error:', error);
           });
         }
+
+        // 2. Real-time password change sync listener for all roles
+        const collectionName = adminSession.role === 'admin' ? 'admins' : adminSession.role === 'manager' ? 'managers' : 'staff';
+        const userDocRef = doc(db(), collectionName, adminSession.username);
+        unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+          if (!isMounted) return;
+          if (!docSnap.exists()) {
+            console.warn('User document missing. Forcing logout due to password change.');
+            triggerPasswordLogout();
+            return;
+          }
+          const data = docSnap.data();
+          if (adminSession.passwordHash && data?.passwordHash !== adminSession.passwordHash) {
+            console.warn('Password hash changed. Forcing logout.');
+            triggerPasswordLogout();
+          }
+        }, (error) => {
+          console.error('User doc sync error:', error);
+        });
       } catch (err) {
         console.error('Failed to setup session listener:', err);
       }
@@ -1005,12 +1026,20 @@ const App: React.FC = () => {
       // Alert user
       alert('Your account was logged in from another device.');
     };
+
+    const triggerPasswordLogout = () => {
+      StorageService.clearAdminSession();
+      setAdminSession(null);
+      setIsAdminPanelOpen(false);
+      alert('Your password was changed by the administrator. Please log in again with your new password.');
+    };
  
     setupSessionListener();
  
     return () => {
       isMounted = false;
       if (unsubscribe) unsubscribe();
+      if (unsubscribeUser) unsubscribeUser();
     };
   }, [configLoaded, adminSession]);
 

@@ -398,26 +398,26 @@ export const MENU_ITEMS: MenuItem[] = [
     vegetarian: true,
     available: true
   },
-  {
-    id: 'm5_v',
-    name: "Veg Crunchy Momos",
-    description: "Extra crispy breaded veg momos (Full Plate).",
-    price: 100,
-    category: Category.MOMOS,
-    image: "/images/crunchymomos.jpeg",
-    vegetarian: true,
-    available: true
-  },
-  {
-    id: 'm5_s',
-    name: "Soya Crunchy Momos",
-    description: "Breaded crunchy soya dumplings (Full Plate).",
-    price: 90,
-    category: Category.MOMOS,
-    image: "/images/crunchymomos.jpeg",
-    vegetarian: true,
-    available: true
-  },
+ // {
+ //   id: 'm5_v',
+ //   name: "Veg Crunchy Momos",
+//    description: "Extra crispy breaded veg momos (Full Plate).",
+ //   price: 100,
+  //  category: Category.MOMOS,
+ //   image: "/images/crunchymomos.jpeg",
+ //   vegetarian: true,
+ //   available: true
+ // },
+//  {
+  //  id: 'm5_s',
+  //  name: "Soya Crunchy Momos",
+ //   description: "Breaded crunchy soya dumplings (Full Plate).",
+ //   price: 90,
+//    category: Category.MOMOS,
+//    image: "/images/crunchymomos.jpeg",
+//    vegetarian: true,
+//    available: true
+//  },
   {
     id: 'm6_v',
     name: "Veg Gravy Momos",

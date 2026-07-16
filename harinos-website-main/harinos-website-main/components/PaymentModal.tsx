@@ -27,7 +27,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'COD'>('UPI');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [showSandbox, setShowSandbox] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
 
   // Clean up body scroll when modal is open
@@ -61,6 +60,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setIsProcessingPayment(true);
     setPaymentFailed(false);
     
+    const clickTime = Date.now();
+    
     // Redirect customer to the native payment/UPI app
     window.location.href = upiUrl;
 
@@ -69,14 +70,20 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       window.removeEventListener('focus', handleTabReturn);
       document.removeEventListener('visibilitychange', handleTabReturn);
       
-      // Hide the initial redirection loader and start verification
+      const timeSpentAway = Date.now() - clickTime;
       setIsProcessingPayment(false);
-      setVerifying(true);
-      
-      setTimeout(() => {
-        setVerifying(false);
-        setShowSandbox(true);
-      }, 2000); // 2 second bank verification query simulation
+
+      if (timeSpentAway < 1500) {
+        // User aborted the payment app almost immediately (under 1.5 seconds)
+        setPaymentFailed(true);
+      } else {
+        // User spent time in the payment app, proceed to verify and auto-complete
+        setVerifying(true);
+        setTimeout(() => {
+          setVerifying(false);
+          onPaymentComplete('UPI');
+        }, 2000); // 2 second bank verification query simulation
+      }
     };
 
     // Listen for the user returning to the app tab
@@ -87,21 +94,15 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setTimeout(() => {
       window.removeEventListener('focus', handleTabReturn);
       document.removeEventListener('visibilitychange', handleTabReturn);
-      if (!verifying && !showSandbox && !paymentFailed) {
+      if (!verifying && !paymentFailed) {
         setIsProcessingPayment(false);
-        setShowSandbox(true);
+        setVerifying(true);
+        setTimeout(() => {
+          setVerifying(false);
+          onPaymentComplete('UPI');
+        }, 2000);
       }
     }, 3000);
-  };
-
-  const handleSimulateSuccess = () => {
-    setShowSandbox(false);
-    onPaymentComplete('UPI');
-  };
-
-  const handleSimulateFailure = () => {
-    setShowSandbox(false);
-    setPaymentFailed(true);
   };
 
   const handleContactSupport = () => {
@@ -145,35 +146,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         )}
 
         {/* Razorpay Gateway Simulator Sandbox Overlay */}
-        {showSandbox && (
-          <div className="absolute inset-0 z-[240] flex flex-col items-center justify-center bg-slate-900 p-6 text-center text-white animate-fade-in">
-            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.3em] text-blue-400">Razorpay Sandbox</div>
-            <h3 className="text-2xl font-display font-black">UPI Gateway Emulator</h3>
-            <p className="mt-2 text-xs text-slate-400 max-w-xs">
-              Simulate the transaction outcome to test order processing.
-            </p>
-            <div className="my-6 rounded-2xl border border-slate-800 bg-slate-950/80 px-6 py-4 text-slate-200 w-full max-w-xs">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Merchant</div>
-              <div className="text-sm font-bold text-white mt-0.5">Harino's Pizza</div>
-              <div className="mt-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Amount</div>
-              <div className="text-lg font-black text-emerald-400 mt-0.5">Rs {total.toFixed(2)}</div>
-            </div>
-            <div className="flex flex-col gap-3 w-full max-w-xs">
-              <button
-                onClick={handleSimulateSuccess}
-                className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-700 py-3.5 text-xs font-bold uppercase tracking-widest transition-all cursor-pointer shadow-lg"
-              >
-                Simulate Success
-              </button>
-              <button
-                onClick={handleSimulateFailure}
-                className="w-full rounded-2xl bg-red-650 hover:bg-red-750 py-3.5 text-xs font-bold uppercase tracking-widest transition-all cursor-pointer shadow-lg"
-              >
-                Simulate Failure
-              </button>
-            </div>
-          </div>
-        )}
+
 
         <div className="bg-slate-900 px-5 pb-5 pt-4 text-center text-white sm:px-8 sm:pb-7 sm:pt-6">
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/25 sm:hidden" />

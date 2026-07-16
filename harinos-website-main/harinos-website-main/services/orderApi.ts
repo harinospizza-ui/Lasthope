@@ -18,6 +18,7 @@ import {
   storage,
   FIRESTORE_ORDERS_COLLECTION,
   FIRESTORE_CUSTOMERS_COLLECTION,
+  FIRESTORE_NOTIFICATION_TOKENS_COLLECTION,
   FIRESTORE_MENU_ITEMS_COLLECTION,
   FIRESTORE_OUTLETS_COLLECTION,
   FIRESTORE_OFFERS_COLLECTION,
@@ -74,10 +75,18 @@ export interface BackupStatusResponse {
   lastBackupLocation?: string;
 }
 
+export interface NotificationStats {
+  date: string;
+  sent: number;
+  failed: number;
+  removedTokens: number;
+  updatedAt: string;
+}
+
 export interface NotificationDashboardData {
   success: boolean;
   totalDevices: number;
-  stats: any[];
+  stats: NotificationStats[];
 }
 
 export const checkBusinessHours = (): boolean => {
@@ -265,7 +274,7 @@ export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: st
   }
 
   if (order.orderType !== 'dinein') {
-    const hasBeverages = order.items.some(item => item.category === Category.BEVERAGES || item.category === 'Beverages');
+    const hasBeverages = order.items.some(item => item.category === Category.BEVERAGES);
     if (hasBeverages) {
       throw new Error("Beverages are available for Dine-In only.");
     }

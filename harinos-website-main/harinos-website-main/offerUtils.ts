@@ -8,123 +8,6 @@ import {
   PricedCartItem,
 } from './types';
 
-type MinimumAmountScope = 'item' | 'cart';
-
-interface ParsedOfferCondition {
-  amountScope: MinimumAmountScope;
-  minimumAmount?: number;
-  matchedItems: MenuItem[];
-  matchedCategory?: Category;
-}
-
-const CATEGORY_KEYWORDS: Array<{ category: Category; keywords: string[] }> = [
-  { category: Category.PIZZA, keywords: ['pizza', 'pizzas'] },
-  { category: Category.MOMOS, keywords: ['momos', 'momo'] },
-  { category: Category.FRIES, keywords: ['fries'] },
-  { category: Category.BURGERS, keywords: ['burger', 'burgers'] },
-  { category: Category.SIDES, keywords: ['sides', 'side order', 'side orders', 'garlic bread', 'calzone'] },
-  { category: Category.BEVERAGES, keywords: ['beverage', 'beverages', 'drink', 'drinks'] },
-];
-
-const CART_SCOPE_KEYWORDS = [
-  'cart total',
-  'order total',
-  'cart value',
-  'order value',
-  'bill total',
-  'bill amount',
-  'subtotal',
-  'full order',
-  'full bill',
-  'entire bill',
-];
-
-const NON_ACTIONABLE_CONDITION_KEYWORDS = [
-  'display only',
-  'no automatic discount rule',
-  'no automatic rule',
-  'announcement only',
-  'info only',
-  'information only',
-];
-
-const normalizeText = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-const isOfferConditionNonActionable = (offer: OfferCard): boolean => {
-  const normalizedCondition = normalizeText(offer.condition);
-  return NON_ACTIONABLE_CONDITION_KEYWORDS.some((keyword) =>
-    normalizedCondition.includes(normalizeText(keyword)),
-  );
-};
-
-const extractMinimumAmount = (condition: string): number | undefined => {
-  const matchers = [
-    /(?:above|over|at least|minimum(?: order)?(?: amount)?|more than|or more|or above|and above)\s*(?:of\s*)?(?:rs\.?|inr|₹)?\s*(\d+)/i,
-    /(?:rs\.?|inr|₹)\s*(\d+)/i,
-    /(\d+)\s*(?:or more|or above|and above|\+)/i,
-  ];
-
-  for (const matcher of matchers) {
-    const match = condition.match(matcher);
-    if (match) {
-      return Number(match[1]);
-    }
-  }
-
-  return undefined;
-};
-
-const getAmountScope = (condition: string): MinimumAmountScope => {
-  const normalizedCondition = normalizeText(condition);
-  return CART_SCOPE_KEYWORDS.some((keyword) => normalizedCondition.includes(keyword)) ? 'cart' : 'item';
-};
-
-const findMatchedItems = (condition: string): MenuItem[] => {
-  const normalizedCondition = normalizeText(condition);
-
-  return MENU_ITEMS.filter((item) => normalizedCondition.includes(normalizeText(item.name)));
-};
-
-const findMenuItemByName = (itemName: string): MenuItem | undefined => {
-  const normalizedItemName = normalizeText(itemName);
-
-  return MENU_ITEMS.find((item) => {
-    const normalizedMenuName = normalizeText(item.name);
-    return (
-      normalizedMenuName === normalizedItemName ||
-      normalizedMenuName.includes(normalizedItemName) ||
-      normalizedItemName.includes(normalizedMenuName)
-    );
-  });
-};
-
-const findMatchedCategory = (condition: string): Category | undefined => {
-  const normalizedCondition = normalizeText(condition);
-
-  const categoryEntry = CATEGORY_KEYWORDS.find(({ keywords }) =>
-    keywords.some((keyword) => normalizedCondition.includes(keyword)),
-  );
-
-  return categoryEntry?.category;
-};
-
-const parseOfferCondition = (offer: OfferCard): ParsedOfferCondition => {
-  const matchedItems = findMatchedItems(offer.condition);
-
-  return {
-    amountScope: getAmountScope(offer.condition),
-    minimumAmount: extractMinimumAmount(offer.condition),
-    matchedItems,
-    matchedCategory: matchedItems.length ? undefined : findMatchedCategory(offer.condition),
-  };
-};
-
 export const getItemBasePrice = (
   item: Pick<MenuItem, 'price' | 'sizes'>,
   selectedSize?: string,
@@ -153,76 +36,205 @@ export const normalizeStoredCartItem = (item: MenuItem & Partial<CartItem>): Car
   basePrice: item.basePrice ?? getItemBasePrice(item, item.selectedSize),
 });
 
-const offerTargetsItem = (offer: OfferCard, item: Pick<MenuItem, 'id' | 'category'>): boolean => {
-  const parsedCondition = parseOfferCondition(offer);
-
-  if (parsedCondition.matchedItems.length) {
-    return parsedCondition.matchedItems.some((matchedItem) => matchedItem.id === item.id);
+export const getOfferConditionLabel = (offer: OfferCard): string => {
+  if (offer.condition) {
+    return offer.condition;
   }
 
-  if (parsedCondition.matchedCategory) {
-    return parsedCondition.matchedCategory === item.category;
+  const parts: string[] = [];
+  if (offer.isSundayOffer) {
+    parts.push('Sunday Only');
+  }
+  if (offer.minimumOrder) {
+    parts.push(`Min Order Rs ${offer.minimumOrder}`);
+  }
+  if (offer.targetCategory && offer.targetCategory !== 'All') {
+    let targetDesc = offer.targetCategory;
+    if (offer.targetCategory === 'Pizza' && offer.targetSize && offer.targetSize !== 'All') {
+      targetDesc = `${offer.targetSize} Pizza`;
+    }
+    parts.push(`Applies on ${targetDesc}`);
+  }
+  if (offer.offerPercentage) {
+    parts.push(`${offer.offerPercentage}% Off`);
+  }
+  if (offer.additionalItem) {
+    parts.push(`Free ${offer.additionalItem}`);
   }
 
-  return true;
+  return parts.length > 0 ? parts.join(' | ') : 'Special Promo';
 };
 
-export const offerMeetsMinimumAmount = (offer: OfferCard, amount: number): boolean => {
-  const parsedCondition = parseOfferCondition(offer);
-  return !parsedCondition.minimumAmount || amount >= parsedCondition.minimumAmount;
+// Check if a category matches defensively (handling singular, plural, and case)
+const matchesCategory = (itemCategory: string, targetCategory: string): boolean => {
+  const itemCat = itemCategory.toLowerCase().trim();
+  const targetCat = targetCategory.toLowerCase().trim();
+
+  return (
+    itemCat === targetCat ||
+    (targetCat === 'pizza' && itemCat === 'pizza') ||
+    (targetCat === 'burger' && itemCat === 'burgers') ||
+    (targetCat === 'burgers' && itemCat === 'burgers') ||
+    (targetCat === 'fries' && itemCat === 'fries') ||
+    (targetCat === 'momos' && itemCat === 'momos') ||
+    (targetCat === 'beverage' && itemCat === 'beverages') ||
+    (targetCat === 'beverages' && itemCat === 'beverages') ||
+    (targetCat === 'side orders' && itemCat === 'sides') ||
+    (targetCat === 'side' && itemCat === 'sides') ||
+    (targetCat === 'sides' && itemCat === 'sides')
+  );
 };
 
-export const getOfferMinimumScope = (offer: OfferCard): MinimumAmountScope =>
-  parseOfferCondition(offer).amountScope;
+export const doesOfferConditionMatchCart = (offer: OfferCard, cart: CartItem[]): boolean => {
+  if (!offer.enabled) return false;
+
+  const today = new Date().getDay();
+  if (offer.isSundayOffer && today !== 0) {
+    return false;
+  }
+
+  const customerCart = cart.filter((item) => !item.isOfferBonus);
+  if (!customerCart.length) {
+    return false;
+  }
+
+  // Calculate cart subtotal
+  const cartSubtotal = customerCart.reduce((sum, item) => sum + item.basePrice * item.quantity, 0);
+
+  // Check minimum order
+  if (offer.minimumOrder && cartSubtotal < offer.minimumOrder) {
+    return false;
+  }
+
+  // If no target category is specified or it is All, the condition is met (since min order matches)
+  if (!offer.targetCategory || offer.targetCategory === 'All') {
+    return true;
+  }
+
+  // Otherwise, at least one item in the cart must match the target category (and size if pizza)
+  return customerCart.some((item) => {
+    if (!matchesCategory(item.category, offer.targetCategory || '')) {
+      return false;
+    }
+
+    if (
+      item.category === Category.PIZZA &&
+      offer.targetSize &&
+      offer.targetSize !== 'All'
+    ) {
+      const itemSize = (item.selectedSize || '').toLowerCase().trim();
+      const targetSize = offer.targetSize.toLowerCase().trim();
+      if (itemSize !== targetSize) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+};
+
+export const getMatchingDiscountOffer = (
+  offers: OfferCard[],
+  item: Pick<MenuItem, 'id' | 'category'> & { selectedSize?: string },
+): OfferCard | undefined => {
+  const today = new Date().getDay();
+
+  return offers.find((offer) => {
+    if (!offer.enabled || !offer.offerPercentage) {
+      return false;
+    }
+
+    if (offer.isSundayOffer && today !== 0) {
+      return false;
+    }
+
+    if (offer.targetCategory && offer.targetCategory !== 'All') {
+      if (!matchesCategory(item.category, offer.targetCategory)) {
+        return false;
+      }
+
+      if (
+        item.category === Category.PIZZA &&
+        offer.targetSize &&
+        offer.targetSize !== 'All'
+      ) {
+        const itemSize = (item.selectedSize || '').toLowerCase().trim();
+        const targetSize = offer.targetSize.toLowerCase().trim();
+        if (itemSize !== targetSize) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  });
+};
 
 export const isOfferUnlocked = (
   offer: OfferCard,
   itemAmount: number,
   cartAmount: number,
 ): boolean => {
-  const parsedCondition = parseOfferCondition(offer);
-  const amountToCheck = parsedCondition.amountScope === 'cart' ? cartAmount : itemAmount;
-  return !parsedCondition.minimumAmount || amountToCheck >= parsedCondition.minimumAmount;
+  if (offer.minimumOrder) {
+    return cartAmount >= offer.minimumOrder;
+  }
+  return true;
 };
 
-export const getMatchingDiscountOffer = (
-  offers: OfferCard[],
-  item: Pick<MenuItem, 'id' | 'category'>,
-): OfferCard | undefined =>
-  offers.find(
-    (offer) =>
-      offer.enabled &&
-      !isOfferConditionNonActionable(offer) &&
-      !!offer.offerPercentage &&
-      offerTargetsItem(offer, item),
-  );
+export const getOfferMinimumScope = (offer: OfferCard): 'cart' | 'item' => {
+  if (offer.minimumOrder) {
+    return 'cart';
+  }
+  if (offer.targetSize && offer.targetSize !== 'All') {
+    return 'item';
+  }
+  return 'cart';
+};
 
 export const getApplicableDiscountOffer = (
   offers: OfferCard[],
-  item: Pick<MenuItem, 'id' | 'category'>,
+  item: Pick<MenuItem, 'id' | 'category'> & { selectedSize?: string },
   itemAmount: number,
   cartAmount: number,
 ): OfferCard | undefined => {
-  if (item.category === Category.PIZZA && isSundayDhamakaActive(offers)) {
-    return undefined;
-  }
+  const today = new Date().getDay();
 
   for (const offer of offers) {
-    if (
-      !offer.enabled ||
-      isOfferConditionNonActionable(offer) ||
-      !offer.offerPercentage ||
-      !offerTargetsItem(offer, item)
-    ) {
+    if (!offer.enabled || !offer.offerPercentage) {
       continue;
     }
 
-    const parsedCondition = parseOfferCondition(offer);
-    const amountToCheck = parsedCondition.amountScope === 'cart' ? cartAmount : itemAmount;
-
-    if (!parsedCondition.minimumAmount || amountToCheck >= parsedCondition.minimumAmount) {
-      return offer;
+    // Check Sunday rule
+    if (offer.isSundayOffer && today !== 0) {
+      continue;
     }
+
+    // Check Minimum Order
+    if (offer.minimumOrder && cartAmount < offer.minimumOrder) {
+      continue;
+    }
+
+    // Check target category / size filter
+    if (offer.targetCategory && offer.targetCategory !== 'All') {
+      if (!matchesCategory(item.category, offer.targetCategory)) {
+        continue;
+      }
+
+      // Check size for Pizza
+      if (
+        item.category === Category.PIZZA &&
+        offer.targetSize &&
+        offer.targetSize !== 'All'
+      ) {
+        const itemSize = (item.selectedSize || '').toLowerCase().trim();
+        const targetSize = offer.targetSize.toLowerCase().trim();
+        if (itemSize !== targetSize) {
+          continue;
+        }
+      }
+    }
+
+    return offer;
   }
 
   return undefined;
@@ -266,26 +278,18 @@ export const buildPricedCart = (cart: CartItem[], offers: OfferCard[]): PricedCa
   });
 };
 
-export const getOfferConditionLabel = (offer: OfferCard): string => offer.condition;
-
 export const getOfferActionTarget = (
   offer: OfferCard,
 ): { category: CategoryFilter; item?: MenuItem } => {
-  const parsedCondition = parseOfferCondition(offer);
-
-  if (parsedCondition.matchedItems.length === 1) {
-    const [item] = parsedCondition.matchedItems;
-    return { category: item.category, item };
-  }
-
-  if (parsedCondition.matchedItems.length > 1) {
-    const firstCategory = parsedCondition.matchedItems[0].category;
-    const sameCategory = parsedCondition.matchedItems.every((item) => item.category === firstCategory);
-    return { category: sameCategory ? firstCategory : 'All' };
-  }
-
-  if (parsedCondition.matchedCategory) {
-    return { category: parsedCondition.matchedCategory };
+  // Try to find if a category matches
+  if (offer.targetCategory && offer.targetCategory !== 'All') {
+    // Map to Category enum
+    const foundCategory = Object.values(Category).find(
+      (cat) => cat.toLowerCase() === (offer.targetCategory || '').toLowerCase(),
+    );
+    if (foundCategory) {
+      return { category: foundCategory };
+    }
   }
 
   return { category: 'All' };
@@ -293,10 +297,6 @@ export const getOfferActionTarget = (
 
 export const getOfferActionLabel = (offer: OfferCard): string => {
   const target = getOfferActionTarget(offer);
-
-  if (target.item) {
-    return `View ${target.item.name}`;
-  }
 
   if (target.category !== 'All') {
     return `View ${target.category}`;
@@ -307,90 +307,51 @@ export const getOfferActionLabel = (offer: OfferCard): string => {
 
 export const getOfferNotificationMessage = (offer: OfferCard): string => {
   const extraItemText = offer.additionalItem ? ` Bonus highlight: ${offer.additionalItem}.` : '';
-  return `${offer.displayText} ${offer.condition}${extraItemText}`.trim();
+  const conditionLabel = getOfferConditionLabel(offer);
+  return `${offer.displayText} (${conditionLabel})${extraItemText}`.trim();
 };
 
 export const getOfferReleaseSignature = (offers: OfferCard[]): string =>
   offers
     .filter((offer) => offer.enabled && offer.notifyCustomers)
-    .map((offer) => [
-      offer.id,
-      offer.offerTitle,
-      offer.displayText,
-      offer.offerPercentage ?? '',
-      offer.condition,
-      offer.additionalItem ?? '',
-      offer.additionalItemImage ?? '',
-    ].join('|'))
+    .map((offer) =>
+      [
+        offer.id,
+        offer.offerTitle,
+        offer.displayText,
+        offer.offerPercentage ?? '',
+        getOfferConditionLabel(offer),
+        offer.additionalItem ?? '',
+        offer.additionalItemImage ?? '',
+      ].join('|'),
+    )
     .join('||');
 
-export const doesOfferConditionMatchCart = (offer: OfferCard, cart: CartItem[]): boolean => {
-  if (isOfferConditionNonActionable(offer)) {
-    return false;
-  }
+// Find a menu item by name for bonus auto-adding
+const findMenuItemByName = (itemName: string): MenuItem | undefined => {
+  const normalizedItemName = itemName.toLowerCase().trim();
 
-  const customerCart = cart.filter((item) => !item.isOfferBonus);
-  if (!customerCart.length) {
-    return false;
-  }
-
-  const cartSubtotal = customerCart.reduce((sum, item) => sum + item.basePrice * item.quantity, 0);
-
-  return customerCart.some((item) => {
-    if (!offerTargetsItem(offer, item)) {
-      return false;
-    }
-
-    const lineAmount = item.basePrice * item.quantity;
-    return isOfferUnlocked(offer, lineAmount, cartSubtotal);
+  return MENU_ITEMS.find((item) => {
+    const normalizedMenuName = item.name.toLowerCase().trim();
+    return (
+      normalizedMenuName === normalizedItemName ||
+      normalizedMenuName.includes(normalizedItemName) ||
+      normalizedItemName.includes(normalizedMenuName)
+    );
   });
 };
 
-export const isSundayDhamakaActive = (offers: OfferCard[]): boolean => {
-  const sundayDhamaka = offers.find((o) => o.id === 'offer-sunday-dhamaka');
-  if (!sundayDhamaka || !sundayDhamaka.enabled) return false;
-  return new Date().getDay() === 0;
-};
-
-export const getSundayDhamakaBonusItems = (cart: CartItem[], offers: OfferCard[]): CartItem[] => {
-  if (!isSundayDhamakaActive(offers)) {
-    return [];
-  }
-
-  const bonusItems: CartItem[] = [];
-  const largePizzas = cart.filter(
-    (item) => !item.isOfferBonus && item.category === Category.PIZZA && item.selectedSize === 'Large'
-  );
-
-  for (const item of largePizzas) {
-    const regularItem: CartItem = {
-      ...item,
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      category: item.category,
-      image: item.image,
-      vegetarian: true,
-      available: true,
-      sizes: item.sizes,
-      quantity: item.quantity,
-      selectedSize: 'Regular',
-      basePrice: 0,
-      isOfferBonus: true,
-      sourceOfferId: 'offer-sunday-dhamaka',
-      originalPrice: getItemBasePrice(item, 'Regular'),
-    };
-    bonusItems.push(regularItem);
-  }
-
-  return bonusItems;
-};
-
 export const getAutomaticOfferBonusItems = (cart: CartItem[], offers: OfferCard[]): CartItem[] => {
-  const standardBonus = offers
+  const today = new Date().getDay();
+
+  return offers
     .filter((offer) => offer.enabled && !!offer.additionalItem)
     .flatMap((offer) => {
+      // Check Sunday rule
+      if (offer.isSundayOffer && today !== 0) {
+        return [];
+      }
+
       if (!doesOfferConditionMatchCart(offer, cart) || !offer.additionalItem) {
         return [];
       }
@@ -400,19 +361,23 @@ export const getAutomaticOfferBonusItems = (cart: CartItem[], offers: OfferCard[
         return [];
       }
 
+      // If the offer is specifically applied to Pizza, and the bonus item is a Pizza,
+      // default the free item size to Regular
+      const selectedSize =
+        bonusMenuItem.category === Category.PIZZA
+          ? 'Regular'
+          : bonusMenuItem.sizes?.[0]?.label;
+
       return [
         {
           ...bonusMenuItem,
           quantity: 1,
-          selectedSize: bonusMenuItem.sizes?.[0]?.label,
+          selectedSize,
           basePrice: 0,
           isOfferBonus: true,
           sourceOfferId: offer.id,
-          originalPrice: getItemBasePrice(bonusMenuItem, bonusMenuItem.sizes?.[0]?.label),
+          originalPrice: getItemBasePrice(bonusMenuItem, selectedSize),
         },
       ];
     });
-
-  const sundayBonus = getSundayDhamakaBonusItems(cart, offers);
-  return [...standardBonus, ...sundayBonus];
 };

@@ -40,6 +40,10 @@ export interface OfferCard {
   additionalItem?: string;
   additionalItemImage?: string;
   notifyCustomers?: boolean;
+  targetCategory?: string;
+  targetSize?: string;
+  minimumOrder?: number;
+  isSundayOffer?: boolean;
 }
 
 export interface OutletConfig {

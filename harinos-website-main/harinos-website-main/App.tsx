@@ -1051,7 +1051,12 @@ const App: React.FC = () => {
     onDismiss: () => handleAppBack(() => setView('menu')),
   });
   const activeOfferCards = useMemo(
-    () => offers.filter((offer) => offer.enabled),
+    () =>
+      offers.filter((offer) => {
+        if (!offer.enabled) return false;
+        if (offer.isSundayOffer && new Date().getDay() !== 0) return false;
+        return true;
+      }),
     [offers],
   );
   const activeOutlets = useMemo(

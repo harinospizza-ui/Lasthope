@@ -7,9 +7,8 @@ interface AdminMenuProps {
   session: AdminSession;
   menuItems: MenuItem[];
   outlets: OutletConfig[];
-  offers: OfferCard[];
   onRefresh: () => void;
-  activeTab: 'menu' | 'outlets' | 'offers';
+  activeTab: 'menu' | 'outlets';
   orders?: Order[];
 }
 
@@ -17,7 +16,6 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   session,
   menuItems,
   outlets,
-  offers,
   onRefresh,
   activeTab,
   orders,
@@ -102,12 +100,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<Category>(Category.PIZZA);
   const [newItemImage, setNewItemImage] = useState('');
-  const sundayDhamakaCount = React.useMemo(() => {
-    if (!orders) return 0;
-    return orders.filter((order) =>
-      order.items.some((item) => item.appliedOfferId === 'offer-sunday-dhamaka' || item.sourceOfferId === 'offer-sunday-dhamaka')
-    ).length;
-  }, [orders]);
+
   const [newItemSpicy, setNewItemSpicy] = useState(false);
   const [newItemPopular, setNewItemPopular] = useState(false);
 
@@ -156,11 +149,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     onRefresh();
   };
 
-  const toggleOfferEnabled = async (offer: OfferCard) => {
-    const updated = { ...offer, enabled: !offer.enabled };
-    await saveOfferToServer(updated);
-    onRefresh();
-  };
+
 
   if (activeTab === 'menu') {
     return (
@@ -636,43 +625,6 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                   </button>
                 </div>
               )}
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (activeTab === 'offers') {
-    return (
-      <section className="relative mx-auto max-w-6xl p-4 animate-fade-in">
-        <h3 className="mb-4 font-display text-2xl font-bold">Offers & Disount Rules</h3>
-        <div className="grid gap-4 md:grid-cols-2">
-          {offers.map((offer) => (
-            <div key={offer.id} className={`rounded-3xl p-5 border border-white/10 shadow-2xl glass-card transition-premium ${!offer.enabled ? 'opacity-40 grayscale-[20%]' : ''}`}>
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-lg font-display font-bold">{offer.offerTitle}</span>
-                <button
-                  disabled={session.role !== 'admin'}
-                  onClick={() => toggleOfferEnabled(offer)}
-                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
-                    session.role !== 'admin' ? 'opacity-65 cursor-not-allowed' : ''
-                  } ${
-                    offer.enabled ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/40' : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/40'
-                  }`}
-                >
-                  {offer.enabled ? 'Enabled' : 'Disabled'}
-                </button>
-              </div>
-              <p className="text-xs text-slate-400 font-medium mb-3">💬 Display: {offer.displayText}</p>
-              <div className="text-xs text-slate-300 space-y-1 font-semibold">
-                <div>Condition: <span className="text-red-400 font-bold">{offer.condition}</span></div>
-                {offer.id === 'offer-sunday-dhamaka' && (
-                  <div className="mt-2 text-emerald-400 font-bold">
-                    🎉 Total Sunday Dhamaka Orders: {sundayDhamakaCount}
-                  </div>
-                )}
-              </div>
             </div>
           ))}
         </div>

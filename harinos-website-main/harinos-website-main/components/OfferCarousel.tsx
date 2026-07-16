@@ -10,7 +10,14 @@ interface OfferCarouselProps {
 const SWIPE_THRESHOLD = 40;
 
 const OfferCarousel: React.FC<OfferCarouselProps> = ({ offers, onAction }) => {
-  const visibleOffers = offers.filter((offer) => offer.enabled).slice(0, 3);
+  const today = new Date().getDay();
+  const visibleOffers = offers
+    .filter((offer) => {
+      if (!offer.enabled) return false;
+      if (offer.isSundayOffer && today !== 0) return false;
+      return true;
+    })
+    .slice(0, 5);
   const [activeIndex, setActiveIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
 

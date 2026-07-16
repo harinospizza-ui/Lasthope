@@ -31,9 +31,8 @@ const Header: React.FC<HeaderProps> = ({
   const [scrolled, setScrolled] = useState(false);
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
   const [showInstallHelp, setShowInstallHelp] = useState(false);
-  const [isHoldingLogo, setIsHoldingLogo] = useState(false);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const holdStartedAt = useRef(0);
+  const [logoClicks, setLogoClicks] = useState(0);
+  const lastLogoClickTime = useRef(0);
   const logoUrl = '/icon-192.png';
   const { canPromptInstall, needsIosInstructions, isInstalled, promptInstall } = useInstallPrompt();
 
@@ -68,38 +67,33 @@ const Header: React.FC<HeaderProps> = ({
       return;
     }
 
-    if (needsIosInstructions) {
-      setShowInstallHelp((current) => !current);
+    setShowInstallHelp((current) => !current);
+  };
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    // Switch view to menu on the very first click
+    if (logoClicks === 0) {
+      onViewMenu();
     }
+
+    const now = Date.now();
+    if (now - lastLogoClickTime.current > 3000) {
+      setLogoClicks(1);
+    } else {
+      const nextCount = logoClicks + 1;
+      setLogoClicks(nextCount);
+      if (nextCount >= 9) {
+        setLogoClicks(0);
+        navigator.vibrate?.(200);
+        onAdminTrigger?.();
+      }
+    }
+    lastLogoClickTime.current = now;
   };
 
   const isScrolledOrLight = scrolled || activeView === 'orders';
-
-  const cancelLogoHold = (treatQuickTapAsMenu: boolean) => {
-    const elapsed = Date.now() - holdStartedAt.current;
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current);
-      holdTimer.current = null;
-    }
-    setIsHoldingLogo(false);
-    if (treatQuickTapAsMenu && elapsed < 300) {
-      onViewMenu();
-    }
-  };
-
-  const startLogoHold = () => {
-    holdStartedAt.current = Date.now();
-    setIsHoldingLogo(true);
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current);
-    }
-    holdTimer.current = setTimeout(() => {
-      holdTimer.current = null;
-      setIsHoldingLogo(false);
-      navigator.vibrate?.(200);
-      onAdminTrigger?.();
-    }, 7000);
-  };
 
   return (
     <nav
@@ -110,15 +104,10 @@ const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
           <button
-            onPointerDown={startLogoHold}
-            onPointerUp={() => cancelLogoHold(true)}
-            onPointerCancel={() => cancelLogoHold(false)}
-            onPointerLeave={() => cancelLogoHold(false)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-            }}
-            className="flex items-center space-x-3 cursor-pointer group select-none"
-            title="Hold for admin"
+            onClick={handleLogoClick}
+            onContextMenu={(event) => event.preventDefault()}
+            className="flex items-center space-x-3 cursor-pointer group select-none outline-none"
+            title="Harino's Pizza Menu"
             style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
           >
             <div
@@ -126,25 +115,12 @@ const Header: React.FC<HeaderProps> = ({
                 isScrolledOrLight ? 'w-10 h-10' : 'w-14 h-14'
               } relative`}
             >
-              <span
-                className="absolute inset-0 rounded-2xl border-2 border-red-500"
-                style={{
-                  animation: isHoldingLogo ? 'harinosHoldRing 7s linear forwards' : 'none',
-                  opacity: isHoldingLogo ? 1 : 0,
-                }}
-              />
               <img
                 src={logoUrl}
                 alt="Harino's"
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform"
               />
             </div>
-            <style>{`
-              @keyframes harinosHoldRing {
-                from { transform: scale(0.8); opacity: 0.2; box-shadow: 0 0 0 0 rgba(220,38,38,0.7); }
-                to { transform: scale(1.25); opacity: 1; box-shadow: 0 0 0 12px rgba(220,38,38,0); }
-              }
-            `}</style>
             <div className="text-left">
               <span
                 className={`block transition-all duration-500 font-display font-bold tracking-tight leading-none ${
@@ -164,6 +140,20 @@ const Header: React.FC<HeaderProps> = ({
           </button>
 
           <div className="flex items-center space-x-3">
+            {!isInstalled && (
+              <button
+                onClick={handleInstall}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale ${
+                  isScrolledOrLight
+                    ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100/50 shadow-sm'
+                    : 'bg-white/10 border-white/10 text-white hover:bg-white/20 backdrop-blur-md'
+                }`}
+                title="Install Harino's App"
+              >
+                📥 <span className="hidden xs:inline">Install App</span>
+              </button>
+            )}
+
             {customerProfile && onWalletClick && (
               <button
                 onClick={onWalletClick}
@@ -211,6 +201,15 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+      {showInstallHelp && (
+        <div className="bg-slate-900 text-white text-center py-2 px-4 text-xs border-t border-white/10 animate-fade-in">
+          {needsIosInstructions ? (
+            <>iPhone / iPad Users: Open this site in <span className="font-bold">Safari</span>, tap <span className="font-bold">Share</span> and select <span className="font-bold">Add to Home Screen</span>.</>
+          ) : (
+            <>To install Harino's: Click your browser's menu/share button and select <span className="font-bold">Add to Home Screen</span> or <span className="font-bold">Install</span>.</>
+          )}
+        </div>
+      )}
     </nav>
   );
 };

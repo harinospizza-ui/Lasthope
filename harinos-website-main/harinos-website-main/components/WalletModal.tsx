@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CustomerProfile, WalletTransaction } from '../types';
 import { StorageService } from '../services/storage';
-import { getServerCustomers, verifyServerCustomer, saveWalletTransactionToServer, saveCustomerToServer } from '../services/orderApi';
+import { getServerCustomers, verifyServerCustomer, saveWalletTransactionToServer, saveCustomerToServer, subscribeServerWalletTransactions } from '../services/orderApi';
 import { copyTextToClipboard } from '../services/browserSupport';
 
 interface WalletModalProps {
@@ -23,9 +23,83 @@ export const WalletModal: React.FC<WalletModalProps> = ({
   onProceedToPayment,
   instagramUrl = '',
 }) => {
-  const [inputOtp, setInputOtp] = useState('');
+
   const [inputReferralCode, setInputReferralCode] = useState('');
   const [topUpAmount, setTopUpAmount] = useState('');
+  const [latestTopup, setLatestTopup] = useState<WalletTransaction | null>(null);
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState(customerProfile.name || '');
+
+  useEffect(() => {
+    if (customerProfile?.name) {
+      setTempName(customerProfile.name);
+    }
+  }, [customerProfile?.name]);
+
+  const handleSaveName = async () => {
+    if (!tempName.trim()) {
+      alert('Name cannot be empty.');
+      return;
+    }
+    const updated = {
+      ...customerProfile,
+      name: tempName.trim(),
+      fullName: tempName.trim()
+    };
+    try {
+      await saveCustomerToServer(updated);
+      StorageService.saveCustomerProfile(updated);
+      onProfileChange(updated);
+      setIsEditingName(false);
+      showNotification({ title: 'Success', message: 'Name updated successfully!', type: 'success' });
+    } catch (err: any) {
+      alert(err.message || 'Failed to save name.');
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen || !customerProfile?.id) return;
+    
+    const unsub = subscribeServerWalletTransactions(
+      (txs) => {
+        const userTopups = txs.filter(
+          (t) => t.customerId === customerProfile.id && t.type === 'topup'
+        );
+        if (userTopups.length > 0) {
+          setLatestTopup(userTopups[0]);
+        }
+      },
+      (err) => console.warn('Transaction subscription error:', err)
+    );
+    return () => unsub();
+  }, [isOpen, customerProfile?.id]);
+
+  useEffect(() => {
+    if (!isOpen || !customerProfile?.id) return;
+    const isVerified = customerProfile.verified === true || String(customerProfile.verified) === 'true';
+    if (isVerified) {
+      const code = customerProfile.referralCode || '';
+      const isFiveCharHex = /^[0-9A-F]{5}$/.test(code);
+      if (!code || !isFiveCharHex) {
+        void (async () => {
+          try {
+            const result = await verifyServerCustomer(customerProfile.id);
+            if (result && result.referralCode) {
+              const updated = {
+                ...customerProfile,
+                referralCode: result.referralCode
+              };
+              StorageService.saveCustomerProfile(updated);
+              onProfileChange(updated);
+            }
+          } catch (e) {
+            console.warn('Failed to auto-generate referral code:', e);
+          }
+        })();
+      }
+    }
+  }, [isOpen, customerProfile, onProfileChange]);
 
   if (!isOpen) return null;
 
@@ -121,92 +195,82 @@ export const WalletModal: React.FC<WalletModalProps> = ({
             </div>
           )}
 
-          <div className="mt-3 flex items-center gap-1.5">
-            <span className="font-display font-black text-xl text-slate-900">{customerProfile.name}</span>
-            {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
-              <span className="inline-flex items-center justify-center bg-blue-500 text-white rounded-full w-4.5 h-4.5 text-[9px] font-black">✓</span>
-            )}
-          </div>
-          <span className="text-xs text-slate-500 font-bold">📞 {customerProfile.phone}</span>
+          {isEditingName ? (
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                type="text"
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                className="px-3 py-1 rounded-xl border border-slate-350 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:border-red-500 w-36 shadow-inner"
+                placeholder="Enter name"
+                maxLength={30}
+              />
+              <button
+                onClick={handleSaveName}
+                className="bg-green-600 hover:bg-green-500 text-white text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg transition-all"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setTempName(customerProfile.name || '');
+                  setIsEditingName(false);
+                }}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 flex items-center justify-center gap-1.5">
+              <span className="font-display font-black text-xl text-slate-900">{customerProfile.name}</span>
+              {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
+                <span className="inline-flex items-center justify-center bg-blue-500 text-white rounded-full w-4.5 h-4.5 text-[9px] font-black">✓</span>
+              )}
+              <button
+                onClick={() => setIsEditingName(true)}
+                className="text-slate-400 hover:text-red-500 text-xs ml-1 focus:outline-none cursor-pointer"
+                title="Edit Name"
+              >
+                ✏️
+              </button>
+            </div>
+          )}
+          <span className="text-xs text-slate-500 font-bold">📞 {customerProfile.phone?.split('-')[0]}</span>
+          {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
+            <div className="mt-3 grid grid-cols-2 gap-2 w-full text-center">
+              <div className="rounded-2xl border border-orange-150 bg-orange-50/20 p-2 shadow-sm">
+                <div className="text-[8px] font-black uppercase tracking-wider text-orange-850">Referrals</div>
+                <div className="mt-0.5 text-xs font-bold text-slate-800">{customerProfile.referralCount ?? 0} Count</div>
+              </div>
+              <div className="rounded-2xl border border-orange-150 bg-orange-50/20 p-2 shadow-sm">
+                <div className="text-[8px] font-black uppercase tracking-wider text-orange-850">Referral Earnings</div>
+                <div className="mt-0.5 text-xs font-bold text-emerald-600">Rs {(customerProfile.referralEarnings ?? 0).toFixed(0)}</div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-3xl p-5 mb-4 text-center shadow-inner">
           <div className="text-[10px] font-black uppercase tracking-widest text-orange-800 mb-1">Wallet Balance</div>
           <span className="text-3xl font-display font-black text-orange-950">Rs {(customerProfile.walletBalance ?? 0).toFixed(2)}</span>
           <div className="mt-2 text-[9px] font-black uppercase tracking-[0.2em] text-orange-850">
-            Reward Points: {customerProfile.rewardPoints ?? 0} pts (Rs {((customerProfile.rewardPoints ?? 0) * 0.1).toFixed(2)})
+            Coins: {customerProfile.rewardPoints ?? 0} (Rs {((customerProfile.rewardPoints ?? 0) * 0.1).toFixed(2)})
           </div>
         </div>
 
-        {/* OTP Verification Section */}
+        {/* Verification Status Section */}
         {!(customerProfile.verified === true || String(customerProfile.verified) === 'true') && (
-          <div className="mb-6 p-4 border border-orange-100 bg-orange-50/30 rounded-2xl">
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-550 mb-2">
-              Verify Your Account
+          <div className="mb-6 p-4 border border-orange-100 bg-orange-50/30 rounded-2xl text-center">
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-550 mb-1">
+              Account Verification Status
             </label>
-            <p className="text-[11px] text-slate-600 mb-3 font-medium">
-              Enter the 6-digit OTP shared by the Admin/Manager (via WhatsApp or SMS) to verify your profile.
-            </p>
-            <div className="relative flex items-center border border-slate-200 rounded-xl focus-within:border-red-500 bg-white p-1">
-              <input
-                type="text"
-                placeholder="Enter 6-digit OTP"
-                value={inputOtp}
-                onChange={(e) => setInputOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="w-full pl-3 pr-24 py-2 text-sm font-bold tracking-widest outline-none bg-transparent"
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  const otpVal = inputOtp.trim();
-                  if (otpVal.length !== 6) {
-                    showNotification({
-                      title: 'Invalid OTP',
-                      message: 'Please enter a 6-digit number.',
-                      type: 'warning'
-                    });
-                    return;
-                  }
-
-                  try {
-                    const result = await verifyServerCustomer(customerProfile.id, otpVal);
-                    if (result) {
-                      StorageService.markCustomerVerified(customerProfile.id);
-                      const updated = {
-                        ...customerProfile,
-                        verified: true,
-                        referralCode: result.referralCode,
-                        otp: undefined
-                      };
-                      StorageService.saveCustomerProfile(updated);
-                      onProfileChange(updated);
-
-                      showNotification({
-                        title: 'Account Verified!',
-                        message: `Your profile is verified. Code: ${result.referralCode ?? ''}`,
-                        type: 'success'
-                      });
-                      setInputOtp('');
-                    } else {
-                      showNotification({
-                        title: 'Verification Failed',
-                        message: 'Could not verify customer profile.',
-                        type: 'error'
-                      });
-                    }
-                  } catch (err: any) {
-                    showNotification({
-                      title: 'Verification Failed',
-                      message: err.message || 'OTP validation failed.',
-                      type: 'error'
-                    });
-                  }
-                }}
-                className="absolute right-1 top-1 bottom-1 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md"
-              >
-                Verify
-              </button>
+            <div className="inline-block rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2">
+              Pending Verification
             </div>
+            <p className="text-[11px] text-slate-600 font-medium">
+              Please contact the store manager or admin to verify your profile. Once verified, you will unlock referrals and rewards!
+            </p>
           </div>
         )}
 
@@ -371,58 +435,203 @@ export const WalletModal: React.FC<WalletModalProps> = ({
           </button>
         </div>
 
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 text-center">Share & Earn 100 Pts</div>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <button
-              type="button"
-              onClick={handleShare}
-              className="flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 px-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-700 transition-all active:scale-95"
-            >
-              Share App
-            </button>
-            <a
-              href="https://wa.me/917818958571?text=Hello%20Harinos%20Support"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 px-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-700 transition-all active:scale-95 text-center"
-            >
-              💬 Need Help
-            </a>
-          </div>
+        {/* Latest Top-up Status Tracker */}
+        {latestTopup && (
+          <div className="mt-4 p-4 border border-slate-200 bg-slate-50/50 rounded-2xl animate-fade-in text-left">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Latest Top-up Status</span>
+              <span className="text-[10px] font-black text-slate-400">Rs {latestTopup.amount.toFixed(2)}</span>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Step 1 */}
+              <div className="flex items-start gap-3">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500 text-white text-[10px] font-bold">✓</div>
+                <div>
+                  <div className="text-xs font-bold text-slate-800">1. Top-up Requested</div>
+                  <div className="text-[10px] text-slate-500">Submitted at {new Date(latestTopup.createdAt).toLocaleTimeString()}</div>
+                </div>
+              </div>
+              
+              {/* Step 2 */}
+              <div className="flex items-start gap-3">
+                <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                  latestTopup.status === 'completed' 
+                    ? 'bg-green-500 text-white' 
+                    : latestTopup.status === 'failed'
+                    ? 'bg-red-500 text-white'
+                    : 'bg-amber-500 text-white animate-pulse'
+                }`}>
+                  {latestTopup.status === 'completed' ? '✓' : latestTopup.status === 'failed' ? '✗' : '••'}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-800">
+                    2. Admin Approval {latestTopup.status === 'pending' && <span className="text-amber-500 text-[10px] font-bold animate-pulse"> (In Progress)</span>}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {latestTopup.status === 'completed' 
+                      ? 'Approved by Admin' 
+                      : latestTopup.status === 'failed'
+                      ? 'Rejected by Admin'
+                      : 'Estimated waiting time: 2 to 4 hours'}
+                  </div>
+                </div>
+              </div>
 
-          <div className={`grid gap-3 ${instagramUrl ? 'grid-cols-3' : 'grid-cols-2'}`}>
-            <button
-              type="button"
-              onClick={() => {
-                const shareText = `Order from Harino's Pizza: https://harinos.store`;
-                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`, '_blank');
-              }}
-              className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:bg-red-50/20 active:scale-95 transition-premium shadow-sm text-center"
-            >
-              <span className="text-xs text-[#25D366] font-bold">WhatsApp</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                window.open(`https://t.me/share/url?url=https://harinos.store`, '_blank');
-              }}
-              className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:bg-red-50/20 active:scale-95 transition-premium shadow-sm text-center"
-            >
-              <span className="text-xs text-[#0088cc] font-bold">Telegram</span>
-            </button>
-            {instagramUrl && (
+              {/* Step 3 */}
+              <div className="flex items-start gap-3">
+                <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                  latestTopup.status === 'completed' 
+                    ? 'bg-green-500 text-white' 
+                    : latestTopup.status === 'failed'
+                    ? 'bg-red-500 text-white'
+                    : 'bg-slate-200 text-slate-400'
+                }`}>
+                  {latestTopup.status === 'completed' ? '✓' : latestTopup.status === 'failed' ? '😢' : '3'}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-800">3. Result</div>
+                  <div className="text-[10px] text-slate-500">
+                    {latestTopup.status === 'completed' && (
+                      <span className="text-green-600 font-bold">🎉 Congratulations! Your top-up is approved and wallet balance updated!</span>
+                    )}
+                    {latestTopup.status === 'failed' && (
+                      <span className="text-red-500 font-bold">😢 Sorry! Your top-up request was rejected. Please contact support.</span>
+                    )}
+                    {latestTopup.status === 'pending' && 'Awaiting approval...'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* My Referral Code Section */}
+        {(customerProfile.verified === true || String(customerProfile.verified) === 'true') && customerProfile.referralCode && (
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 text-center">My Referral Code</div>
+            <div className="bg-slate-50 border border-slate-200 rounded-3xl p-4 text-center mb-4">
+              <div className="text-2xl font-display font-black text-slate-900 tracking-wider">
+                {customerProfile.referralCode}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const didCopy = await copyTextToClipboard(customerProfile.referralCode || '');
+                    if (didCopy) {
+                      showNotification({ title: 'Code Copied', message: 'Referral code copied to clipboard!', type: 'success' });
+                    }
+                  }}
+                  className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
+                >
+                  Copy Code
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards.`;
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({
+                          title: "Harino's Pizza Referral",
+                          text: shareText,
+                          url: 'https://harinos.store'
+                        });
+                      } catch (e) {}
+                    } else {
+                      const didCopy = await copyTextToClipboard(shareText);
+                      if (didCopy) {
+                        showNotification({ title: 'Share Copied', message: 'Referral message copied to clipboard.', type: 'success' });
+                      }
+                    }
+                  }}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
+                >
+                  Share Code
+                </button>
+              </div>
+            </div>
+
+            {/* Platform-specific quick shares */}
+            <div className="grid grid-cols-4 gap-2 text-center mb-4">
               <button
                 type="button"
                 onClick={() => {
-                  window.open(instagramUrl, '_blank');
+                  const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards.`;
+                  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`, '_blank');
                 }}
-                className="flex flex-col items-center p-3 rounded-2xl bg-white border border-slate-150 hover:bg-red-50/20 active:scale-95 transition-premium shadow-sm text-center"
+                className="py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[9px] font-black uppercase tracking-wider text-[#25D366] transition-all active:scale-95"
               >
-                <span className="text-xs text-[#E1306C] font-bold">Instagram</span>
+                WhatsApp
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => {
+                  const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards.`;
+                  window.open(`https://t.me/share/url?url=https://harinos.store&text=${encodeURIComponent(shareText)}`, '_blank');
+                }}
+                className="py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[9px] font-black uppercase tracking-wider text-[#0088cc] transition-all active:scale-95"
+              >
+                Telegram
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards.`;
+                  void copyTextToClipboard(shareText).then(() => {
+                    showNotification({
+                      title: 'Copy & Share',
+                      message: 'Message copied! Open Instagram to share.',
+                      type: 'success'
+                    });
+                    if (instagramUrl) {
+                      window.open(instagramUrl, '_blank');
+                    } else {
+                      window.open('https://instagram.com', '_blank');
+                    }
+                  });
+                }}
+                className="py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[9px] font-black uppercase tracking-wider text-[#E1306C] transition-all active:scale-95"
+              >
+                Instagram
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const shareText = `Use my referral code ${customerProfile.referralCode} while joining Harino's Pizza and earn rewards: https://harinos.store`;
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: "Harino's Pizza Referral",
+                        text: shareText,
+                        url: 'https://harinos.store'
+                      });
+                    } catch (e) {}
+                  } else {
+                    const didCopy = await copyTextToClipboard(shareText);
+                    if (didCopy) {
+                      showNotification({ title: 'Link Copied', message: 'Referral link copied to clipboard.', type: 'success' });
+                    }
+                  }
+                }}
+                className="py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[9px] font-black uppercase tracking-wider text-slate-700 transition-all active:scale-95"
+              >
+                Device
+              </button>
+            </div>
           </div>
+        )}
+
+        <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+          <a
+            href="https://wa.me/917818958571?text=Hello%20Harinos%20Support"
+            target="_blank"
+            rel="noreferrer"
+            className="flex-1 flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-700 transition-all active:scale-95 text-center"
+          >
+            💬 Need Help
+          </a>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { CustomerProfile } from '../types';
-import { initCustomerLogin, verifyCustomerLogin, registerCustomer } from '../services/orderApi';
+import { initCustomerLogin } from '../services/orderApi';
 
 const checkBusinessHours = (): boolean => {
   const now = new Date();
@@ -15,89 +15,50 @@ interface CustomerLoginModalProps {
   onAdminTrigger?: () => void;
 }
 
-type ModalMode = 'select' | 'register' | 'login' | 'otp';
-
 const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdminTrigger }) => {
-  const [mode, setMode] = useState<ModalMode>('select');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [customerId, setCustomerId] = useState('');
-  const [requestId, setRequestId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!checkBusinessHours()) {
-      setError("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
-    }
-  }, []);
-  
-  const logoHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Logo click counter for Admin Portal (9 rapid clicks)
+  const [logoClicks, setLogoClicks] = useState(0);
+  const lastLogoClickTime = useRef(0);
 
-  const startAdminHold = () => {
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
     if (!onAdminTrigger) return;
-    if (logoHoldTimer.current) clearTimeout(logoHoldTimer.current);
-    logoHoldTimer.current = setTimeout(() => {
-      navigator.vibrate?.(200);
-      onAdminTrigger();
-    }, 7000);
-  };
-
-  const cancelAdminHold = () => {
-    if (!logoHoldTimer.current) return;
-    clearTimeout(logoHoldTimer.current);
-    logoHoldTimer.current = null;
-  };
-
-  const handleRegister = async () => {
-    setError('');
-    
-    if (!checkBusinessHours()) {
-      setError("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
-      return;
-    }
-
-    const cleanPhone = phone.replace(/\D/g, '');
-    
-    if (!name.trim()) {
-      setError('Please enter your full name.');
-      return;
-    }
-    if (cleanPhone.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await registerCustomer(phone, name.trim());
-      if (result.success && result.customer) {
-        if (result.requestId) {
-          localStorage.setItem('harinos_pending_verification_request_id', result.requestId);
-        }
-        alert('Account created successfully! You can use the app immediately. Verification is pending.');
-        onSave(result.customer);
-      } else {
-        setError(result.message || 'Registration failed. Please try again.');
+    const now = Date.now();
+    if (now - lastLogoClickTime.current > 3000) {
+      setLogoClicks(1);
+    } else {
+      const nextCount = logoClicks + 1;
+      setLogoClicks(nextCount);
+      if (nextCount >= 9) {
+        setLogoClicks(0);
+        navigator.vibrate?.(200);
+        onAdminTrigger();
       }
-    } catch (err: any) {
-      setError(err.message || 'Network error creating account.');
-    } finally {
-      setLoading(false);
     }
+    lastLogoClickTime.current = now;
   };
 
-  const handleLogin = async () => {
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
-    
+
     if (!checkBusinessHours()) {
       setError("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
       return;
     }
 
     const cleanPhone = phone.replace(/\D/g, '');
-    
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      setError('Please enter your name.');
+      return;
+    }
     if (cleanPhone.length !== 10) {
       setError('Please enter a valid 10-digit mobile number.');
       return;
@@ -105,16 +66,15 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
 
     setLoading(true);
     try {
-      const result = await initCustomerLogin(phone, undefined, false);
+      const result = await initCustomerLogin(cleanPhone, trimmedName, true);
       
       if (result.success && result.customer) {
-        alert(result.message || 'Login successful!');
         onSave(result.customer);
       } else {
         setError(result.message || 'Login failed. Please try again.');
       }
     } catch (err: any) {
-      setError(err.message || 'Network error initiating login.');
+      setError(err.message || 'Network error logging in. Please check connection.');
     } finally {
       setLoading(false);
     }
@@ -122,150 +82,80 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
 
   return (
     <div className="fixed inset-0 z-[150] flex items-end justify-center bg-slate-950/80 p-0 backdrop-blur-md sm:items-center sm:p-4 animate-slide-up">
-      <div className="w-full max-w-md rounded-t-[2.5rem] bg-white p-6 shadow-2xl sm:rounded-[2.5rem] transition-all relative overflow-hidden border border-slate-100">
+      <div className="w-full max-w-md rounded-t-[2.5rem] bg-white p-8 shadow-2xl sm:rounded-[2.5rem] transition-all relative overflow-hidden border border-slate-100">
         
         {/* Brand Logo Header */}
-        <button
-          onPointerDown={startAdminHold}
-          onPointerUp={cancelAdminHold}
-          onPointerCancel={cancelAdminHold}
-          onPointerLeave={cancelAdminHold}
-          onContextMenu={(event) => event.preventDefault()}
-          className="mx-auto block select-none rounded-2xl cursor-pointer mt-2"
-          aria-label="Harino's"
-          style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
-        >
-          <img src="/icon-192.png" alt="Harino's" className="h-16 w-16 rounded-2xl shadow-xl hover:scale-105 transition-transform" />
-        </button>
+        <div className="flex flex-col items-center">
+          <button
+            onClick={handleLogoClick}
+            onContextMenu={(event) => event.preventDefault()}
+            className="select-none rounded-2xl cursor-pointer mt-2 focus:outline-none"
+            aria-label="Harino's Logo"
+            style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+          >
+            <img 
+              src="/icon-192.png" 
+              alt="Harino's" 
+              className="h-20 w-20 rounded-2xl shadow-xl hover:scale-105 transition-transform" 
+            />
+          </button>
 
-        <h2 className="mt-4 text-center font-display text-3xl font-black tracking-tight text-slate-900">
-          {mode === 'select' && "Welcome to Harino's"}
-          {mode === 'register' && "Create Account"}
-          {mode === 'login' && "Welcome Back"}
-          {mode === 'otp' && "Verify Mobile"}
-        </h2>
-        
-        <p className="mt-2 text-center text-xs leading-5 text-slate-500 font-medium px-4">
-          {mode === 'select' && "Enjoy fresh, hot, custom-made pizzas delivered right to your door. Choose an option to get started."}
-          {mode === 'register' && "Enter your details to create an account and access your pizza wallet."}
-          {mode === 'login' && "Enter your registered mobile number to log into your account."}
-          {mode === 'otp' && "Verification request submitted. Please wait while we verify your number. Once you receive your OTP via WhatsApp, enter it below."}
-        </p>
+          <h2 className="mt-5 text-center font-display text-3xl font-black tracking-tight text-slate-900">
+            Welcome to Harino's Pizza
+          </h2>
+          
+          <p className="mt-2 text-center text-xs leading-5 text-slate-500 font-medium px-4">
+            Enjoy fresh, hot, custom-made pizzas delivered right to your door. Enter your name and phone number to start ordering.
+          </p>
+        </div>
 
         {error && (
-          <div className="mt-4 mx-2 p-3 bg-red-50 border border-red-150 rounded-2xl text-xs font-bold text-red-700 text-center animate-pulse">
+          <div className="mt-4 p-3 bg-red-50 border border-red-150 rounded-2xl text-xs font-bold text-red-700 text-center animate-pulse">
             ⚠️ {error}
           </div>
         )}
 
-        {/* 1. SELECTION MODE */}
-        {mode === 'select' && (
-          <div className="mt-6 space-y-3.5 px-2">
-            <button
-              onClick={() => setMode('register')}
-              className="w-full rounded-2xl bg-red-650 bg-red-600 hover:bg-red-500 text-white py-4 text-[11px] font-black uppercase tracking-widest transition-premium active:scale-95 shadow-lg shadow-red-200"
-            >
-              🆕 Create Account
-            </button>
-            <button
-              onClick={() => setMode('login')}
-              className="w-full rounded-2xl bg-slate-900 hover:bg-slate-800 text-white py-4 text-[11px] font-black uppercase tracking-widest transition-premium active:scale-95 shadow-lg shadow-slate-900/10"
-            >
-              🔑 Login to Existing Account
-            </button>
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 ml-1">
+              Your Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Enter your name"
+              disabled={loading}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
+              required
+            />
           </div>
-        )}
 
-        {/* 2. REGISTRATION MODE */}
-        {mode === 'register' && (
-          <div className="mt-6 space-y-4">
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 ml-1">Full Name</label>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Enter your name"
-                disabled={loading}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 ml-1">Mobile Number</label>
-              <input
-                value={phone}
-                onChange={(event) => setPhone(event.target.value.replace(/[^\d+ ]/g, ''))}
-                type="tel"
-                inputMode="tel"
-                placeholder="Enter 10-digit number"
-                disabled={loading}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm"
-              />
-            </div>
-            
-            <button
-              onClick={handleRegister}
-              disabled={loading || !checkBusinessHours()}
-              className="w-full rounded-2xl bg-red-655 bg-red-600 hover:bg-red-500 text-white py-4 text-[11px] font-black uppercase tracking-widest transition-premium active:scale-95 shadow-lg shadow-red-200 disabled:opacity-50"
-            >
-              {loading ? "Creating..." : "Create Account"}
-            </button>
-
-            <div className="text-center mt-4">
-              <button
-                onClick={() => { setMode('login'); setError(''); }}
-                className="text-[10px] font-black uppercase tracking-wider text-slate-450 hover:text-red-600 transition-colors"
-              >
-                Already Have An Account? Login
-              </button>
-            </div>
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 ml-1">
+              Mobile Number
+            </label>
+            <input
+              type="tel"
+              inputMode="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value.replace(/[^\d]/g, ''))}
+              placeholder="Enter 10-digit mobile number"
+              disabled={loading}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
+              required
+            />
           </div>
-        )}
-
-        {/* 3. LOGIN MODE */}
-        {mode === 'login' && (
-          <div className="mt-6 space-y-4">
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 ml-1">Mobile Number</label>
-              <input
-                value={phone}
-                onChange={(event) => setPhone(event.target.value.replace(/[^\d+ ]/g, ''))}
-                type="tel"
-                inputMode="tel"
-                placeholder="Enter 10-digit number"
-                disabled={loading}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm"
-              />
-            </div>
-            
-            <button
-              onClick={handleLogin}
-              disabled={loading || !checkBusinessHours()}
-              className="w-full rounded-2xl bg-red-655 bg-red-600 hover:bg-red-500 text-white py-4 text-[11px] font-black uppercase tracking-widest transition-premium active:scale-95 shadow-lg shadow-red-200 disabled:opacity-50"
-            >
-              {loading ? "Submitting..." : "Continue"}
-            </button>
-
-            <div className="text-center mt-4">
-              <button
-                onClick={() => { setMode('register'); setError(''); }}
-                className="text-[10px] font-black uppercase tracking-wider text-slate-455 hover:text-red-600 transition-colors"
-              >
-                New Customer? Create Account
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Cancel / Go Back to Select Screen (Only visible if not in select screen) */}
-        {mode !== 'select' && (
+          
           <button
-            onClick={() => { setMode('select'); setError(''); }}
+            type="submit"
             disabled={loading}
-            className="absolute top-4 right-4 w-8 h-8 rounded-full border border-slate-100 bg-slate-50 flex items-center justify-center text-slate-450 font-bold hover:text-red-500 hover:bg-white transition-colors"
+            className="w-full mt-2 rounded-2xl bg-red-650 hover:bg-red-500 text-white py-4 text-[11px] font-black uppercase tracking-widest transition-premium active:scale-95 shadow-lg shadow-red-200 disabled:opacity-50"
           >
-            &times;
+            {loading ? "Entering..." : "🍕 Let's Pizza"}
           </button>
-        )}
+        </form>
+        
       </div>
     </div>
   );

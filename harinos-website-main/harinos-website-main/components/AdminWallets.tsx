@@ -39,11 +39,11 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
   const [mergePrimaryId, setMergePrimaryId] = useState<Record<string, string>>({});
 
   const normalizePhoneForWhatsApp = (phone: string): string => {
-    const digits = phone.replace(/\D/g, '');
+    const digits = (phone || '').replace(/\D/g, '');
     return digits.length === 10 ? `91${digits}` : digits;
   };
 
-  const cleanPhoneStr = (p: string) => p.replace(/\D/g, '');
+  const cleanPhoneStr = (p: string) => (p || '').split('-')[0].replace(/\D/g, '');
 
   // Group customers by cleaned phone number to find duplicate profiles
   const duplicatesGrouped = React.useMemo(() => {
@@ -97,14 +97,18 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
   const filteredCustomers = customers.filter((cust) => {
     const query = walletSearchQuery.toLowerCase().trim();
     if (!query) return true;
-    return cust.name.toLowerCase().includes(query) || cust.phone.includes(query);
+    const nameStr = cust.name || '';
+    const phoneStr = cust.phone || '';
+    return nameStr.toLowerCase().includes(query) || phoneStr.includes(query);
   });
 
   const pendingTransactions = transactions.filter((tx) => {
     if (tx.status !== 'pending') return false;
     const query = walletSearchQuery.toLowerCase().trim();
     if (!query) return true;
-    return tx.customerName.toLowerCase().includes(query) || tx.customerPhone.includes(query);
+    const nameStr = tx.customerName || '';
+    const phoneStr = tx.customerPhone || '';
+    return nameStr.toLowerCase().includes(query) || phoneStr.includes(query);
   });
 
   return (
@@ -202,7 +206,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
                   try {
                     const allCusts = await getServerCustomers();
-                    const cleanPhone = (p: string) => p.replace(/\D/g, '');
+                    const cleanPhone = (p: string) => (p || '').split('-')[0].replace(/\D/g, '');
                     const duplicate = allCusts.find((c) => cleanPhone(c.phone) === cleanPhone(phoneVal));
                     if (duplicate) {
                       alert(`A customer with phone number ${phoneVal} already exists.`);
@@ -211,7 +215,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
                     const referralCode = Math.floor(65536 + Math.random() * 983039).toString(16).toUpperCase();
                     const newCust: CustomerProfile = {
-                      id: `cust_${Date.now()}`,
+                      id: phoneVal,
                       name: nameVal,
                       phone: phoneVal,
                       email: emailVal || undefined,
@@ -298,7 +302,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
 
                   try {
                     const allCusts = await getServerCustomers();
-                    const cleanPhone = (p: string) => p.replace(/\D/g, '');
+                    const cleanPhone = (p: string) => (p || '').split('-')[0].replace(/\D/g, '');
                     const duplicate = allCusts.find((c) => c.id !== editingCustomer.id && cleanPhone(c.phone) === cleanPhone(phoneVal));
                     if (duplicate) {
                       alert(`Another customer with phone number ${phoneVal} already exists.`);
@@ -367,13 +371,18 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                     <span className={`rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${verified ? 'bg-green-500/20 text-green-300 border border-green-500/20' : 'bg-amber-500/20 text-amber-300 border border-amber-500/20'}`}>
                       {verified ? 'Verified' : 'Pending'}
                     </span>
+                    {customer.legacyUser && (
+                      <span className="rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest bg-purple-500/25 text-purple-300 border border-purple-500/30 animate-pulse">
+                        Legacy User (Previous Version)
+                      </span>
+                    )}
                     {customer.status === 'blocked' && (
                       <span className="rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest bg-red-500/20 text-red-300 border border-red-500/20">
                         Blocked
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400 mt-1 font-semibold">Ph: {customer.phone} {customer.email ? `• ${customer.email}` : ''}</div>
+                  <div className="text-xs text-slate-400 mt-1 font-semibold">Ph: {customer.phone?.split('-')[0]} {customer.email ? `• ${customer.email}` : ''}</div>
                   {customer.referralCode && (
                     <div className="text-[10px] text-red-400 mt-1 font-bold">Referral Code: {customer.referralCode}</div>
                   )}
@@ -393,7 +402,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                       }}
                       className="rounded-xl bg-red-650 hover:bg-red-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-premium active:scale-95 cursor-pointer animate-fade-in"
                     >
-                      Verify
+                      Verify {customer.legacyUser ? "Legacy User" : ""}
                     </button>
                   )}
                   {session.role === 'admin' && (
@@ -574,50 +583,56 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                 <div className="mt-1.5 text-xs font-black text-amber-300">Amount: Rs {tx.amount}</div>
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={async () => {
-                    if (!confirm(`Are you sure you want to APPROVE this wallet top-up request of Rs ${tx.amount} for ${tx.customerName}?`)) {
-                      return;
-                    }
-                    try {
-                      const freshCustomers = await getServerCustomers();
-                      const customer = freshCustomers.find((c) => c.id === tx.customerId);
-                      if (!customer) {
-                        alert('Customer profile not found on server.');
-                        return;
-                      }
-                      const updatedTx: WalletTransaction = { ...tx, status: 'completed' };
-                      const updatedCustomer = { ...customer, walletBalance: (customer.walletBalance ?? 0) + tx.amount };
-                      await saveWalletTransactionToServer(updatedTx);
-                      await saveCustomerToServer(updatedCustomer);
-                      alert(`Approved top-up of Rs ${tx.amount} for ${tx.customerName}`);
-                      onRefresh();
-                    } catch (err: any) {
-                      alert(err.message || 'Failed to approve transaction.');
-                    }
-                  }}
-                  className="rounded-xl bg-green-700 hover:bg-green-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      if (!confirm(`Are you sure you want to REJECT this top-up request of Rs ${tx.amount} for ${tx.customerName}?`)) {
-                        return;
-                      }
-                      const updatedTx: WalletTransaction = { ...tx, status: 'failed' };
-                      await saveWalletTransactionToServer(updatedTx);
-                      alert(`Rejected top-up request of Rs ${tx.amount} for ${tx.customerName}`);
-                      onRefresh();
-                    } catch (err: any) {
-                      alert(err.message || 'Failed to reject transaction.');
-                    }
-                  }}
-                  className="rounded-xl bg-red-650 hover:bg-red-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
-                >
-                  Reject
-                </button>
+                {session.role === 'admin' ? (
+                  <>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Are you sure you want to APPROVE this wallet top-up request of Rs ${tx.amount} for ${tx.customerName}?`)) {
+                          return;
+                        }
+                        try {
+                          const freshCustomers = await getServerCustomers();
+                          const customer = freshCustomers.find((c) => c.id === tx.customerId);
+                          if (!customer) {
+                            alert('Customer profile not found on server.');
+                            return;
+                          }
+                          const updatedTx: WalletTransaction = { ...tx, status: 'completed' };
+                          const updatedCustomer = { ...customer, walletBalance: (customer.walletBalance ?? 0) + tx.amount };
+                          await saveWalletTransactionToServer(updatedTx);
+                          await saveCustomerToServer(updatedCustomer);
+                          alert(`Approved top-up of Rs ${tx.amount} for ${tx.customerName}`);
+                          onRefresh();
+                        } catch (err: any) {
+                          alert(err.message || 'Failed to approve transaction.');
+                        }
+                      }}
+                      className="rounded-xl bg-green-700 hover:bg-green-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          if (!confirm(`Are you sure you want to REJECT this top-up request of Rs ${tx.amount} for ${tx.customerName}?`)) {
+                            return;
+                          }
+                          const updatedTx: WalletTransaction = { ...tx, status: 'failed' };
+                          await saveWalletTransactionToServer(updatedTx);
+                          alert(`Rejected top-up request of Rs ${tx.amount} for ${tx.customerName}`);
+                          onRefresh();
+                        } catch (err: any) {
+                          alert(err.message || 'Failed to reject transaction.');
+                        }
+                      }}
+                      className="rounded-xl bg-red-650 hover:bg-red-600 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition-premium active:scale-95"
+                    >
+                      Reject
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Awaiting Admin Approval</span>
+                )}
               </div>
             </div>
           ))}
@@ -635,7 +650,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
             <div key={cust.id} className="rounded-2xl bg-white/[0.05] p-4 flex flex-col justify-between border border-white/5 shadow-2xl">
               <div>
                 <div className="font-bold text-lg text-white">{cust.name}</div>
-                <div className="text-xs text-slate-400 font-semibold">Ph: {cust.phone}</div>
+                <div className="text-xs text-slate-400 font-semibold">Ph: {cust.phone?.split('-')[0]}</div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                   <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 text-center text-orange-200 font-bold">
                     👛 Rs {(cust.walletBalance ?? 0).toFixed(0)}

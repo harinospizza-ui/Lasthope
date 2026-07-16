@@ -21,7 +21,7 @@ export const OUTLET_LOCATIONS: OutletConfig[] = [
     longitude: 77.675534,
 
     // Delivery Rules
-    deliveryRadiusKm: 5,
+    deliveryRadiusKm: 7,
     freeDeliveryRadiusKm: 3,
     freeDeliveryMinimumOrder: 150,
     minimumOrderIncrementPerKm: 100,
@@ -321,134 +321,122 @@ export const MENU_ITEMS: MenuItem[] = [
   {
     id: 'm1_v',
     name: "Veg Steam Momos",
-    description: "Delicate steamed veggie dumplings.",
-    price: 40,
+    description: "Delicate steamed veggie dumplings (Full Plate).",
+    price: 60,
     category: Category.MOMOS,
     image: "/images/steammomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 40 }, { label: 'Full', price: 60 }]
+    available: true
   },
   {
     id: 'm1_s',
     name: "Soya Steam Momos",
-    description: "Steamed momos with protein-rich soya filling.",
-    price: 30,
+    description: "Steamed momos with protein-rich soya filling (Full Plate).",
+    price: 50,
     category: Category.MOMOS,
     image: "/images/steammomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 30 }, { label: 'Full', price: 50 }]
+    available: true
   },
   {
     id: 'm2_v',
     name: "Veg Fried Momos",
-    description: "Crispy fried vegetable dumplings.",
-    price: 40,
+    description: "Crispy fried vegetable dumplings (Full Plate).",
+    price: 60,
     category: Category.MOMOS,
     image: "/images/friedmomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 40 }, { label: 'Full', price: 60 }]
+    available: true
   },
   {
     id: 'm2_s',
     name: "Soya Fried Momos",
-    description: "Golden fried soya dumplings.",
-    price: 30,
+    description: "Golden fried soya dumplings (Full Plate).",
+    price: 50,
     category: Category.MOMOS,
     image: "/images/friedmomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 30 }, { label: 'Full', price: 50 }]
+    available: true
   },
   {
     id: 'm3_v',
     name: "Veg Tandoori Momos",
-    description: "Grilled veg momos in tandoori marinade.",
-    price: 50,
+    description: "Grilled veg momos in tandoori marinade (Full Plate).",
+    price: 70,
     category: Category.MOMOS,
     image: "/images/tandurimomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 50 }, { label: 'Full', price: 70 }]
+    available: true
   },
   {
     id: 'm3_s',
     name: "Soya Tandoori Momos",
-    description: "Smoky tandoori soya momos.",
-    price: 40,
+    description: "Smoky tandoori soya momos (Full Plate).",
+    price: 60,
     category: Category.MOMOS,
     image: "/images/tandurimomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 40 }, { label: 'Full', price: 60 }]
+    available: true
   },
   {
     id: 'm4_v',
     name: "Veg Cheese Momos",
-    description: "Veg momos with a liquid cheese heart.",
-    price: 70,
+    description: "Veg momos with a liquid cheese heart (Full Plate).",
+    price: 100,
     category: Category.MOMOS,
     image: "/images/cheesemomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 70 }, { label: 'Full', price: 100 }]
+    available: true
   },
   {
     id: 'm4_s',
     name: "Soya Cheese Momos",
-    description: "Soya momos stuffed with cheese.",
-    price: 60,
+    description: "Soya momos stuffed with cheese (Full Plate).",
+    price: 90,
     category: Category.MOMOS,
     image: "/images/cheesemomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 60 }, { label: 'Full', price: 90 }]
+    available: true
   },
   {
     id: 'm5_v',
     name: "Veg Crunchy Momos",
-    description: "Extra crispy breaded veg momos.",
-    price: 70,
+    description: "Extra crispy breaded veg momos (Full Plate).",
+    price: 100,
     category: Category.MOMOS,
     image: "/images/crunchymomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 70 }, { label: 'Full', price: 100 }]
+    available: true
   },
   {
     id: 'm5_s',
     name: "Soya Crunchy Momos",
-    description: "Breaded crunchy soya dumplings.",
-    price: 60,
+    description: "Breaded crunchy soya dumplings (Full Plate).",
+    price: 90,
     category: Category.MOMOS,
     image: "/images/crunchymomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 60 }, { label: 'Full', price: 90 }]
+    available: true
   },
   {
     id: 'm6_v',
     name: "Veg Gravy Momos",
-    description: "Veg momos tossed in spicy house gravy.",
-    price: 80,
+    description: "Veg momos tossed in spicy house gravy (Full Plate).",
+    price: 120,
     category: Category.MOMOS,
     image: "/images/gravymomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 80 }, { label: 'Full', price: 120 }]
+    available: true
   },
   {
     id: 'm6_s',
     name: "Soya Gravy Momos",
-    description: "Soya momos served in rich spicy gravy.",
-    price: 70,
+    description: "Soya momos served in rich spicy gravy (Full Plate).",
+    price: 110,
     category: Category.MOMOS,
     image: "/images/gravymomos.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: 'Half', price: 70 }, { label: 'Full', price: 110 }]
+    available: true
   },
 
   // --- FRIES ---
@@ -508,30 +496,27 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'b_cv', name: "Veg Carnival Burger", description: "Jumbo burger loaded with everything.", price: 90, category: Category.BURGERS, image: "/images/vegcar.jpeg", vegetarian: true, available: true, popular: true },
 
   // --- SIDE ORDERS & SNACKS ---
-  { id: 's_cl', name: "Choco Lava Cake", description: "Molten chocolate center cake.", price: 60, category: Category.SIDES, image: "/images/chocolava.jpeg", vegetarian: true, available: true },
-  { id: 's_gb', name: "Garlic Bread", description: "Freshly baked garlic butter bread.", price: 80, category: Category.SIDES, image: "/images/garlicbread.jpeg", vegetarian: true, available: true },
+  { id: 's_cl', name: "Chocolava Cake", description: "Molten chocolate center cake.", price: 60, category: Category.SIDES, image: "/images/chocolava.jpeg", vegetarian: true, available: true },
   { id: 's_sg', name: "Stuffed Garlic Bread", description: "Loaded with cheese, corn, and onion.", price: 120, category: Category.SIDES, image: "/images/stuffed.jpeg", vegetarian: true, available: true },
   {
     id: 's_zp',
-    name: "Zingi Parcel",
-    description: "Paneer stuffed savory parcels.",
-    price: 70,
+    name: "Zingli Parcel (4 Pieces)",
+    description: "Paneer stuffed savory parcels (4 pieces).",
+    price: 130,
     category: Category.SIDES,
     image: "/images/zingi.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: '2-Pieces', price: 70 }, { label: '4-Pieces', price: 130 }]
+    available: true
   },
   {
     id: 's_cz',
-    name: "Calzone",
-    description: "Folded pizza pocket stuffed with toppings.",
-    price: 70,
+    name: "Calzone (2 Pieces)",
+    description: "Folded pizza pocket stuffed with toppings (2 pieces).",
+    price: 130,
     category: Category.SIDES,
     image: "/images/calzone.jpeg",
     vegetarian: true,
-    available: true,
-    sizes: [{ label: '1-Piece', price: 70 }, { label: '2-Pieces', price: 130 }]
+    available: true
   },
   { id: 's_cp', name: "Chilli Potato", description: "Crispy honey chilli glazed potato fingers.", price: 90, category: Category.SIDES, image: "/images/chillipotato.jpeg", vegetarian: true, available: true },
   { id: 's_hp', name: "Honey Chilli Potato", description: "Sweet and spicy crispy potato snack.", price: 100, category: Category.SIDES, image: "/images/chillipotato.jpeg", vegetarian: true, available: true },

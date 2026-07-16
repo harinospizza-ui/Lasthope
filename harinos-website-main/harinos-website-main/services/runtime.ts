@@ -49,28 +49,11 @@ export const registerFreshRuntime = async (): Promise<void> => {
   }
 
   try {
-    const registration = await navigator.serviceWorker.register('/sw.js', {
-      scope: '/',
-      updateViaCache: 'none',
-    });
-
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      reloadOnceForKey(CONTROLLER_RELOAD_KEY, __APP_VERSION__);
-    });
-
-    await registration.update().catch((error) => {
-      console.warn('Service worker update skipped:', error);
-    });
-
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') {
-        return;
-      }
-
-      void registration.update().catch(() => undefined);
-      void ensureLatestCode();
-    });
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations) {
+      await registration.unregister();
+    }
   } catch (error) {
-    console.warn('Service worker registration skipped:', error);
+    console.warn('Service worker unregistration failed:', error);
   }
 };

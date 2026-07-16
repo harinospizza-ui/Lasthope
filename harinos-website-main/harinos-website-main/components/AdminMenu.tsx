@@ -102,8 +102,27 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<Category>(Category.PIZZA);
   const [newItemImage, setNewItemImage] = useState('');
+  const sundayDhamakaCount = React.useMemo(() => {
+    if (!orders) return 0;
+    return orders.filter((order) =>
+      order.items.some((item) => item.appliedOfferId === 'offer-sunday-dhamaka' || item.sourceOfferId === 'offer-sunday-dhamaka')
+    ).length;
+  }, [orders]);
   const [newItemSpicy, setNewItemSpicy] = useState(false);
   const [newItemPopular, setNewItemPopular] = useState(false);
+
+  // Sort menuItems: by Category order first, then by Price ascending
+  const sortedMenuItems = React.useMemo(() => {
+    const categoryOrder = [Category.PIZZA, Category.BURGERS, Category.FRIES, Category.MOMOS, Category.SIDES, Category.BEVERAGES];
+    return [...menuItems].sort((a, b) => {
+      const idxA = categoryOrder.indexOf(a.category);
+      const idxB = categoryOrder.indexOf(b.category);
+      if (idxA !== idxB) {
+        return idxA - idxB;
+      }
+      return a.price - b.price;
+    });
+  }, [menuItems]);
 
   // Operations
   const toggleItemAvailability = async (item: MenuItem) => {
@@ -160,116 +179,117 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
             </ul>
           </div>
         )}
-        
-        {/* Add Menu Item Panel */}
-        <div className="mb-6 rounded-3xl border border-white/10 bg-white/[0.02] p-5 shadow-lg">
-          <button
-            onClick={() => setIsAddingItem(!isAddingItem)}
-            className="w-full text-left font-display font-bold text-lg flex justify-between items-center outline-none"
-          >
-            <span>➕ Add New Menu Item</span>
-            <span className="text-slate-400">{isAddingItem ? 'Close' : 'Expand'}</span>
-          </button>
-          
-          {isAddingItem && (
-            <div className="mt-5 space-y-4 max-w-xl">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Item ID (must start with p1_ for pizzas)</label>
-                  <input value={newItemId} onChange={e => setNewItemId(e.target.value)} placeholder="p1_onion" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
+             {/* Add Menu Item Panel */}
+        {session.role === 'admin' && (
+          <div className="mb-6 rounded-3xl border border-white/10 bg-white/[0.02] p-5 shadow-lg">
+            <button
+              onClick={() => setIsAddingItem(!isAddingItem)}
+              className="w-full text-left font-display font-bold text-lg flex justify-between items-center outline-none"
+            >
+              <span>➕ Add New Menu Item</span>
+              <span className="text-slate-400">{isAddingItem ? 'Close' : 'Expand'}</span>
+            </button>
+            
+            {isAddingItem && (
+              <div className="mt-5 space-y-4 max-w-xl">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Item ID (must start with p1_ for pizzas)</label>
+                    <input value={newItemId} onChange={e => setNewItemId(e.target.value)} placeholder="p1_onion" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-550 mb-2">Item Name</label>
+                    <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Double Cheese Margherita" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
+                  </div>
                 </div>
+
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Item Name</label>
-                  <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Double Cheese Margherita" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Description</label>
+                  <textarea value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} placeholder="Double loaded cheese with herbs" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500 h-20" />
                 </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Category</label>
+                    <select value={newItemCategory} onChange={e => setNewItemCategory(e.target.value as any)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500">
+                      {Object.values(Category).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Base Price (Rs)</label>
+                    <input type="number" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} placeholder="199" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Image URL</label>
+                    <input value={newItemImage} onChange={e => setNewItemImage(e.target.value)} placeholder="/icon-192.png" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
+                  </div>
+                </div>
+
+                <div className="flex gap-6 pt-2">
+                  <label className="flex items-center gap-2 font-bold cursor-pointer">
+                    <input type="checkbox" checked={newItemSpicy} onChange={e => setNewItemSpicy(e.target.checked)} className="w-4 h-4 rounded text-red-600 focus:ring-0 bg-transparent border-white/20" />
+                    <span>Spicy</span>
+                  </label>
+                  <label className="flex items-center gap-2 font-bold cursor-pointer">
+                    <input type="checkbox" checked={newItemPopular} onChange={e => setNewItemPopular(e.target.checked)} className="w-4 h-4 rounded text-red-600 focus:ring-0 bg-transparent border-white/20" />
+                    <span>Popular / Bestseller</span>
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!newItemId.trim() || !newItemName.trim() || !newItemPrice.trim()) {
+                      alert('Please fill out Name, ID and Base Price.');
+                      return;
+                    }
+                    
+                    const priceNum = parseFloat(newItemPrice);
+                    const sizes = newItemCategory === Category.PIZZA ? [
+                      { label: 'Regular', price: priceNum },
+                      { label: 'Medium', price: priceNum + 100 },
+                      { label: 'Large', price: priceNum + 200 }
+                    ] : undefined;
+
+                    const item: MenuItem = {
+                      id: newItemId,
+                      name: newItemName,
+                      description: newItemDesc,
+                      price: priceNum,
+                      category: newItemCategory,
+                      image: newItemImage || '/icon-192.png',
+                      vegetarian: true,
+                      spicy: newItemSpicy,
+                      popular: newItemPopular,
+                      available: true,
+                      sizes
+                    };
+
+                    try {
+                      await saveMenuItemToServer(item);
+                      alert('Menu item added successfully.');
+                      setNewItemId('');
+                      setNewItemName('');
+                      setNewItemDesc('');
+                      setNewItemPrice('');
+                      setNewItemImage('');
+                      setIsAddingItem(false);
+                      onRefresh();
+                    } catch (err) {
+                      alert('Failed to save menu item.');
+                    }
+                  }}
+                  className="bg-red-650 hover:bg-red-500 text-white rounded-2xl px-6 py-3.5 text-xs font-black uppercase tracking-widest transition-premium"
+                >
+                  Save Item
+                </button>
               </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Description</label>
-                <textarea value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} placeholder="Double loaded cheese with herbs" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500 h-20" />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Category</label>
-                  <select value={newItemCategory} onChange={e => setNewItemCategory(e.target.value as any)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500">
-                    {Object.values(Category).map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Base Price (Rs)</label>
-                  <input type="number" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} placeholder="199" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Image URL</label>
-                  <input value={newItemImage} onChange={e => setNewItemImage(e.target.value)} placeholder="/icon-192.png" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
-                </div>
-              </div>
-
-              <div className="flex gap-6 pt-2">
-                <label className="flex items-center gap-2 font-bold cursor-pointer">
-                  <input type="checkbox" checked={newItemSpicy} onChange={e => setNewItemSpicy(e.target.checked)} className="w-4 h-4 rounded text-red-600 focus:ring-0 bg-transparent border-white/20" />
-                  <span>Spicy</span>
-                </label>
-                <label className="flex items-center gap-2 font-bold cursor-pointer">
-                  <input type="checkbox" checked={newItemPopular} onChange={e => setNewItemPopular(e.target.checked)} className="w-4 h-4 rounded text-red-600 focus:ring-0 bg-transparent border-white/20" />
-                  <span>Popular / Bestseller</span>
-                </label>
-              </div>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!newItemId.trim() || !newItemName.trim() || !newItemPrice.trim()) {
-                    alert('Please fill out Name, ID and Base Price.');
-                    return;
-                  }
-                  
-                  const priceNum = parseFloat(newItemPrice);
-                  const sizes = newItemCategory === Category.PIZZA ? [
-                    { label: 'Regular', price: priceNum },
-                    { label: 'Medium', price: priceNum + 100 },
-                    { label: 'Large', price: priceNum + 200 }
-                  ] : undefined;
-
-                  const item: MenuItem = {
-                    id: newItemId,
-                    name: newItemName,
-                    description: newItemDesc,
-                    price: priceNum,
-                    category: newItemCategory,
-                    image: newItemImage || '/icon-192.png',
-                    vegetarian: true,
-                    spicy: newItemSpicy,
-                    popular: newItemPopular,
-                    available: true,
-                    sizes
-                  };
-
-                  try {
-                    await saveMenuItemToServer(item);
-                    alert('Menu item added successfully.');
-                    setNewItemId('');
-                    setNewItemName('');
-                    setNewItemDesc('');
-                    setNewItemPrice('');
-                    setNewItemImage('');
-                    setIsAddingItem(false);
-                    onRefresh();
-                  } catch (err) {
-                    alert('Failed to save menu item.');
-                  }
-                }}
-                className="bg-red-650 hover:bg-red-500 text-white rounded-2xl px-6 py-3.5 text-xs font-black uppercase tracking-widest transition-premium"
-              >
-                Save Item
-              </button>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2">
-          {menuItems.map((item) => (
+          {sortedMenuItems.map((item) => (
             <div key={item.id} className={`rounded-2xl p-4 flex gap-4 shadow-2xl glass-card transition-premium ${!item.available ? 'opacity-50 grayscale-[30%] border border-red-500/20' : ''}`}>
               <img src={item.image} className="w-20 h-20 rounded-xl object-cover" onError={(e) => { e.currentTarget.src = '/icon-192.png'; }} />
               <div className="flex-1 flex flex-col justify-between">
@@ -289,9 +309,10 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                             <span className="text-slate-500 font-bold">Rs</span>
                             <input
                               type="number"
+                              disabled={session.role !== 'admin'}
                               defaultValue={sz.price}
                               onBlur={(e) => updateSizePrice(item, idx, parseFloat(e.target.value))}
-                              className="w-16 bg-slate-900 border border-white/10 rounded px-1.5 py-0.5 text-right text-white font-bold outline-none focus:border-red-500/80 transition-premium"
+                              className="w-16 bg-slate-900 border border-white/10 rounded px-1.5 py-0.5 text-right text-white font-bold outline-none focus:border-red-500/80 transition-premium disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                           </div>
                         </div>
@@ -304,9 +325,10 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                         <span className="text-slate-500 font-bold">Rs</span>
                         <input
                           type="number"
+                          disabled={session.role !== 'admin'}
                           defaultValue={item.price}
                           onBlur={(e) => updateItemPrice(item, parseFloat(e.target.value))}
-                          className="w-16 bg-slate-900 border border-white/10 rounded px-1.5 py-0.5 text-right text-white font-bold outline-none focus:border-red-500/80 transition-premium"
+                          className="w-16 bg-slate-900 border border-white/10 rounded px-1.5 py-0.5 text-right text-white font-bold outline-none focus:border-red-500/80 transition-premium disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </div>
                     </div>
@@ -315,8 +337,11 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 
                 <div className="mt-3 flex justify-between items-center">
                   <button
+                    disabled={session.role !== 'admin'}
                     onClick={() => toggleItemAvailability(item)}
                     className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
+                      session.role !== 'admin' ? 'opacity-65 cursor-not-allowed' : ''
+                    } ${
                       item.available ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/35' : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/35'
                     }`}
                   >
@@ -564,8 +589,11 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-lg font-display font-bold">{outlet.name}</span>
                   <button
+                    disabled={session.role !== 'admin'}
                     onClick={() => toggleOutletEnabled(outlet)}
                     className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
+                      session.role !== 'admin' ? 'opacity-65 cursor-not-allowed' : ''
+                    } ${
                       outlet.enabled ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/45 animate-fade-in' : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/45 animate-fade-in'
                     }`}
                   >
@@ -615,13 +643,6 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     );
   }
 
-  const sundayDhamakaCount = React.useMemo(() => {
-    if (!orders) return 0;
-    return orders.filter((order) =>
-      order.items.some((item) => item.appliedOfferId === 'offer-sunday-dhamaka' || item.sourceOfferId === 'offer-sunday-dhamaka')
-    ).length;
-  }, [orders]);
-
   if (activeTab === 'offers') {
     return (
       <section className="relative mx-auto max-w-6xl p-4 animate-fade-in">
@@ -632,8 +653,11 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
               <div className="flex justify-between items-center mb-3">
                 <span className="text-lg font-display font-bold">{offer.offerTitle}</span>
                 <button
+                  disabled={session.role !== 'admin'}
                   onClick={() => toggleOfferEnabled(offer)}
                   className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-premium ${
+                    session.role !== 'admin' ? 'opacity-65 cursor-not-allowed' : ''
+                  } ${
                     offer.enabled ? 'bg-green-600/20 border border-green-500 text-green-300 hover:bg-green-600/40' : 'bg-red-600/20 border border-red-500 text-red-300 hover:bg-red-650/40'
                   }`}
                 >

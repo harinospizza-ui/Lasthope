@@ -54,8 +54,8 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
     }
   };
 
-  const normalizePhoneForWhatsApp = (phone: string): string => {
-    const digits = phone.replace(/\D/g, '');
+  const normalizePhoneForWhatsApp = (phone?: string): string => {
+    const digits = (phone || '').replace(/\D/g, '');
     return digits.length === 10 ? `91${digits}` : digits;
   };
 
@@ -134,7 +134,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <b className="text-base font-display">#{order.id.split('-')[2] || order.id.slice(-5)}</b>
+                            <b className="text-base font-display">#{((order.id || '').split('-')[2] || (order.id || '').slice(-5))}</b>
                             <span className={`rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusClass(order.status)}`}>
                               {statusLabel(order.status)}
                             </span>
@@ -174,6 +174,22 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                       <div className="mt-3 text-sm font-semibold text-slate-200">
                         {order.customerName} (📞 {order.customerPhone})
                       </div>
+
+                      {order.orderType === 'delivery' && (
+                        <div className="mt-2 text-xs font-semibold text-slate-350">
+                          📍 Delivery Address: {order.customerLocation?.address || 'Saved Location'}
+                          {((order.customerLocation?.latitude && order.customerLocation?.longitude) || order.customerLocationUrl) && (
+                            <a
+                              href={order.customerLocationUrl || `https://maps.google.com/?q=${order.customerLocation?.latitude},${order.customerLocation?.longitude}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="ml-2 text-red-400 hover:text-red-300 font-bold underline"
+                            >
+                              (View Map Location 🗺️)
+                            </a>
+                          )}
+                        </div>
+                      )}
 
                       <div className="mt-2 pl-3 border-l-2 border-slate-700 space-y-1 text-xs text-slate-350">
                         {order.items.map((item, i) => (

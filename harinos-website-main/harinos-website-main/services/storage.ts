@@ -59,18 +59,58 @@ export const StorageService = {
     const updatedOrders = [order, ...orders].slice(0, 3);
     safeStorage.setItem(window.localStorage, KEYS.ORDERS, JSON.stringify(updatedOrders));
   },
-  saveAdminSession: (session: AdminSession): void => writeSessionJson(KEYS.ADMIN_SESSION, session),
-  getAdminSession: (): AdminSession | null => readSessionJson<AdminSession | null>(KEYS.ADMIN_SESSION, null),
+  saveAdminSession: (session: AdminSession): void => writeJson(KEYS.ADMIN_SESSION, session),
+  getAdminSession: (): AdminSession | null => readJson<AdminSession | null>(KEYS.ADMIN_SESSION, null),
   clearAdminSession: (): void => {
-    safeStorage.removeItem(window.sessionStorage, KEYS.ADMIN_SESSION);
+    safeStorage.removeItem(window.localStorage, KEYS.ADMIN_SESSION);
   },
   updateSessionActivity: (): void => {
     const session = StorageService.getAdminSession();
     if (!session) return;
     StorageService.saveAdminSession({ ...session, lastActivityTime: new Date().toISOString() });
   },
-  saveCustomerProfile: (profile: CustomerProfile): void => writeJson(KEYS.CUSTOMER_PROFILE, profile),
-  getCustomerProfile: (): CustomerProfile | null => readJson<CustomerProfile | null>(KEYS.CUSTOMER_PROFILE, null),
+  saveProfilePhoto: (base64: string): void => {
+    safeStorage.setItem(window.localStorage, 'harinos_profile_photo', base64);
+  },
+  getProfilePhoto: (): string => {
+    return safeStorage.getItem(window.localStorage, 'harinos_profile_photo') || '';
+  },
+  saveCustomerProfile: (profile: CustomerProfile): void => {
+    if (profile.avatar) {
+      StorageService.saveProfilePhoto(profile.avatar);
+    }
+    writeJson(KEYS.CUSTOMER_PROFILE, profile);
+  },
+  getCustomerProfile: (): CustomerProfile | null => {
+    const profile = readJson<CustomerProfile | null>(KEYS.CUSTOMER_PROFILE, null);
+    if (profile) {
+      const localPhoto = StorageService.getProfilePhoto();
+      if (localPhoto) {
+        profile.avatar = localPhoto;
+      }
+      let changed = false;
+      if (profile.phone && profile.phone.includes('-')) {
+        profile.phone = profile.phone.split('-')[0];
+        changed = true;
+      }
+      if (profile.mobileNumber && profile.mobileNumber.includes('-')) {
+        profile.mobileNumber = profile.mobileNumber.split('-')[0];
+        changed = true;
+      }
+      if (profile.id && profile.id.includes('-')) {
+        profile.id = profile.id.split('-')[0];
+        changed = true;
+      }
+      if (profile.customerId && profile.customerId.includes('-')) {
+        profile.customerId = profile.customerId.split('-')[0];
+        changed = true;
+      }
+      if (changed) {
+        writeJson(KEYS.CUSTOMER_PROFILE, profile);
+      }
+    }
+    return profile;
+  },
   getVerifiedCustomers: (): Record<string, boolean> => readJson<Record<string, boolean>>(KEYS.VERIFIED_CUSTOMERS, {}),
   markCustomerVerified: (customerId: string): void => {
     const verified = StorageService.getVerifiedCustomers();
@@ -100,4 +140,13 @@ export const StorageService = {
   saveAdminOutlets: (outlets: OutletConfig[]): void => writeJson(KEYS.ADMIN_OUTLETS, outlets),
   getAdminOffers: (): OfferCard[] => readJson<OfferCard[]>(KEYS.ADMIN_OFFERS, []),
   saveAdminOffers: (offers: OfferCard[]): void => writeJson(KEYS.ADMIN_OFFERS, offers),
+  getReferralInputLock: (): { attemptsRemaining: number; isLocked: boolean } => {
+    return readJson<{ attemptsRemaining: number; isLocked: boolean }>(
+      'harinos_referral_input_lock',
+      { attemptsRemaining: 3, isLocked: false }
+    );
+  },
+  saveReferralInputLock: (lock: { attemptsRemaining: number; isLocked: boolean }): void => {
+    writeJson('harinos_referral_input_lock', lock);
+  },
 };

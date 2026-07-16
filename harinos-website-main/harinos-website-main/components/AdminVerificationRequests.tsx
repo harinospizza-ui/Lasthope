@@ -28,7 +28,7 @@ export const AdminVerificationRequests: React.FC<AdminVerificationRequestsProps>
   }, []);
 
   const handleSendWhatsApp = (req: VerificationRequest) => {
-    let phone = req.mobileNumber.replace(/\D/g, '');
+    let phone = (req.mobileNumber || '').replace(/\D/g, '');
     if (phone.length === 10) {
       phone = '91' + phone;
     }

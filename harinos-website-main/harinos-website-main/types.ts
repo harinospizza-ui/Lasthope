@@ -62,6 +62,7 @@ export interface CustomerLocation {
   latitude: number;
   longitude: number;
   mapUrl: string;
+  address?: string;
 }
 
 export interface CartItem extends MenuItem {
@@ -179,6 +180,10 @@ export interface CustomerProfile {
   referralLocked?: boolean;
   referralAppliedAt?: string;
   status?: 'active' | 'blocked' | 'removed';
+  legacyUser?: boolean;
+  coins?: number;
+  referralCount?: number;
+  referralEarnings?: number;
 }
 
 export interface WalletTransaction {

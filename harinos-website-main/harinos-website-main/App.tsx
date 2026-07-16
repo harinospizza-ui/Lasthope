@@ -18,7 +18,7 @@ import { MENU_ITEMS, OFFER_CARDS, OUTLET_LOCATIONS } from './constants';
 import { StorageService } from './services/storage';
 import { setDynamicFirebaseConfig } from './services/firebaseClient';
 import { NotificationService } from './services/notification';
-import { getServerOrders, saveCustomerToServer, saveFullOrderToServer, subscribeServerOrder, getServerMenuItems, seedMenuItemsToServer, subscribeServerMenuItems, getServerOutlets, seedOutletsToServer, subscribeServerOutlets, getServerOffers, seedOffersToServer, subscribeServerOffers, saveWalletTransactionToServer, getServerCustomers, verifyServerCustomer, getServerSettings, getServerCustomerById } from './services/orderApi';
+import { getServerOrders, saveCustomerToServer, saveFullOrderToServer, subscribeServerOrder, subscribeServerOrders, getServerMenuItems, seedMenuItemsToServer, subscribeServerMenuItems, getServerOutlets, seedOutletsToServer, subscribeServerOutlets, getServerOffers, seedOffersToServer, subscribeServerOffers, saveWalletTransactionToServer, getServerCustomers, verifyServerCustomer, getServerSettings, getServerCustomerById } from './services/orderApi';
 import { copyTextToClipboard, getNotificationPermission } from './services/browserSupport';
 import { notifyStaffNewOrder, requestNotificationPermission } from './services/notificationService';
 import {
@@ -47,6 +47,7 @@ import ServiceModeModal from './components/ServiceModeModal';
 import CustomerLoginModal from './components/CustomerLoginModal';
 import AdminPanel from './components/AdminPanel';
 import { WalletModal } from './components/WalletModal';
+import FirstTimeUserModal from './components/FirstTimeUserModal';
 import { useSwipeDismiss } from './hooks/useSwipeDismiss';
 
 interface InAppNotification {
@@ -128,16 +129,323 @@ ${order.rewardPointsRedeemed ? `<div class="row"><span>Points Paid</span><b>-Rs 
 <div class="center">Thank you! Come again!<br>Because Hari Knows</div>
 </body></html>`;
 
+const a4InvoiceHtml = (order: Order): string => {
+  const displayId = getDisplayOrderId(order.id);
+  const orderDate = new Date(order.receivedAt ?? order.date).toLocaleString();
+
+  const itemRows = order.items.map(item => {
+    const sizeStr = item.selectedSize ? ` (${item.selectedSize})` : '';
+    const name = `${item.name}${sizeStr}`;
+    return `
+      <tr>
+        <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 13px; vertical-align: top;">
+          <div style="font-weight: bold; color: #333;">${name}</div>
+          ${item.description ? `<div style="font-size: 11px; color: #777; margin-top: 2px;">${item.description}</div>` : ''}
+        </td>
+        <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; color: #555; vertical-align: top;">Rs ${Math.round(item.discountedPrice ?? item.price)}</td>
+        <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; color: #555; vertical-align: top;">${item.quantity}</td>
+        <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; font-weight: bold; color: #333; vertical-align: top;">Rs ${Math.round(item.totalPrice)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const subtotal = Math.round(order.total - (order.deliveryFee ?? 0) + (order.walletAmountRedeemed ?? 0) + (order.rewardPointsRedeemed ?? 0));
+  const deliveryFeeRow = order.deliveryFee 
+    ? `<tr>
+         <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Delivery Fee</td>
+         <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #333;">Rs ${Math.round(order.deliveryFee)}</td>
+       </tr>`
+    : '';
+  const walletRow = order.walletAmountRedeemed
+    ? `<tr>
+         <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Wallet Redeemed</td>
+         <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #2e7d32;">-Rs ${Math.round(order.walletAmountRedeemed)}</td>
+       </tr>`
+    : '';
+  const pointsRow = order.rewardPointsRedeemed
+    ? `<tr>
+         <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Coins Redeemed</td>
+         <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #2e7d32;">-Rs ${Math.round(order.rewardPointsRedeemed)}</td>
+       </tr>`
+    : '';
+
+  const grandTotal = Math.round(order.total);
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Invoice - #${displayId}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body {
+          font-family: 'Segoe UI', Roboto, -apple-system, sans-serif;
+          color: #333;
+          margin: 0;
+          padding: 20px;
+          background: #fff;
+        }
+        .invoice-container {
+          max-width: 800px;
+          margin: 0 auto;
+          background: #fff;
+          padding: 20px;
+        }
+        .header-table {
+          width: 100%;
+          border-bottom: 3px solid #e53935;
+          padding-bottom: 20px;
+          margin-bottom: 25px;
+        }
+        .logo-title {
+          font-size: 28px;
+          font-weight: 800;
+          color: #e53935;
+          margin: 0;
+          letter-spacing: 1px;
+        }
+        .logo-subtitle {
+          font-size: 12px;
+          color: #666;
+          margin: 4px 0 0 0;
+        }
+        .invoice-heading {
+          font-size: 26px;
+          font-weight: 800;
+          color: #333;
+          margin: 0;
+          text-align: right;
+        }
+        .invoice-meta {
+          font-size: 13px;
+          color: #666;
+          margin: 5px 0 0 0;
+          text-align: right;
+        }
+        .details-table {
+          width: 100%;
+          margin-bottom: 30px;
+        }
+        .details-column {
+          width: 50%;
+          vertical-align: top;
+        }
+        .details-card {
+          background: #f8f9fa;
+          border: 1px solid #eef0f2;
+          border-radius: 12px;
+          padding: 15px;
+          margin-right: 10px;
+          min-height: 120px;
+        }
+        .details-card-right {
+          background: #f8f9fa;
+          border: 1px solid #eef0f2;
+          border-radius: 12px;
+          padding: 15px;
+          margin-left: 10px;
+          min-height: 120px;
+        }
+        .card-title {
+          font-size: 13px;
+          font-weight: bold;
+          text-transform: uppercase;
+          color: #e53935;
+          margin: 0 0 10px 0;
+          border-bottom: 1px dashed rgba(229, 57, 53, 0.2);
+          padding-bottom: 4px;
+        }
+        .card-text {
+          font-size: 13px;
+          line-height: 1.6;
+          color: #495057;
+          margin: 0;
+        }
+        .items-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 30px;
+        }
+        .items-table th {
+          background: #e53935;
+          color: #fff;
+          font-weight: bold;
+          text-transform: uppercase;
+          font-size: 11px;
+          letter-spacing: 0.5px;
+          padding: 12px 10px;
+          border: none;
+        }
+        .summary-table {
+          width: 320px;
+          margin-left: auto;
+          border-collapse: collapse;
+        }
+        .grand-total-row {
+          border-top: 2px solid #e53935;
+          font-weight: 800;
+          font-size: 16px;
+          color: #e53935;
+        }
+        .footer {
+          margin-top: 50px;
+          text-align: center;
+          border-top: 1px solid #eef0f2;
+          padding-top: 20px;
+          font-size: 12px;
+          color: #868e96;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        <!-- Logo and invoice heading -->
+        <table class="header-table" style="width: 100%;">
+          <tr>
+            <td style="text-align: left; vertical-align: middle;">
+              <h1 class="logo-title">HARINO'S PIZZA</h1>
+              <p class="logo-subtitle">${order.outletName ?? 'Harino\'s Pizza Outlet'}</p>
+            </td>
+            <td style="text-align: right; vertical-align: middle;">
+              <h2 class="invoice-heading">INVOICE</h2>
+              <p class="invoice-meta">Order ID: <strong>#${displayId}</strong></p>
+              <p class="invoice-meta">Date: ${orderDate}</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Billed to & Order details -->
+        <table class="details-table" style="width: 100%;">
+          <tr>
+            <td class="details-column">
+              <div class="details-card">
+                <h3 class="card-title">Billed To</h3>
+                <p class="card-text">
+                  <strong>Name:</strong> ${order.customerName ?? 'Customer'}<br>
+                  <strong>Phone:</strong> ${order.customerPhone ?? 'N/A'}<br>
+                  <strong>Email:</strong> ${order.customerEmail ?? 'N/A'}
+                </p>
+              </div>
+            </td>
+            <td class="details-column">
+              <div class="details-card-right">
+                <h3 class="card-title">Order Info</h3>
+                <p class="card-text">
+                  <strong>Type:</strong> ${order.orderType.toUpperCase()}<br>
+                  <strong>Payment:</strong> ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}<br>
+                  <strong>Address:</strong> ${order.outletAddress ?? 'Outlet Address'}
+                </p>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Items Table -->
+        <table class="items-table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th style="text-align: left; border-top-left-radius: 8px; border-bottom-left-radius: 8px;">Item Description</th>
+              <th style="text-align: right; width: 100px;">Price</th>
+              <th style="text-align: right; width: 80px;">Qty</th>
+              <th style="text-align: right; width: 120px; border-top-right-radius: 8px; border-bottom-right-radius: 8px;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRows}
+          </tbody>
+        </table>
+
+        <!-- Totals Summary -->
+        <table class="summary-table">
+          <tr>
+            <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Subtotal</td>
+            <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #333;">Rs ${subtotal}</td>
+          </tr>
+          ${deliveryFeeRow}
+          ${walletRow}
+          ${pointsRow}
+          <tr class="grand-total-row">
+            <td style="padding: 12px 10px; text-align: left;">Grand Total</td>
+            <td style="padding: 12px 10px; text-align: right;">Rs ${grandTotal}</td>
+          </tr>
+        </table>
+
+        <!-- Footer -->
+        <div class="footer">
+          <p style="margin: 0; font-weight: bold;">Thank you for dining with Harino's Pizza!</p>
+          <p style="margin: 5px 0 0 0; font-style: italic;">Because Hari Knows</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 const printOrderReceipt = (order: Order) => {
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(receiptHtml(order));
-  win.document.close();
-  win.focus();
-  window.setTimeout(() => {
-    win.print();
-    win.close();
-  }, 250);
+  const displayId = getDisplayOrderId(order.id);
+  const scriptId = 'html2pdf-cdn-script';
+  let script = document.getElementById(scriptId) as HTMLScriptElement;
+
+  const runHtml2Pdf = () => {
+    const element = document.createElement('div');
+    element.innerHTML = a4InvoiceHtml(order);
+    
+    const opt = {
+      margin:       [10, 10, 10, 10], // top, left, bottom, right in mm
+      filename:     `Order_${displayId}_Bill.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    (window as any).html2pdf().from(element).set(opt).save();
+  };
+
+  const fallbackPrint = () => {
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(a4InvoiceHtml(order));
+    win.document.close();
+    win.focus();
+    window.setTimeout(() => {
+      win.print();
+      win.close();
+    }, 500);
+  };
+
+  if (!(window as any).html2pdf) {
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      script.integrity = 'sha512-GsLlZN/3F2ErC5IfS51RR359xOPgq19cV50fGRoUX30jOb3JzuUMxlKCgizUXyURvuVEcKxpUMt5PRCxQN161Q==';
+      script.crossOrigin = 'anonymous';
+      script.onload = () => {
+        runHtml2Pdf();
+      };
+      script.onerror = () => {
+        console.error('Failed to load html2pdf from CDN, falling back to print dialog.');
+        fallbackPrint();
+      };
+      document.body.appendChild(script);
+    } else {
+      let checkCount = 0;
+      const interval = setInterval(() => {
+        checkCount++;
+        if ((window as any).html2pdf) {
+          clearInterval(interval);
+          runHtml2Pdf();
+        } else if (checkCount > 50) {
+          clearInterval(interval);
+          fallbackPrint();
+        }
+      }, 100);
+    }
+  } else {
+    runHtml2Pdf();
+  }
 };
 
 export const getDisplayOrderId = (orderId: string): string => {
@@ -150,42 +458,55 @@ export const getDisplayOrderId = (orderId: string): string => {
 };
 
 export const extendMenuItemsWithGeneratedSeries = (items: MenuItem[]): MenuItem[] => {
-  const baseCheesePizzas = items.filter(
-    (item) => item.category === Category.PIZZA && item.id.startsWith('p1_'),
+  const extended: MenuItem[] = [];
+  
+  // Filter out any generated items that might be cached or passed in
+  const sourceItems = items.filter(
+    (item) => 
+      item &&
+      item.id &&
+      !item.id.startsWith('cheese_') && 
+      !item.id.startsWith('masala_') &&
+      !item.id.startsWith('makhni_') &&
+      !item.id.startsWith('tandoori_')
   );
-  const extended = [...items];
 
-  for (const pizza of baseCheesePizzas) {
-    // Makhni version
-    const makhniId = `makhni_${pizza.id}`;
-    if (!extended.some((item) => item.id === makhniId)) {
-      extended.push({
-        ...pizza,
-        id: makhniId,
-        name: `Makhni ${pizza.name}`,
-        description: `Delicious rich Makhni sauce variant. ${pizza.description}`,
-        price: pizza.price + 20,
-        sizes: pizza.sizes?.map((sz) => ({
-          label: sz.label,
-          price: sz.label === 'Regular' ? sz.price + 20 : sz.label === 'Medium' ? sz.price + 30 : sz.label === 'Large' ? sz.price + 50 : sz.price,
-        })),
-      });
-    }
+  for (const item of sourceItems) {
+    extended.push(item);
 
-    // Tandoori version
-    const tandooriId = `tandoori_${pizza.id}`;
-    if (!extended.some((item) => item.id === tandooriId)) {
-      extended.push({
-        ...pizza,
-        id: tandooriId,
-        name: `Tandoori ${pizza.name}`,
-        description: `Spicy smoky Tandoori sauce variant. ${pizza.description}`,
-        price: pizza.price + 20,
-        sizes: pizza.sizes?.map((sz) => ({
-          label: sz.label,
-          price: sz.label === 'Regular' ? sz.price + 20 : sz.label === 'Medium' ? sz.price + 30 : sz.label === 'Large' ? sz.price + 50 : sz.price,
-        })),
-      });
+    // Exclude Harino's Special (p_hs) from the series generator
+    if (item.category === Category.PIZZA && item.id !== 'p_hs') {
+      // 1. Makhni Series version
+      if (!item.name.toLowerCase().includes('makhni')) {
+        const makhniId = `makhni_${item.id}`;
+        extended.push({
+          ...item,
+          id: makhniId,
+          name: `${item.name.replace(" Pizza", "").split(" (")[0]} Makhni Pizza`,
+          description: `Rich and creamy makhni gravy base. ${item.description}`,
+          price: item.price + 30,
+          sizes: item.sizes?.map((sz) => ({
+            label: sz.label,
+            price: sz.label === 'Regular' ? sz.price + 30 : sz.label === 'Medium' ? sz.price + 45 : sz.label === 'Large' ? sz.price + 60 : sz.price + 30,
+          })),
+        });
+      }
+
+      // 2. Tandoori Series version
+      if (!item.name.toLowerCase().includes('tandoori')) {
+        const tandooriId = `tandoori_${item.id}`;
+        extended.push({
+          ...item,
+          id: tandooriId,
+          name: `${item.name.replace(" Pizza", "").split(" (")[0]} Tandoori Pizza`,
+          description: `Smoky tandoori sauce base. ${item.description}`,
+          price: item.price + 25,
+          sizes: item.sizes?.map((sz) => ({
+            label: sz.label,
+            price: sz.label === 'Regular' ? sz.price + 25 : sz.label === 'Medium' ? sz.price + 35 : sz.label === 'Large' ? sz.price + 50 : sz.price + 25,
+          })),
+        });
+      }
     }
   }
 
@@ -205,10 +526,17 @@ const App: React.FC = () => {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
   const [isServiceModeModalOpen, setIsServiceModeModalOpen] = useState(true);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [vegOnly, setVegOnly] = useState(false);
+  const [popularOnly, setPopularOnly] = useState(false);
   const [customerLocation, setCustomerLocation] = useState<CustomerLocation | null>(null);
   const [view, setView] = useState<'menu' | 'orders'>('menu');
   const [pastOrders, setPastOrders] = useState<Order[]>(StorageService.getPastOrders());
   const [latestOrder, setLatestOrder] = useState<Order | null>(null);
+  const [dismissedOrderId, setDismissedOrderId] = useState<string | null>(() => {
+    return localStorage.getItem('dismissed_tracker_order_id') || null;
+  });
   const [isStoreOpen, setIsStoreOpen] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
   const [nearestOutletMatch, setNearestOutletMatch] = useState<OutletMatch | null>(null);
@@ -226,10 +554,31 @@ const App: React.FC = () => {
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [instagramUrl, setInstagramUrl] = useState<string>('');
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
+  const [uncompletedOrdersCount, setUncompletedOrdersCount] = useState(0);
 
   const customerProfileRef = useRef(customerProfile);
   customerProfileRef.current = customerProfile;
 
+  const lastProfileUpdateRef = useRef<number>(0);
+  const lastNotifiedStatusRef = useRef<Record<string, string>>({});
+  const updateLocalCustomerProfile = useCallback((profile: CustomerProfile | null) => {
+    if (profile) {
+      const localPhoto = StorageService.getProfilePhoto();
+      if (localPhoto) {
+        profile.avatar = localPhoto;
+      }
+      setCustomerProfile(profile);
+      StorageService.saveCustomerProfile(profile);
+    } else {
+      setCustomerProfile(null);
+      localStorage.removeItem('harinos_customer_profile');
+      localStorage.removeItem('harinos_profile_photo');
+    }
+    lastProfileUpdateRef.current = Date.now();
+  }, []);
+
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [newVersionString, setNewVersionString] = useState('');
   const [menuItems, setMenuItems] = useState<MenuItem[]>(extendMenuItemsWithGeneratedSeries(MENU_ITEMS));
   const [outlets, setOutlets] = useState<OutletConfig[]>(OUTLET_LOCATIONS);
   const [offers, setOffers] = useState<OfferCard[]>(OFFER_CARDS);
@@ -238,7 +587,93 @@ const App: React.FC = () => {
   // Initialize config immediately using Vite variables
   useEffect(() => {
     setConfigLoaded(true);
+    const isTutorialCompleted = localStorage.getItem('harinos_tutorial_completed');
+    if (!isTutorialCompleted) {
+      setShowTutorial(true);
+    }
   }, []);
+
+  // Listen to new orders for logged-in Admin/Manager/Staff devices
+  useEffect(() => {
+    if (!adminSession) {
+      setUncompletedOrdersCount(0);
+      if ('clearAppBadge' in navigator) {
+        navigator.clearAppBadge().catch(err => console.error('Error clearing app badge:', err));
+      }
+      return;
+    }
+    
+    // Request notification permission automatically if not set
+    if ('Notification' in window && Notification.permission === 'default') {
+      void Notification.requestPermission();
+    }
+
+    const notifiedIds = new Set<string>();
+    let initialLoad = true;
+
+    const unsubscribe = subscribeServerOrders((serverOrders) => {
+      let playSound = false;
+      serverOrders.forEach((o) => {
+        if (o.id && !notifiedIds.has(o.id)) {
+          notifiedIds.add(o.id);
+          // Only trigger alert if this is NOT the initial load and it's a new status order
+          if (!initialLoad && o.status === 'new') {
+            playSound = true;
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('🍕 New Order Received', {
+                body: `Order #${o.id.replace('HRN-', '')} from ${o.customerName || 'Customer'} - Rs ${Math.round(o.total)}`,
+                icon: '/icon-192.png',
+                badge: '/icon-192.png',
+                requireInteraction: true,
+              });
+            }
+          }
+        }
+      });
+
+      // Calculate uncompleted orders count
+      const activeOrders = serverOrders.filter((o) => {
+        if (!o) return false;
+        if (o.isDeleted || String(o.isDeleted) === 'true') return false;
+        const status = (o.status || 'new').toLowerCase().trim();
+        if (status === 'done' || status === 'cancelled' || status === 'delete' || status === 'deleted') {
+          return false;
+        }
+        return ['new', 'preparing', 'ready', 'out_for_delivery'].includes(status);
+      });
+      const count = activeOrders.length;
+      setUncompletedOrdersCount(count);
+
+      // Set App Badge on Device
+      if ('setAppBadge' in navigator) {
+        if (count > 0) {
+          navigator.setAppBadge(count).catch(err => console.error('Error setting app badge:', err));
+        } else {
+          navigator.clearAppBadge().catch(err => console.error('Error clearing app badge:', err));
+        }
+      }
+
+      if (playSound) {
+        // play order sound/chime
+        try {
+          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-120.wav');
+          void audio.play();
+        } catch (e) {
+          console.warn('Failed to play chime:', e);
+        }
+      }
+      initialLoad = false;
+    }, (err) => {
+      console.warn('Orders notification subscription failed:', err);
+    });
+
+    return () => {
+      unsubscribe();
+      if ('clearAppBadge' in navigator) {
+        navigator.clearAppBadge().catch(err => console.error('Error clearing app badge:', err));
+      }
+    };
+  }, [adminSession]);
 
   // Fetch application settings and static data (menu, outlets, offers) on startup with caching
   useEffect(() => {
@@ -246,20 +681,28 @@ const App: React.FC = () => {
 
     const loadData = async () => {
       try {
-        // Failsafe DB Recovery & Initialization
-        try {
-          const { initializeFirebaseCollections } = await import('./services/orderApi');
-          await initializeFirebaseCollections();
-        } catch (dbErr) {
-          console.warn('Failsafe collection initialization error (non-fatal):', dbErr);
-        }
+        // Failsafe DB Recovery, Menu Verification & Repairs (Staff/Admin only to prevent guest permission errors)
+        if (adminSession) {
+          try {
+            const { initializeFirebaseCollections } = await import('./services/orderApi');
+            await initializeFirebaseCollections();
+          } catch (dbErr) {
+            console.warn('Failsafe collection initialization error (non-fatal):', dbErr);
+          }
 
-        // Failsafe Menu Recovery & Verification
-        try {
-          const { recoverMenuItems } = await import('./services/orderApi');
-          await recoverMenuItems(MENU_ITEMS);
-        } catch (menuErr) {
-          console.warn('Failsafe menu items recovery error (non-fatal):', menuErr);
+          try {
+            const { recoverMenuItems } = await import('./services/orderApi');
+            await recoverMenuItems(MENU_ITEMS);
+          } catch (menuErr) {
+            console.warn('Failsafe menu items recovery error (non-fatal):', menuErr);
+          }
+
+          try {
+            const { repairMissingCustomerProfiles } = await import('./services/orderApi');
+            await repairMissingCustomerProfiles();
+          } catch (repairErr) {
+            console.warn('Failsafe repair missing customer profiles error (non-fatal):', repairErr);
+          }
         }
 
         // Fetch settings once to get instagramUrl and current menuVersion
@@ -277,11 +720,40 @@ const App: React.FC = () => {
           const cachedOffers = localStorage.getItem('cached_offers');
 
           if (cachedMenu && cachedOutlets && cachedOffers) {
-            console.log('Loading menu, outlets, and offers from local storage cache.');
-            setMenuItems(JSON.parse(cachedMenu));
-            setOutlets(JSON.parse(cachedOutlets));
-            setOffers(JSON.parse(cachedOffers));
-            return;
+            try {
+              const parsedMenu = JSON.parse(cachedMenu) as MenuItem[];
+              const parsedOutlets = JSON.parse(cachedOutlets) as OutletConfig[];
+              const parsedOffers = JSON.parse(cachedOffers) as OfferCard[];
+
+              const hasMomos = parsedMenu.some(item => item.category === Category.MOMOS);
+              const hasFries = parsedMenu.some(item => item.category === Category.FRIES);
+              const hasSides = parsedMenu.some(item => item.category === Category.SIDES);
+
+              // Validate that outlets has at least one active (enabled) outlet
+              const hasActiveOutlets = Array.isArray(parsedOutlets) && 
+                parsedOutlets.length > 0 && 
+                parsedOutlets.some(o => o && o.enabled === true);
+
+              if (hasMomos && hasFries && hasSides && hasActiveOutlets) {
+                console.log('Loading menu, outlets, and offers from local storage cache.');
+                setMenuItems(parsedMenu);
+                setOutlets(parsedOutlets);
+                setOffers(parsedOffers);
+                return;
+              } else {
+                console.warn('Cache validation failed (corrupt/inactive outlets or missing categories). Clearing cache...');
+                localStorage.removeItem('cached_outlets');
+                localStorage.removeItem('cached_menu_items');
+                localStorage.removeItem('cached_offers');
+                localStorage.removeItem('cached_menu_version');
+              }
+            } catch (err) {
+              console.warn('Error parsing cache data, clearing cache...', err);
+              localStorage.removeItem('cached_outlets');
+              localStorage.removeItem('cached_menu_items');
+              localStorage.removeItem('cached_offers');
+              localStorage.removeItem('cached_menu_version');
+            }
           }
         }
 
@@ -337,6 +809,200 @@ const App: React.FC = () => {
   useEffect(() => {
     void requestNotificationPermission();
   }, []);
+
+  // Listen to live broadcast notifications in real-time
+  useEffect(() => {
+    if (!configLoaded) return;
+    const isFirstRun = { current: true };
+    
+    let unsubscribe: () => void = () => {};
+    
+    import('./services/firebaseClient').then(({ db }) => {
+      import('firebase/firestore').then(({ collection, query, orderBy, limit, onSnapshot }) => {
+        const q = query(
+          collection(db(), 'broadcast_notifications'),
+          orderBy('timestamp', 'desc'),
+          limit(1)
+        );
+        
+        unsubscribe = onSnapshot(q, (snapshot) => {
+          if (snapshot.empty) return;
+          const latestDoc = snapshot.docs[0].data();
+          const docId = snapshot.docs[0].id;
+          
+          if (isFirstRun.current) {
+            isFirstRun.current = false;
+            return;
+          }
+          
+          const title = latestDoc.title;
+          const body = latestDoc.body;
+          const icon = latestDoc.icon;
+          
+          if (title && body) {
+            NotificationService.show(title, body, icon);
+            
+            const newNotif = {
+              id: docId || `broadcast-${Date.now()}`,
+              title,
+              message: body,
+              type: 'info' as const,
+              timestamp: new Date().toISOString()
+            };
+            setInAppNotifications(prev => [newNotif, ...prev]);
+          }
+        });
+      });
+    });
+    
+    return () => unsubscribe();
+  }, [configLoaded]);
+
+  // Real-time synchronization of Menu, Outlets, and Offers
+  useEffect(() => {
+    if (!configLoaded) return;
+    
+    // Subscribe to menu items
+    const unsubMenu = subscribeServerMenuItems(
+      (items) => {
+        if (items && items.length > 0) {
+          const extended = extendMenuItemsWithGeneratedSeries(items);
+          setMenuItems(extended);
+          localStorage.setItem('cached_menu_items', JSON.stringify(extended));
+        }
+      },
+      (err) => console.warn('Menu subscription failed:', err)
+    );
+
+    // Subscribe to outlets
+    const unsubOutlets = subscribeServerOutlets(
+      (outlets) => {
+        if (outlets && outlets.length > 0) {
+          setOutlets(outlets);
+          localStorage.setItem('cached_outlets', JSON.stringify(outlets));
+        }
+      },
+      (err) => console.warn('Outlets subscription failed:', err)
+    );
+
+    // Subscribe to offers
+    const unsubOffers = subscribeServerOffers(
+      (offers) => {
+        if (offers && offers.length > 0) {
+          setOffers(offers);
+          localStorage.setItem('cached_offers', JSON.stringify(offers));
+        }
+      },
+      (err) => console.warn('Offers subscription failed:', err)
+    );
+
+    return () => {
+      unsubMenu();
+      unsubOutlets();
+      unsubOffers();
+    };
+  }, [configLoaded]);
+
+  // Periodic background profile self-healing check
+  useEffect(() => {
+    if (!configLoaded) return;
+    const runRepair = async () => {
+      try {
+        const { repairMissingCustomerProfiles } = await import('./services/orderApi');
+        await repairMissingCustomerProfiles();
+      } catch (err) {}
+    };
+    const timer = setInterval(runRepair, 60000);
+    return () => clearInterval(timer);
+  }, [configLoaded]);
+
+  // Periodic check for PWA updates against build version
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+
+    const checkVersion = async () => {
+      if (!navigator.onLine) return;
+      try {
+        const res = await fetch('/version.json?t=' + Date.now(), {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const serverVersion = data.version;
+          const currentVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
+          if (serverVersion && currentVersion && serverVersion !== currentVersion) {
+            setNewVersionString(serverVersion);
+            setShowUpdateModal(true);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to check version:', err);
+      }
+    };
+
+    void checkVersion();
+    const interval = setInterval(checkVersion, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Real-time legacy user sync: detects profiles from previous versions and pushes to Firestore for admin verification
+  useEffect(() => {
+    if (!configLoaded) return;
+    
+    const syncLegacyUser = async () => {
+      const localProfile = StorageService.getCustomerProfile();
+      if (localProfile && localProfile.phone) {
+        try {
+          const { getDoc, doc, setDoc } = await import('firebase/firestore');
+          const { db } = await import('./services/firebaseClient');
+          
+          const cleanId = localProfile.phone.replace(/\D/g, '');
+          const docRef = doc(db(), 'customers', cleanId);
+          const snap = await getDoc(docRef);
+          
+          if (!snap.exists()) {
+            // First time detecting this legacy user on the new deployment:
+            // Register them in Firestore as legacy unverified so the admin can verify their profile.
+            const legacyCust: CustomerProfile = {
+              ...localProfile,
+              id: cleanId,
+              legacyUser: true,
+              verified: false, // Set to false to trigger admin verification request
+              status: 'active',
+              createdAt: localProfile.createdAt || new Date().toISOString()
+            };
+            await setDoc(docRef, legacyCust);
+            console.log('Registered legacy/previous version customer profile for admin verification:', localProfile.phone);
+          } else {
+            // Document exists, sync local verified/coins status with server
+            const serverCust = snap.data() as CustomerProfile;
+            const serverPoints = serverCust.rewardPoints ?? serverCust.coins ?? 0;
+            const localPoints = localProfile.rewardPoints ?? localProfile.coins ?? 0;
+
+            if (
+              serverCust.verified !== localProfile.verified || 
+              serverPoints !== localPoints || 
+              serverCust.status !== localProfile.status
+            ) {
+              const updated = {
+                ...localProfile,
+                verified: !!serverCust.verified,
+                coins: serverPoints,
+                rewardPoints: serverPoints,
+                status: serverCust.status ?? localProfile.status ?? 'active',
+                legacyUser: !!serverCust.legacyUser
+              };
+               updateLocalCustomerProfile(updated);
+            }
+          }
+        } catch (err) {
+          console.warn('Failsafe legacy user profile sync failed:', err);
+        }
+      }
+    };
+    
+    void syncLegacyUser();
+  }, [configLoaded]);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const applyAppScreen = useCallback((screen: AppScreen) => {
@@ -475,6 +1141,7 @@ const App: React.FC = () => {
  
     let isMounted = true;
     let unsubscribe: (() => void) | undefined;
+    let unsubscribeUser: (() => void) | undefined;
  
     const setupSessionListener = async () => {
       try {
@@ -487,6 +1154,7 @@ const App: React.FC = () => {
  
         if (!isMounted) return;
  
+        // 1. Single device sync for Admin & Manager
         if (adminSession.role === 'admin' || adminSession.role === 'manager') {
           const docRef = doc(db(), 'userSessions', adminSession.username);
           unsubscribe = onSnapshot(docRef, (docSnap) => {
@@ -507,6 +1175,25 @@ const App: React.FC = () => {
             console.error('Session sync error:', error);
           });
         }
+
+        // 2. Real-time password change sync listener for all roles
+        const collectionName = adminSession.role === 'admin' ? 'admins' : adminSession.role === 'manager' ? 'managers' : 'staff';
+        const userDocRef = doc(db(), collectionName, adminSession.username);
+        unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+          if (!isMounted) return;
+          if (!docSnap.exists()) {
+            console.warn('User document missing. Forcing logout due to password change.');
+            triggerPasswordLogout();
+            return;
+          }
+          const data = docSnap.data();
+          if (adminSession.passwordHash && data?.passwordHash !== adminSession.passwordHash) {
+            console.warn('Password hash changed. Forcing logout.');
+            triggerPasswordLogout();
+          }
+        }, (error) => {
+          console.error('User doc sync error:', error);
+        });
       } catch (err) {
         console.error('Failed to setup session listener:', err);
       }
@@ -533,23 +1220,96 @@ const App: React.FC = () => {
       // Alert user
       alert('Your account was logged in from another device.');
     };
+
+    const triggerPasswordLogout = () => {
+      StorageService.clearAdminSession();
+      setAdminSession(null);
+      setIsAdminPanelOpen(false);
+      alert('Your password was changed by the administrator. Please log in again with your new password.');
+    };
  
     setupSessionListener();
  
     return () => {
       isMounted = false;
       if (unsubscribe) unsubscribe();
+      if (unsubscribeUser) unsubscribeUser();
     };
   }, [configLoaded, adminSession]);
 
   const activeOrder = useMemo(() => {
-    return pastOrders.find((order) => order.status !== 'done' && order.status !== 'cancelled');
-  }, [pastOrders]);
+    const latest = pastOrders[0];
+    if (!latest) return null;
+    if (dismissedOrderId === latest.id) return null;
+
+    if (latest.status !== 'done' && latest.status !== 'cancelled') {
+      return latest;
+    }
+
+    try {
+      const orderTime = new Date(latest.date).getTime();
+      const now = new Date().getTime();
+      const ageHours = (now - orderTime) / (1000 * 60 * 60);
+      if (ageHours < 24) {
+        return latest;
+      }
+    } catch (e) {
+      // Fallback
+    }
+    return null;
+  }, [pastOrders, dismissedOrderId]);
 
   const trackedOrderId = activeOrder?.id || latestOrder?.id;
 
   useEffect(() => {
     if (!configLoaded || !trackedOrderId) return;
+    const handleCancellationRefreshes = (orderStatus: string) => {
+      if (orderStatus === 'cancelled' && customerProfile?.id) {
+        void import('./services/orderApi').then(({ getServerCustomerById }) => {
+          getServerCustomerById(customerProfile.id).then((fresh) => {
+            if (fresh) {
+              setCustomerProfile(fresh);
+              StorageService.saveCustomerProfile(fresh);
+            }
+          }).catch(() => undefined);
+        });
+      }
+    };
+
+    const handleBrowserNotification = (order: Order) => {
+      if (!order.status || !order.id) return;
+      const lastStatus = lastNotifiedStatusRef.current[order.id];
+      if (lastStatus && lastStatus !== order.status) {
+        const titleMap: Record<string, string> = {
+          new: '🍕 Order Placed',
+          preparing: '👨‍🍳 Preparing Your Order',
+          ready: '✅ Order Ready!',
+          out_for_delivery: '🚗 Out for Delivery',
+          done: '🎉 Order Complete',
+          cancelled: '❌ Order Cancelled'
+        };
+        const msgMap: Record<string, string> = {
+          new: 'Your order has been received by Harino\'s.',
+          preparing: 'The kitchen has started preparing your fresh pizza!',
+          ready: 'Your order is hot and ready for pickup!',
+          out_for_delivery: 'Our delivery partner is on the way to your location.',
+          done: 'Thank you for ordering from Harino\'s! Enjoy your meal.',
+          cancelled: 'Your order has been cancelled by the store.'
+        };
+        const title = titleMap[order.status] || 'Order Status Update';
+        const body = msgMap[order.status] || `Your order status is now ${order.status}`;
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(title, {
+            body,
+            icon: '/icon-192.png',
+            badge: '/icon-192.png',
+            tag: `order-status-${order.id}`
+          });
+        }
+      }
+      lastNotifiedStatusRef.current[order.id] = order.status;
+    };
+
     const unsubscribe = subscribeServerOrder(
       trackedOrderId,
       (order) => {
@@ -559,6 +1319,10 @@ const App: React.FC = () => {
         );
         if (latestOrder?.id === order.id) {
           setLatestOrder(order);
+        }
+        if (order.status) {
+          handleCancellationRefreshes(order.status);
+          handleBrowserNotification(order);
         }
       },
       () => undefined,
@@ -574,6 +1338,10 @@ const App: React.FC = () => {
             if (latestOrder?.id === updatedOrder.id) {
               setLatestOrder(updatedOrder);
             }
+            if (updatedOrder.status) {
+              handleCancellationRefreshes(updatedOrder.status);
+              handleBrowserNotification(updatedOrder);
+            }
           })
           .catch(() => undefined);
       });
@@ -582,7 +1350,7 @@ const App: React.FC = () => {
       unsubscribe?.();
       window.clearInterval(statusPoll);
     };
-  }, [configLoaded, trackedOrderId, latestOrder?.id]);
+  }, [configLoaded, trackedOrderId, latestOrder?.id, customerProfile?.id]);
 
   useEffect(() => {
     if (!configLoaded || !customerProfile?.id) return;
@@ -592,10 +1360,13 @@ const App: React.FC = () => {
       try {
         const fresh = await getServerCustomerById(customerProfile.id);
         if (fresh && isMounted) {
+          // If the profile was updated locally within the last 5 seconds, ignore server polling to prevent race conditions
+          if (Date.now() - lastProfileUpdateRef.current < 5000) {
+            return;
+          }
           if (fresh.status === 'blocked' || fresh.status === 'removed') {
             alert('Your account has been deactivated or blocked by an administrator. You will be logged out.');
-            localStorage.removeItem('harinos_customer_profile');
-            setCustomerProfile(null);
+            updateLocalCustomerProfile(null);
             return;
           }
           const oldBalance = customerProfileRef.current?.walletBalance ?? 0;
@@ -1022,13 +1793,29 @@ const App: React.FC = () => {
     showNotification('Last order restored to basket.');
   }, [pushAppScreen, showNotification]);
 
-  const filteredItems = useMemo(
-    () =>
-      selectedCategory === 'All'
-        ? menuItems
-        : menuItems.filter((item) => item.category === selectedCategory),
-    [selectedCategory, menuItems],
-  );
+  const filteredItems = useMemo(() => {
+    let result = menuItems;
+    if (selectedCategory !== 'All') {
+      result = result.filter((item) => item.category === selectedCategory);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (item) =>
+          item.name.toLowerCase().includes(q) ||
+          item.description.toLowerCase().includes(q)
+      );
+    }
+    if (vegOnly) {
+      // Harino's Pizza is pure veg. Categorized items have Category enum values.
+      // Filter out any non-veg if defined, or match category types.
+      result = result.filter((item) => item.category !== 'nonveg');
+    }
+    if (popularOnly) {
+      result = result.filter((item) => item.popular);
+    }
+    return result;
+  }, [selectedCategory, menuItems, searchQuery, vegOnly, popularOnly]);
 
   const baseSubtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.basePrice * item.quantity, 0),
@@ -1156,7 +1943,7 @@ const App: React.FC = () => {
       customerEmail: customerProfile?.email,
       walletAmountRedeemed: walletDiscount,
       rewardPointsRedeemed: pointsDiscount,
-      rewardPointsEarned: Math.floor(subtotal / 10),
+      rewardPointsEarned: subtotal > 200 ? Math.floor(subtotal / 10) : 0,
       paymentMethod: paymentMethod || 'UPI',
     };
 
@@ -1184,6 +1971,7 @@ const App: React.FC = () => {
       if (usePoints && pointsDiscount > 0) {
         const pointsDeducted = Math.round(pointsDiscount * 10);
         updatedProfile.rewardPoints = Math.max(0, (updatedProfile.rewardPoints ?? 0) - pointsDeducted);
+        updatedProfile.coins = updatedProfile.rewardPoints; // Sync coins with rewardPoints
         // Log transaction
         const tx: WalletTransaction = {
           id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1198,24 +1986,22 @@ const App: React.FC = () => {
         void saveWalletTransactionToServer(tx).catch(console.error);
       }
 
-      const pointsEarned = Math.floor(subtotal / 10);
+      const pointsEarned = subtotal > 200 ? Math.floor(subtotal / 10) : 0;
       if (pointsEarned > 0) {
         updatedProfile.rewardPoints = (updatedProfile.rewardPoints ?? 0) + pointsEarned;
-        // Log transaction
-        const tx: WalletTransaction = {
-          id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          customerId: customerProfile.id,
-          customerName: customerProfile.name,
-          customerPhone: customerProfile.phone,
-          amount: pointsEarned * 0.1,
-          type: 'reward',
-          status: 'completed',
-          createdAt: new Date().toISOString()
-        };
-        void saveWalletTransactionToServer(tx).catch(console.error);
+        updatedProfile.coins = updatedProfile.rewardPoints; // Sync coins with rewardPoints
+        // No WalletTransaction is created for coins earned, ensuring only coins are credited without cash wallet changes.
       }
 
-      saveCustomerProfile(updatedProfile);
+      // Sync state and localStorage immediately synchronously to prevent stale server overrides
+      updateLocalCustomerProfile(updatedProfile);
+
+      // Save to server asynchronously but await it to ensure DB writes finish
+      try {
+        await saveCustomerToServer(updatedProfile);
+      } catch (err) {
+        console.error('Failed to sync updated customer profile to server:', err);
+      }
     }
 
     setUseWallet(false);
@@ -1235,16 +2021,18 @@ const App: React.FC = () => {
     StorageService.saveOrder(placedOrder);
     setPastOrders((currentOrders) => [placedOrder, ...currentOrders].slice(0, 3));
     setLatestOrder(placedOrder);
+    setDismissedOrderId(null);
+    localStorage.removeItem('dismissed_tracker_order_id');
     setShowOrderSuccess(true);
     replaceAppScreen('success');
     setCart([]);
   };
 
-  const categoryButtons: CategoryFilter[] = ['All', ...Object.values(Category)];
+  const categoryButtons: CategoryFilter[] = ['All', Category.PIZZA, Category.BURGERS, Category.FRIES, Category.MOMOS, Category.SIDES, Category.BEVERAGES];
   const saveCustomerProfile = useCallback(async (profile: CustomerProfile) => {
     try {
       const remoteCustomers = await getServerCustomers();
-      const cleanPhone = (p: string) => p.replace(/\D/g, '');
+      const cleanPhone = (p?: string) => (p || '').replace(/\D/g, '');
       const targetPhone = cleanPhone(profile.phone);
 
       const existing = remoteCustomers.find(
@@ -1259,8 +2047,7 @@ const App: React.FC = () => {
           phone: profile.phone.trim() || existing.phone,
           avatar: profile.avatar || existing.avatar,
         };
-        StorageService.saveCustomerProfile(mergedProfile);
-        setCustomerProfile(mergedProfile);
+        updateLocalCustomerProfile(mergedProfile);
         void saveCustomerToServer(mergedProfile).catch(() => undefined);
         if (!customerProfile) {
           alert(`Welcome back, ${mergedProfile.name}! Loaded your existing wallet balance of Rs ${(mergedProfile.walletBalance ?? 0).toFixed(2)} and ${mergedProfile.rewardPoints ?? 0} reward points.`);
@@ -1271,13 +2058,12 @@ const App: React.FC = () => {
       console.error('Error fetching existing customer profile:', err);
     }
 
-    StorageService.saveCustomerProfile(profile);
-    setCustomerProfile(profile);
+    updateLocalCustomerProfile(profile);
     void saveCustomerToServer(profile).catch(() => undefined);
   }, [customerProfile]);
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#fff7f0] text-slate-900">
+    <div className="relative min-h-screen overflow-x-hidden bg-cream-50 text-slate-900">
       <style>{`
         @keyframes slideInRight {
           from { transform: translateX(100%); opacity: 0; }
@@ -1287,10 +2073,10 @@ const App: React.FC = () => {
           animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
       `}</style>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[42rem] bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,0.28),transparent_26%),radial-gradient(circle_at_top_right,rgba(251,191,36,0.18),transparent_24%),linear-gradient(180deg,#120507_0%,#2a0d11_18%,#fffaf4_48%,#fff1e4_100%)]" />
-      <div className="pointer-events-none absolute -left-24 top-[24rem] h-72 w-72 rounded-full bg-red-200/35 blur-3xl" />
-      <div className="pointer-events-none absolute right-[-6rem] top-[36rem] h-80 w-80 rounded-full bg-amber-200/40 blur-3xl" />
-      <div className="pointer-events-none absolute left-1/3 top-[70rem] h-64 w-64 rounded-full bg-orange-100/60 blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[42rem] bg-[radial-gradient(circle_at_top_left,rgba(230,92,0,0.15),transparent_35%),radial-gradient(circle_at_top_right,rgba(234,222,202,0.5),transparent_30%),linear-gradient(180deg,#faf7f0_0%,#f4efe6_35%,#eadeca_100%)]" />
+      <div className="pointer-events-none absolute -left-24 top-[24rem] h-72 w-72 rounded-full bg-red-100/30 blur-3xl" />
+      <div className="pointer-events-none absolute right-[-6rem] top-[36rem] h-80 w-80 rounded-full bg-amber-100/40 blur-3xl" />
+      <div className="pointer-events-none absolute left-1/3 top-[70rem] h-64 w-64 rounded-full bg-orange-50/50 blur-3xl" />
 
       <ServiceModeModal
         isOpen={isServiceModeModalOpen}
@@ -1310,7 +2096,15 @@ const App: React.FC = () => {
         onAdminTrigger={() => setIsAdminPanelOpen(true)}
         customerProfile={customerProfile}
         onWalletClick={() => setIsWalletModalOpen(true)}
+        onHelpTour={() => setShowTutorial(true)}
       />
+      {showTutorial && (
+        <FirstTimeUserModal
+          isOpen={showTutorial}
+          onClose={() => setShowTutorial(false)}
+          onDetectLocation={detectLocation}
+        />
+      )}
       {!customerProfile && <CustomerLoginModal onSave={saveCustomerProfile} onAdminTrigger={() => setIsAdminPanelOpen(true)} />}
       <InstallPopup
         blocked={
@@ -1334,50 +2128,117 @@ const App: React.FC = () => {
               <div className="max-w-md mx-auto px-4 mt-6">
                 <div className="rounded-3xl border border-red-200 bg-white/95 backdrop-blur-md p-6 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl">
                   {/* Neon border decoration */}
-                  <div className="absolute top-0 left-0 w-2 h-full bg-red-650 bg-red-600" />
+                  <div className={`absolute top-0 left-0 w-2 h-full ${
+                    activeOrder.status === 'cancelled'
+                      ? 'bg-red-500'
+                      : activeOrder.status === 'done'
+                        ? 'bg-emerald-500'
+                        : 'bg-red-600'
+                  }`} />
 
                   <div className="flex justify-between items-start mb-4 pl-3">
                     <div>
                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">Active Order Tracker</span>
                       <h4 className="text-lg font-display font-bold text-slate-900 mt-0.5">Order #{activeOrder.id}</h4>
                     </div>
-                    <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-red-100 text-red-750 text-red-700 border border-red-200/50">
-                      {(activeOrder.status ?? 'new').replace(/_/g, ' ').toUpperCase()}
-                    </span>
-                  </div>
-
-                  <div className="pl-3 mb-5">
-                    {/* Visual Progress Steps */}
-                    <div className="flex items-center justify-between mt-4 relative">
-                      <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-100 -translate-y-1/2 z-0" />
-                      {['new', 'preparing', 'ready', 'out_for_delivery', 'done'].map((step, idx) => {
-                        const statusOrder = ['new', 'preparing', 'ready', 'out_for_delivery', 'done'];
-                        const currentIdx = statusOrder.indexOf(activeOrder.status ?? 'new');
-                        const isCompleted = statusOrder.indexOf(step) <= currentIdx;
-                        const isCurrent = step === (activeOrder.status ?? 'new');
-
-                        return (
-                          <div key={step} className="flex flex-col items-center z-10 relative">
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all ${isCurrent
-                                ? 'bg-red-600 text-white ring-4 ring-red-100 scale-110 shadow-lg shadow-red-200'
-                                : isCompleted
-                                  ? 'bg-emerald-500 text-white'
-                                  : 'bg-slate-100 text-slate-400 border border-slate-200'
-                              }`}>
-                              {idx + 1}
-                            </div>
-                            <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 mt-1.5 whitespace-nowrap hidden sm:inline">
-                              {step.replace(/_/g, ' ')}
-                            </span>
-                          </div>
-                        );
-                      })}
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                        activeOrder.status === 'cancelled'
+                          ? 'bg-red-50 text-red-600 border-red-200'
+                          : activeOrder.status === 'done'
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                            : 'bg-red-100 text-red-700 border-red-200/50'
+                      }`}>
+                        {activeOrder.status === 'cancelled' 
+                          ? 'CANCELLED' 
+                          : activeOrder.status === 'done' 
+                            ? 'COMPLETE' 
+                            : (activeOrder.status ?? 'new').replace(/_/g, ' ').toUpperCase()}
+                      </span>
+                      {(activeOrder.status === 'done' || activeOrder.status === 'cancelled') && (
+                        <button
+                          onClick={() => {
+                            setDismissedOrderId(activeOrder.id);
+                            localStorage.setItem('dismissed_tracker_order_id', activeOrder.id);
+                          }}
+                          className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 text-xs font-bold transition-all"
+                          title="Dismiss Tracker"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   </div>
 
+                  {activeOrder.status === 'cancelled' ? (
+                    <div className="pl-3 mb-5 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 shadow-sm">
+                      <span className="text-red-500 text-base mt-0.5">⚠️</span>
+                      <div className="flex-1">
+                        <span className="text-[10px] font-black text-red-700 block uppercase tracking-wider">Cancellation Reason</span>
+                        <p className="text-sm font-semibold text-red-600 mt-1 leading-relaxed">
+                          {activeOrder.cancellationReason || 'No reason specified by administration.'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pl-3 mb-5">
+                      {/* Visual Progress Steps */}
+                      <div className="flex items-center justify-between mt-4 relative">
+                        <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-100 -translate-y-1/2 z-0" />
+                        {['placed', 'preparing', 'ready', 'complete'].map((step, idx) => {
+                          const status = activeOrder.status ?? 'new';
+                          
+                          let currentStepIndex = 0;
+                          if (status === 'new') {
+                            currentStepIndex = 0;
+                          } else if (status === 'preparing') {
+                            currentStepIndex = 1;
+                          } else if (status === 'ready' || status === 'out_for_delivery') {
+                            currentStepIndex = 2;
+                          } else if (status === 'done') {
+                            currentStepIndex = 3;
+                          }
+
+                          const isCompleted = idx <= currentStepIndex;
+                          const isCurrent = idx === currentStepIndex;
+
+                          let labelText = '';
+                          if (idx === 0) labelText = 'Placed';
+                          else if (idx === 1) labelText = 'Preparing';
+                          else if (idx === 2) labelText = 'Ready';
+                          else if (idx === 3) labelText = 'Complete';
+
+                          return (
+                            <div key={step} className="flex flex-col items-center z-10 relative">
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all ${
+                                isCurrent
+                                  ? 'bg-red-600 text-white ring-4 ring-red-100 scale-110 shadow-lg shadow-red-200'
+                                  : isCompleted
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-slate-100 text-slate-400 border border-slate-200'
+                              }`}>
+                                {idx + 1}
+                              </div>
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 mt-1.5 whitespace-nowrap hidden sm:inline">
+                                {labelText}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="pl-3 flex flex-col sm:flex-row gap-3 items-center justify-between pt-2 border-t border-slate-100">
-                    <div className="text-[10px] font-bold text-slate-650 text-slate-600">
-                      {activeOrder.estimatedTime ? `Estimated Time: ${activeOrder.estimatedTime}` : 'Fresh ingredients are being prepared.'}
+                    <div className="text-[10px] font-bold text-slate-600">
+                      {activeOrder.status === 'cancelled' 
+                        ? 'This order was cancelled by the store.' 
+                        : activeOrder.status === 'done'
+                          ? 'Order complete! Enjoy your meal!'
+                          : activeOrder.estimatedTime 
+                            ? `Estimated Time: ${activeOrder.estimatedTime}` 
+                            : 'Fresh ingredients are being prepared.'
+                      }
                     </div>
                     <button
                       onClick={() => printOrderReceipt(activeOrder)}
@@ -1392,22 +2253,57 @@ const App: React.FC = () => {
             )}
 
             <div ref={menuRef} className="max-w-7xl mx-auto px-4 mt-8 md:mt-12 pb-24 scroll-mt-24">
+              {/* Search & Filter Bar */}
+              <div className="mb-6 bg-white border border-slate-200/80 rounded-[2rem] p-4 md:p-6 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+                <div className="relative w-full md:w-96">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search delicious pizzas, momos..."
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-205 rounded-2xl font-semibold text-slate-800 outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500/10 text-sm placeholder:text-slate-400"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-655 font-bold cursor-pointer"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
+                  <button
+                    onClick={() => setPopularOnly(!popularOnly)}
+                    className={`px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                      popularOnly
+                        ? 'bg-amber-50 border-amber-300 text-amber-850 font-black scale-105 shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
+                    }`}
+                  >
+                    ⭐ Popular
+                  </button>
+                </div>
+              </div>
+
               <div className="relative mb-8 md:mb-12">
                 <div className="flex space-x-2 overflow-x-auto pb-4 pt-2 px-1 hide-scrollbar snap-x snap-mandatory scroll-smooth">
                   {categoryButtons.map((category) => (
                     <button
                       key={category}
                       onClick={() => handleExploreCategory(category)}
-                      className={`snap-start whitespace-nowrap px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border shadow-sm flex-shrink-0 ${selectedCategory === category
-                          ? 'bg-red-600 border-red-600 text-white scale-105 shadow-red-200'
-                          : 'bg-white border-slate-100 text-slate-500 hover:text-red-600'
+                      className={`snap-start whitespace-nowrap px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border shadow-sm flex-shrink-0 cursor-pointer ${selectedCategory === category
+                          ? 'bg-red-655 border-red-655 text-white scale-105 shadow-md shadow-red-900/10'
+                          : 'bg-white border-slate-200 text-slate-500 hover:text-red-655'
                         }`}
                     >
                       {category}
                     </button>
                   ))}
                 </div>
-                <div className="absolute right-0 top-0 h-full w-12 bg-gradient-to-l from-slate-50/30 to-transparent pointer-events-none md:hidden" />
+                <div className="absolute right-0 top-0 h-full w-12 bg-gradient-to-l from-cream-50/30 to-transparent pointer-events-none md:hidden" />
               </div>
 
               {!isStoreOpen && (
@@ -1421,6 +2317,8 @@ const App: React.FC = () => {
                 onAddToCart={addToCart}
                 offers={activeOfferCards}
                 cartSubtotal={baseSubtotal}
+                cart={cart}
+                onUpdateQuantity={updateQuantity}
               />
             </div>
           </>
@@ -1431,21 +2329,21 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <footer className="relative z-10 overflow-hidden border-t border-white/10 bg-[linear-gradient(135deg,#17070a,#2d0f14_55%,#120507)] py-20 pb-32 text-white md:pb-24">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top,rgba(248,113,113,0.22),transparent_65%)]" />
+      <footer className="relative z-10 overflow-hidden border-t border-slate-200 bg-white py-20 pb-32 text-slate-800 md:pb-24">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top,rgba(230,92,0,0.06),transparent_65%)]" />
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <h2 className="font-display text-5xl md:text-6xl mb-4 text-red-500">Harino&apos;s</h2>
-          <div className="text-white font-bold tracking-[0.6em] uppercase text-[9px] md:text-[11px] mb-10 opacity-40">
+          <h2 className="font-display text-5xl md:text-6xl mb-4 text-red-650">Harino&apos;s</h2>
+          <div className="text-slate-500 font-bold tracking-[0.6em] uppercase text-[9px] md:text-[11px] mb-10 opacity-60">
             Because Hari Knows
           </div>
-          <div className="text-white/20 text-[8px] uppercase tracking-widest mt-8">harinos.store</div>
+          <div className="text-slate-400/30 text-[8px] uppercase tracking-widest mt-8">harinos.store</div>
         </div>
       </footer>
 
       {isCategoryModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-end justify-center p-0 sm:items-center sm:p-4">
           <div
-            className="absolute inset-0 bg-slate-900/90 backdrop-blur-xl"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             onClick={closeCategoryView}
           />
           <div
@@ -1453,32 +2351,32 @@ const App: React.FC = () => {
             style={categorySwipeDismiss.style}
             {...categorySwipeDismiss.bind}
           >
-            <div className="bg-slate-900 p-5 text-center sm:p-8">
-              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/25 sm:hidden" />
-              <h3 className="mb-2 text-2xl font-display text-white sm:text-3xl">Explore Our Kitchen</h3>
-              <p className="text-white/50 text-[10px] uppercase tracking-[0.24em] font-black">
+            <div className="bg-slate-50 border-b border-slate-200 p-5 text-center sm:p-8">
+              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 sm:hidden" />
+              <h3 className="mb-2 text-2xl font-display text-slate-800 sm:text-3xl">Explore Our Kitchen</h3>
+              <p className="text-slate-500 text-[10px] uppercase tracking-[0.24em] font-black">
                 Choose a category and jump to the menu
               </p>
-              <div className="mt-3 text-[9px] font-black uppercase tracking-[0.22em] text-white/35">
+              <div className="mt-3 text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">
                 Swipe down to close
               </div>
             </div>
-            <div className="p-5 sm:p-8 md:p-12">
+            <div className="p-5 sm:p-8 md:p-12 bg-white">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {categoryButtons.map((category) => (
                   <button
                     key={category}
                     onClick={() => handleExploreCategory(category)}
-                    className="flex items-center justify-between p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-red-200 hover:bg-red-50 transition-all group"
+                    className="flex items-center justify-between p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-red-200 hover:bg-red-50/50 transition-all group cursor-pointer"
                   >
                     <div className="text-left">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-red-500 transition-colors">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-red-650 transition-colors">
                         Category
                       </div>
                       <div className="text-xl font-display font-bold text-slate-900">{category}</div>
                     </div>
                     <svg
-                      className="w-5 h-5 text-slate-300 group-hover:text-red-500 transition-colors"
+                      className="w-5 h-5 text-slate-350 group-hover:text-red-650 transition-colors"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1626,10 +2524,7 @@ const App: React.FC = () => {
           isOpen={isWalletModalOpen}
           onClose={() => setIsWalletModalOpen(false)}
           customerProfile={customerProfile}
-          onProfileChange={(updated) => {
-            setCustomerProfile(updated);
-            StorageService.saveCustomerProfile(updated);
-          }}
+          onProfileChange={updateLocalCustomerProfile}
           showNotification={showNotification}
           onProceedToPayment={(amount) => {
             setTopUpAmount(String(amount));
@@ -1695,7 +2590,7 @@ const App: React.FC = () => {
 
       {notification && (
         <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[90%] md:max-w-xs">
-          <div className="bg-slate-900 text-white px-6 md:px-8 py-4 rounded-2xl shadow-2xl border border-red-600/30 mx-auto">
+          <div className="bg-white text-slate-800 px-6 md:px-8 py-4 rounded-2xl shadow-2xl border border-slate-200 mx-auto text-center font-bold">
             <span className="text-[10px] md:text-[11px] font-black uppercase tracking-widest">{notification}</span>
           </div>
         </div>
@@ -1703,41 +2598,124 @@ const App: React.FC = () => {
 
       {showOrderSuccess && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center px-0 sm:items-center sm:px-4">
-          <div className="absolute inset-0 bg-slate-900/75 backdrop-blur-md" onClick={closeSuccessView} />
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={closeSuccessView} />
           <div
-            className="relative w-full max-w-sm rounded-t-[2rem] border-2 border-red-600 bg-slate-900 p-6 text-center text-white shadow-2xl sm:rounded-[3rem] sm:p-10"
+            className="relative w-full max-w-sm rounded-t-[2rem] border-2 border-red-650 bg-white p-6 text-center text-slate-800 shadow-2xl sm:rounded-[3rem] sm:p-10"
             style={successSwipeDismiss.style}
             {...successSwipeDismiss.bind}
           >
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
-            <div className="w-16 h-16 md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center text-white text-3xl md:text-4xl mb-6 mx-auto shadow-xl">
-              OK
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-300 sm:hidden" />
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center text-white text-3xl md:text-4xl mb-6 mx-auto shadow-xl font-black">
+              ✓
             </div>
-            <h4 className="font-display text-3xl md:text-4xl font-bold mb-3 leading-tight">Order Received</h4>
-            <p className="text-white/60 text-[10px] md:text-[11px] uppercase tracking-widest mt-4">
+            <h4 className="font-display text-3xl md:text-4xl font-bold mb-3 leading-tight text-slate-900">Order Received</h4>
+            <p className="text-slate-500 text-[10px] md:text-[11px] uppercase tracking-widest mt-4 font-bold">
               Status: {(latestOrder?.status ?? 'new').replace(/_/g, ' ').toUpperCase()}
             </p>
-            <p className="mt-4 text-[9px] font-black uppercase tracking-[0.22em] text-white/35">
+            <p className="mt-4 text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">
               Swipe down to dismiss
             </p>
-            <p className="text-[10px] md:text-[11px] text-red-500 font-black tracking-[0.5em] mt-8 uppercase">
+            <p className="text-[10px] md:text-[11px] text-red-650 font-black tracking-[0.5em] mt-8 uppercase">
               Because Hari Knows
             </p>
             <button
               onClick={closeSuccessView}
-              className="mt-10 px-10 py-4 bg-white/10 rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-white/20 transition-all w-full"
+              className="mt-10 px-10 py-4 bg-red-650 hover:bg-red-750 text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all w-full cursor-pointer shadow-md"
             >
               Dismiss
             </button>
           </div>
         </div>
       )}
+      {adminSession && uncompletedOrdersCount > 0 && !isAdminPanelOpen && (
+        <div className="fixed bottom-24 right-6 z-[180] animate-bounce">
+          <button
+            onClick={() => setIsAdminPanelOpen(true)}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl border-2 border-white hover:bg-slate-800 transition-all cursor-pointer relative"
+            title="Active Uncompleted Orders"
+          >
+            <span className="text-xl">🍕</span>
+            <span className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-655 border-2 border-white text-[10px] font-black text-white">
+              {uncompletedOrdersCount}
+            </span>
+          </button>
+        </div>
+      )}
+
       {isAdminPanelOpen && (
         <AdminPanel
           session={adminSession}
           onSessionChange={setAdminSession}
           onClose={() => setIsAdminPanelOpen(false)}
         />
+      )}
+
+      {showUpdateModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowUpdateModal(false)} />
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-800 shadow-2xl p-6 md:p-8">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(230,92,0,0.06),_transparent_50%)] pointer-events-none" />
+            <div className="relative text-center">
+              <span className="text-5xl mb-4 block">🚀</span>
+              <h3 className="text-2xl font-display font-black tracking-tight text-slate-900 mb-2">New version available</h3>
+              <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                Update to the latest version of Harino's App for new menu items, improved speed, and new features.
+              </p>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if ('caches' in window) {
+                        const keys = await caches.keys();
+                        await Promise.all(keys.map(key => caches.delete(key)));
+                      }
+                      if ('serviceWorker' in navigator) {
+                        const registrations = await navigator.serviceWorker.getRegistrations();
+                        for (const registration of registrations) {
+                          await registration.unregister();
+                        }
+                      }
+                    } catch (e) {
+                      console.warn(e);
+                    } finally {
+                      window.location.reload();
+                    }
+                  }}
+                  className="flex-1 rounded-2xl bg-red-650 hover:bg-red-750 py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg active:scale-95 transition-all cursor-pointer"
+                >
+                  Update Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUpdateModal(false)}
+                  className="flex-1 rounded-2xl border border-slate-200 bg-slate-100 py-3.5 text-xs font-black uppercase tracking-[0.2em] text-slate-700 hover:bg-slate-200 transition-all cursor-pointer"
+                >
+                  Later
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {view === 'menu' && totalCartItems > 0 && !isCartOpen && !isPaymentOpen && !showOrderSuccess && !isServiceModeModalOpen && !showTutorial && !isAdminPanelOpen && !isWalletModalOpen && (
+        <div className="fixed bottom-6 inset-x-4 z-50 md:left-auto md:right-6 md:w-96 animate-slide-up">
+          <button
+            onClick={openCartView}
+            className="w-full flex items-center justify-between bg-red-655 text-white px-6 py-4 rounded-3xl shadow-[0_20px_50px_rgba(230,92,0,0.3)] transition-all transform hover:scale-[1.02] active:scale-95 cursor-pointer font-bold border border-red-700/10"
+          >
+            <div className="flex items-center gap-3">
+              <span className="bg-white/20 px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider">
+                {totalCartItems} {totalCartItems === 1 ? 'Item' : 'Items'}
+              </span>
+              <span className="text-sm font-black text-white">Rs {grandTotal.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest">
+              <span>View Basket</span>
+              <span>🛒 →</span>
+            </div>
+          </button>
+        </div>
       )}
     </div>
   );

@@ -73,7 +73,9 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
                         <span className="font-bold text-slate-900">{item.quantity}x</span> {item.name}
                       </span>
                     </div>
-                    <span className="text-slate-400 text-sm">₹{item.totalPrice}</span>
+                    <span className="text-slate-400 text-sm">
+                      {typeof item.totalPrice === 'number' ? `₹${item.totalPrice}` : ''}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -81,7 +83,9 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
               <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-slate-50">
                 <div className="mb-6 md:mb-0">
                   <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 block mb-1">Total Amount</span>
-                  <span className="text-3xl font-display font-bold text-slate-900">₹{order.total.toFixed(2)}</span>
+                  <span className="text-3xl font-display font-bold text-slate-900">
+                    {typeof order.total === 'number' ? `₹${order.total.toFixed(2)}` : 'Rs N/A'}
+                  </span>
                 </div>
                 <button 
                   onClick={() => onReorder(order)}

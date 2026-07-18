@@ -329,7 +329,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                           onClick={() => onReorder(lastOrder)}
                           className="w-full rounded-xl border border-slate-200 bg-white py-3 text-[10px] font-black uppercase tracking-widest text-slate-900 shadow-sm transition-all active:scale-95"
                         >
-                          Repeat Last Order (Rs {lastOrder.total.toFixed(0)})
+                          Repeat Last Order {typeof lastOrder.total === 'number' ? `(Rs ${lastOrder.total.toFixed(0)})` : ''}
                         </button>
                       </div>
                     </div>

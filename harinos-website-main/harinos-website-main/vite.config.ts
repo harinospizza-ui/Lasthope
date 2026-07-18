@@ -2,6 +2,10 @@ import path from 'path';
 import { Plugin, defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const appRoot = path.resolve(__dirname, 'harinos-website-main/harinos-website-main');
+
+
+
 const createNoCacheVersionPlugin = (buildVersion: string): Plugin => ({
   name: 'harinos-no-cache-version',
   configureServer(server) {
@@ -45,13 +49,22 @@ export default defineConfig(() => {
   const buildVersion = new Date().toISOString();
 
   return {
+    root: appRoot,
     base: '/',
+    publicDir: path.resolve(appRoot, 'public'),
+    envDir: __dirname,
     server: {
       port: 3000,
       host: '0.0.0.0',
     },
-    plugins: [react(), createNoCacheVersionPlugin(buildVersion)],
+    plugins: [
+      react(),
+      createNoCacheVersionPlugin(buildVersion),
+    ],
+
     build: {
+      outDir: path.resolve(appRoot, 'dist'),
+      emptyOutDir: true,
       target: ['es2018', 'safari13'],
       cssTarget: 'safari13',
       rollupOptions: {
@@ -67,7 +80,7 @@ export default defineConfig(() => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': appRoot,
       },
     },
   };

@@ -40,6 +40,7 @@ import { AdminOffers } from './AdminOffers';
 import { AdminNotifications } from './AdminNotifications';
 import { AdminMigration } from './AdminMigration';
 import { AdminReferralManagement } from './AdminReferralManagement';
+import { AdminPOS } from './AdminPOS';
 
 interface AdminPanelProps {
   session: AdminSession | null;
@@ -130,7 +131,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<CustomerProfile[]>([]);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'orders' | 'wallets' | 'menu' | 'outlets' | 'offers' | 'dashboard' | 'legacyMigration' | 'referrals' | 'notifications'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'pos' | 'wallets' | 'menu' | 'outlets' | 'offers' | 'dashboard' | 'legacyMigration' | 'referrals' | 'notifications'>('orders');
 
 
   // Dynamic config items
@@ -445,6 +446,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
         <button onClick={() => setActiveTab('orders')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'orders' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
           Orders
         </button>
+        <button onClick={() => setActiveTab('pos')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'pos' ? 'bg-gradient-premium border-red-500/30 text-white shadow-lg shadow-red-900/30' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
+          ⚡ Counter POS
+        </button>
         {session.role !== 'staff' && (
           <button onClick={() => setActiveTab('dashboard')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'dashboard' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
             Dashboard
@@ -492,6 +496,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
             onUpdateStatus={setStatus}
             onDeleteOrder={handleDeleteOrder}
             onPrint={printOrder}
+          />
+        )}
+        {activeTab === 'pos' && (
+          <AdminPOS
+            session={session}
+            menuItems={menuItems}
+            outlets={outlets}
+            onRefresh={refresh}
           />
         )}
         {activeTab === 'wallets' && session.role !== 'staff' && (

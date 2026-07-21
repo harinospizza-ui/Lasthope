@@ -29,6 +29,9 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [cart, setCart] = useState<POSCartItem[]>([]);
   const [sizeSelections, setSizeSelections] = useState<Record<string, string>>({});
+  
+  // Mobile View Switcher: 'menu' | 'cart'
+  const [activeMobileView, setActiveMobileView] = useState<'menu' | 'cart'>('menu');
 
   // Customer & Payment Form State
   const [customerName, setCustomerName] = useState('');
@@ -104,6 +107,10 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
     );
   };
 
+  const totalCartItemsCount = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity, 0);
+  }, [cart]);
+
   const subtotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
@@ -122,14 +129,17 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
 
     if (!nameVal) {
       alert('Please enter the customer name.');
+      setActiveMobileView('cart');
       return;
     }
     if (phoneVal.length < 10) {
       alert('Please enter a valid 10-digit mobile number.');
+      setActiveMobileView('cart');
       return;
     }
     if (cart.length === 0) {
-      alert('POS cart is empty. Please add items to generate a bill.');
+      alert('POS cart is empty. Please select menu items to generate a bill.');
+      setActiveMobileView('menu');
       return;
     }
 
@@ -200,6 +210,7 @@ Thank you for dining with Harino's! 🍕`;
       setCart([]);
       setCustomerName('');
       setCustomerPhone('');
+      setActiveMobileView('menu');
       if (onRefresh) onRefresh();
 
       alert(`Counter Bill #${posId} generated successfully!${sendWhatsApp ? ' WhatsApp launched.' : ''}`);
@@ -219,7 +230,7 @@ Thank you for dining with Harino's! 🍕`;
   };
 
   return (
-    <section className="relative mx-auto max-w-7xl p-4 text-white animate-fade-in space-y-6">
+    <section className="relative mx-auto max-w-7xl px-2 py-3 sm:p-4 text-white animate-fade-in space-y-4">
       {/* Printable Receipt styling for thermal printers */}
       <style>{`
         @media print {
@@ -229,39 +240,71 @@ Thank you for dining with Harino's! 🍕`;
         }
       `}</style>
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+      {/* POS Top Header & Outlet Badge */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-950/80 p-3 sm:p-4 rounded-2xl border border-white/10 shadow-xl">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-red-500">Counter Operations</p>
-          <h3 className="font-display text-2xl font-black text-white">⚡ POS Billing & WhatsApp Counter</h3>
+          <p className="text-[9px] font-black uppercase tracking-[0.25em] text-red-500">Counter Operations</p>
+          <h3 className="font-display text-xl sm:text-2xl font-black text-white">⚡ Mobile POS & WhatsApp Bill</h3>
         </div>
         {selectedOutlet && (
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-bold text-slate-300">
+          <div className="rounded-xl border border-white/10 bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-slate-300">
             Outlet: <span className="text-white font-black">{selectedOutlet.name}</span>
           </div>
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-12">
-        {/* Left Side: Fast Menu Items Grid (7 cols) */}
-        <div className="lg:col-span-7 space-y-4">
-          {/* Search & Category Bar */}
-          <div className="space-y-3">
+      {/* Mobile Screen View Switcher Tabs (lg:hidden) */}
+      <div className="flex lg:hidden bg-slate-950 p-1.5 rounded-2xl border border-white/10 gap-1 shadow-lg">
+        <button
+          onClick={() => setActiveMobileView('menu')}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+            activeMobileView === 'menu'
+              ? 'bg-gradient-premium text-white shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <span>🍕 Select Items</span>
+        </button>
+
+        <button
+          onClick={() => setActiveMobileView('cart')}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 relative ${
+            activeMobileView === 'cart'
+              ? 'bg-gradient-premium text-white shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <span>🛍️ Cart & Bill</span>
+          {totalCartItemsCount > 0 && (
+            <span className="bg-white text-red-650 px-2 py-0.5 rounded-full text-[10px] font-black shadow-sm">
+              {totalCartItemsCount} • Rs {grandTotal}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Main Container: Mobile view tab switching + side-by-side on desktop */}
+      <div className="grid gap-5 lg:grid-cols-12">
+        {/* Left Panel: Fast Item Picker (Visible on Desktop OR when activeMobileView === 'menu') */}
+        <div className={`lg:col-span-7 space-y-3 ${activeMobileView === 'menu' ? 'block' : 'hidden lg:block'}`}>
+          {/* Search Input & Horizontal Category Pills */}
+          <div className="space-y-2 bg-slate-950/60 p-3 rounded-2xl border border-white/10 shadow-xl">
             <input
               type="text"
-              placeholder="🔍 Quick search items (e.g. Farmhouse, Burger, Coke)..."
+              placeholder="🔍 Search items (e.g. Farmhouse, Burger, Drink)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-xs font-bold text-white outline-none focus:border-red-500 shadow-xl"
+              className="w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-red-500 shadow-inner"
             />
 
-            <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+            <div className="flex gap-1.5 overflow-x-auto hide-scrollbar pb-1">
               {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                     selectedCategory === cat
-                      ? 'bg-gradient-premium text-white border border-red-500/30 shadow-lg'
+                      ? 'bg-red-650 text-white shadow-md'
                       : 'bg-white/[0.04] text-slate-400 border border-white/5 hover:bg-white/10'
                   }`}
                 >
@@ -271,33 +314,36 @@ Thank you for dining with Harino's! 🍕`;
             </div>
           </div>
 
-          {/* Menu Items Grid */}
-          <div className="grid gap-3 sm:grid-cols-2 max-h-[600px] overflow-y-auto pr-1 hide-scrollbar">
+          {/* Menu Items Grid: Optimized 1-col on mobile, 2-col on sm/md */}
+          <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 max-h-[65vh] lg:max-h-[600px] overflow-y-auto pr-0.5 hide-scrollbar">
             {filteredMenuItems.map((item) => {
               const currentSize = sizeSelections[item.id] || (item.sizes?.[0]?.label ?? '');
               const currentPrice = getItemCurrentPrice(item, currentSize);
+              const cartItemId = `${item.id}-${currentSize || 'std'}`;
+              const cartEntry = cart.find((i) => i.id === cartItemId);
+              const inCartQty = cartEntry ? cartEntry.quantity : 0;
 
               return (
                 <div
                   key={item.id}
-                  className="group relative flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-950/60 p-3.5 shadow-xl transition-all hover:border-red-500/40"
+                  className="relative flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-950/80 p-3 shadow-lg transition-all hover:border-red-500/30"
                 >
-                  <div className="flex gap-3">
+                  <div className="flex gap-2.5 items-center">
                     <img
                       src={item.image}
                       alt={item.name}
-                      className="h-16 w-16 rounded-xl object-cover border border-white/10 flex-shrink-0"
+                      className="h-14 w-14 sm:h-16 sm:w-16 rounded-xl object-cover border border-white/10 flex-shrink-0"
                     />
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-xs font-black text-white truncate">{item.name}</h4>
+                      <h4 className="text-xs font-black text-white truncate leading-tight">{item.name}</h4>
                       <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{item.category}</p>
-                      <div className="mt-1 text-sm font-black text-red-400">Rs {currentPrice}</div>
+                      <div className="mt-1 text-xs sm:text-sm font-black text-red-400">Rs {currentPrice}</div>
                     </div>
                   </div>
 
-                  {/* Pizza Size Selector Pills */}
+                  {/* Size Selectors (if pizza or item has sizes) */}
                   {item.sizes && item.sizes.length > 0 && (
-                    <div className="mt-2.5 flex gap-1 bg-slate-900/60 p-1 rounded-xl border border-white/5">
+                    <div className="mt-2 flex gap-1 bg-slate-900 p-1 rounded-xl border border-white/5">
                       {item.sizes.map((s) => (
                         <button
                           key={s.label}
@@ -308,72 +354,123 @@ Thank you for dining with Harino's! 🍕`;
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          {s.label.slice(0, 3)} (Rs {s.price})
+                          {s.label.slice(0, 3)} (₹{s.price})
                         </button>
                       ))}
                     </div>
                   )}
 
-                  <button
-                    onClick={() => handleAddToCart(item)}
-                    className="mt-3 w-full rounded-xl bg-gradient-premium py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition-all active:scale-95 hover:opacity-90 flex items-center justify-center gap-1"
-                  >
-                    <span>➕ Add to Cart</span>
-                  </button>
+                  {/* Add / Stepper Button */}
+                  <div className="mt-2.5">
+                    {inCartQty > 0 ? (
+                      <div className="flex items-center justify-between bg-slate-900 rounded-xl p-1 border border-red-500/30">
+                        <button
+                          onClick={() => handleUpdateQuantity(cartItemId, -1)}
+                          className="h-7 w-8 rounded-lg bg-red-650 text-white font-black text-xs flex items-center justify-center active:scale-95"
+                        >
+                          -
+                        </button>
+                        <span className="text-xs font-black text-white px-2">
+                          {inCartQty} in Cart
+                        </span>
+                        <button
+                          onClick={() => handleUpdateQuantity(cartItemId, 1)}
+                          className="h-7 w-8 rounded-lg bg-red-650 text-white font-black text-xs flex items-center justify-center active:scale-95"
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleAddToCart(item)}
+                        className="w-full rounded-xl bg-gradient-premium py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition-all active:scale-95 hover:opacity-90 flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <span>➕ Add Item</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
+
             {filteredMenuItems.length === 0 && (
-              <div className="col-span-2 text-center text-xs text-slate-500 py-12 font-bold">
-                No active menu items match your query.
+              <div className="col-span-full text-center text-xs text-slate-500 py-10 font-bold border border-dashed border-white/10 rounded-2xl">
+                No active menu items match your search.
               </div>
             )}
           </div>
+
+          {/* Mobile Floating Bottom Cart Bar (Appears when items are in cart and viewing menu) */}
+          {cart.length > 0 && activeMobileView === 'menu' && (
+            <div className="lg:hidden sticky bottom-2 inset-x-0 z-40 animate-slide-up">
+              <button
+                onClick={() => setActiveMobileView('cart')}
+                className="w-full rounded-2xl bg-gradient-premium px-4 py-3.5 text-white font-bold shadow-2xl border border-red-500/40 flex items-center justify-between cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="bg-white/20 px-2 py-0.5 rounded-lg text-[10px] font-black">
+                    {totalCartItemsCount} {totalCartItemsCount === 1 ? 'Item' : 'Items'}
+                  </span>
+                  <span className="text-sm font-black">Rs {grandTotal}</span>
+                </div>
+                <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                  View Cart & Checkout ➔
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Right Side: Counter Cart & WhatsApp Generator (5 cols) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 shadow-2xl backdrop-blur-2xl flex flex-col justify-between min-h-[550px]">
+        {/* Right Panel: Counter Cart & WhatsApp Billing (Visible on Desktop OR when activeMobileView === 'cart') */}
+        <div className={`lg:col-span-5 space-y-4 ${activeMobileView === 'cart' ? 'block' : 'hidden lg:block'}`}>
+          <div className="rounded-2xl border border-white/10 bg-slate-950/90 p-4 sm:p-5 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-center pb-3 border-b border-white/10">
-                <h4 className="font-display text-lg font-black text-white">🛍️ Counter Cart ({cart.length})</h4>
+                <h4 className="font-display text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <span>🛍️ Counter Cart</span>
+                  {cart.length > 0 && (
+                    <span className="text-xs bg-red-650 text-white px-2 py-0.5 rounded-full font-black">
+                      {totalCartItemsCount}
+                    </span>
+                  )}
+                </h4>
                 {cart.length > 0 && (
                   <button
                     onClick={() => setCart([])}
                     className="text-[9px] font-black uppercase tracking-widest text-red-400 hover:underline"
                   >
-                    Clear Cart
+                    Clear All
                   </button>
                 )}
               </div>
 
               {/* Cart Items List */}
-              <div className="mt-4 space-y-3 max-h-56 overflow-y-auto pr-1 hide-scrollbar">
+              <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1 hide-scrollbar">
                 {cart.map((item) => (
                   <div
                     key={item.id}
-                    className="flex justify-between items-center p-3 rounded-2xl bg-white/[0.03] border border-white/5"
+                    className="flex justify-between items-center p-2.5 rounded-xl bg-white/[0.03] border border-white/5"
                   >
                     <div className="min-w-0 pr-2">
                       <div className="text-xs font-bold text-white truncate">
                         {item.name} {item.selectedSize ? <span className="text-red-400 text-[10px]">[{item.selectedSize}]</span> : ''}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-bold">
-                        Rs {item.price} x {item.quantity} = <span className="text-white">Rs {item.price * item.quantity}</span>
+                      <div className="text-[10px] text-slate-400 font-bold mt-0.5">
+                        Rs {item.price} x {item.quantity} = <span className="text-white font-black">Rs {item.price * item.quantity}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button
                         onClick={() => handleUpdateQuantity(item.id, -1)}
-                        className="h-7 w-7 rounded-xl bg-white/10 text-white font-black hover:bg-white/20 active:scale-95 flex items-center justify-center text-xs"
+                        className="h-7 w-7 rounded-lg bg-white/10 text-white font-black hover:bg-white/20 active:scale-95 flex items-center justify-center text-xs"
                       >
                         -
                       </button>
                       <span className="text-xs font-black text-white w-4 text-center">{item.quantity}</span>
                       <button
                         onClick={() => handleUpdateQuantity(item.id, 1)}
-                        className="h-7 w-7 rounded-xl bg-white/10 text-white font-black hover:bg-white/20 active:scale-95 flex items-center justify-center text-xs"
+                        className="h-7 w-7 rounded-lg bg-white/10 text-white font-black hover:bg-white/20 active:scale-95 flex items-center justify-center text-xs"
                       >
                         +
                       </button>
@@ -382,17 +479,17 @@ Thank you for dining with Harino's! 🍕`;
                 ))}
 
                 {cart.length === 0 && (
-                  <div className="text-center text-xs text-slate-500 py-10 font-bold border border-dashed border-white/10 rounded-2xl">
-                    No items in counter cart. Select items from the left menu.
+                  <div className="text-center text-xs text-slate-500 py-8 font-bold border border-dashed border-white/10 rounded-xl">
+                    Cart is empty. Tap &quot;Select Items&quot; to add counter items.
                   </div>
                 )}
               </div>
 
-              {/* Customer Info & Payment Form */}
-              <div className="mt-5 space-y-3 pt-4 border-t border-white/10">
-                <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">Customer & Order Details</h5>
+              {/* Customer Details Form */}
+              <div className="mt-4 space-y-3 pt-3 border-t border-white/10">
+                <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">Customer & Payment Info</h5>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2">
                   <div>
                     <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Customer Name</label>
                     <input
@@ -415,7 +512,7 @@ Thank you for dining with Harino's! 🍕`;
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2">
                   <div>
                     <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Counter Order Mode</label>
                     <select
@@ -445,17 +542,17 @@ Thank you for dining with Harino's! 🍕`;
             </div>
 
             {/* Total & Action Buttons */}
-            <div className="mt-6 pt-4 border-t border-white/10 space-y-3">
-              <div className="flex justify-between items-center text-sm font-bold">
-                <span className="text-slate-400">Total Payable</span>
-                <span className="text-2xl font-black text-white">Rs {grandTotal}</span>
+            <div className="mt-5 pt-3 border-t border-white/10 space-y-2.5">
+              <div className="flex justify-between items-center font-bold">
+                <span className="text-xs text-slate-400 uppercase tracking-wider">Total Amount</span>
+                <span className="text-xl sm:text-2xl font-black text-white">Rs {grandTotal}</span>
               </div>
 
               <div className="flex flex-col gap-2">
                 <button
                   disabled={isSubmitting || cart.length === 0}
                   onClick={() => handleGenerateBill(true)}
-                  className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-900/30 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-900/30 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>📲 Generate & Send WhatsApp Bill</span>
                 </button>

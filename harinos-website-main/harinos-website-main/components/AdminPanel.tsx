@@ -46,6 +46,7 @@ interface AdminPanelProps {
   session: AdminSession | null;
   onSessionChange: (session: AdminSession | null) => void;
   onClose: () => void;
+  storeMenuItems?: MenuItem[];
 }
 
 const statusLabel = (status?: OrderStatus): string => (status ?? 'new').replace(/_/g, ' ').toUpperCase();
@@ -119,7 +120,7 @@ const combineCustomers = (remoteCustomers: CustomerProfile[]): CustomerProfile[]
   );
 };
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClose }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClose, storeMenuItems }) => {
   useFCMNotifications({
     userId: session?.username,
     role: session?.role,
@@ -135,7 +136,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
 
 
   // Dynamic config items
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(storeMenuItems || []);
+
+  useEffect(() => {
+    if (storeMenuItems && storeMenuItems.length > 0) {
+      setMenuItems(storeMenuItems);
+    }
+  }, [storeMenuItems]);
   const [outlets, setOutlets] = useState<OutletConfig[]>([]);
   const [offers, setOffers] = useState<OfferCard[]>([]);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);

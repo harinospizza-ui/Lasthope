@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
 import { MenuItem, AdminSession, Category, OutletConfig, OrderItem } from '../types';
 import { saveFullOrderToServer } from '../services/orderApi';
+import { MENU_ITEMS } from '../constants';
+import { extendMenuItemsWithGeneratedSeries } from '../App';
 
 interface AdminPOSProps {
   session: AdminSession;
@@ -50,14 +51,19 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   // Categories Filter
   const categories = ['All', Category.PIZZA, Category.BURGERS, Category.FRIES, Category.MOMOS, Category.BEVERAGES, Category.SIDES];
 
+  const effectiveMenuItems = useMemo(() => {
+    const source = menuItems && menuItems.length > 0 ? menuItems : MENU_ITEMS;
+    return extendMenuItemsWithGeneratedSeries(source);
+  }, [menuItems]);
+
   const filteredMenuItems = useMemo(() => {
-    return menuItems.filter((item) => {
-      if (!item.available) return false;
+    return effectiveMenuItems.filter((item) => {
+      if (item.available === false) return false;
       const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
       const matchesSearch = !searchQuery.trim() || item.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
       return matchesCat && matchesSearch;
     });
-  }, [menuItems, selectedCategory, searchQuery]);
+  }, [effectiveMenuItems, selectedCategory, searchQuery]);
 
   const getItemCurrentPrice = (item: MenuItem, size?: string) => {
     if (item.sizes && item.sizes.length > 0) {

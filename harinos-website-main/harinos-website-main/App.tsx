@@ -1094,7 +1094,7 @@ const App: React.FC = () => {
       const now = new Date();
       const currentTimeInMins = now.getHours() * 60 + now.getMinutes();
       const openingTime = 11 * 60;
-      const closingTime = 20 * 60;
+      const closingTime = 21 * 60;
 
       if (currentTimeInMins < openingTime || currentTimeInMins >= closingTime) {
         setIsStoreOpen(false);
@@ -2652,6 +2652,7 @@ const App: React.FC = () => {
           session={adminSession}
           onSessionChange={setAdminSession}
           onClose={() => setIsAdminPanelOpen(false)}
+          storeMenuItems={menuItems}
         />
       )}
 

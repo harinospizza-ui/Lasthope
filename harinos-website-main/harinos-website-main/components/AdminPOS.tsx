@@ -153,6 +153,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
     setIsSubmitting(true);
     const posId = `POS-${Date.now().toString().slice(-6)}`;
     const formattedDate = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const nowIso = new Date().toISOString();
 
     const orderItems: OrderItem[] = cart.map((i) => ({
       id: i.id,
@@ -170,6 +171,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
       items: orderItems,
       total: grandTotal,
       date: formattedDate,
+      receivedAt: nowIso,
       orderType: (orderType === 'counter_dine_in' ? 'dine_in' : 'takeaway') as any,
       status: 'done' as const,
       outletId: selectedOutlet?.id || 'outlet-main',
@@ -220,7 +222,7 @@ Thank you for dining with Harino's! 🍕`;
       setActiveMobileView('menu');
       if (onRefresh) onRefresh();
 
-      alert(`Counter Bill #${posId} generated successfully!${sendWhatsApp ? ' WhatsApp launched.' : ''}`);
+      alert(`Counter Bill #${posId} generated successfully! Added to Dashboard Sales.${sendWhatsApp ? ' WhatsApp launched.' : ''}`);
     } catch (err: any) {
       alert(`Error generating POS bill: ${err.message || err}`);
     } finally {
@@ -237,7 +239,7 @@ Thank you for dining with Harino's! 🍕`;
   };
 
   return (
-    <section className="relative mx-auto max-w-7xl px-2 py-3 sm:p-4 text-white animate-fade-in space-y-4">
+    <section className="relative w-full max-w-full overflow-x-hidden box-border px-2 py-3 sm:p-4 text-white animate-fade-in space-y-4">
       {/* Printable Receipt styling for thermal printers */}
       <style>{`
         @media print {
@@ -248,20 +250,20 @@ Thank you for dining with Harino's! 🍕`;
       `}</style>
 
       {/* POS Top Header & Outlet Badge */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-950/80 p-3 sm:p-4 rounded-2xl border border-white/10 shadow-xl">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-950/80 p-3 sm:p-4 rounded-2xl border border-white/10 shadow-xl w-full max-w-full box-border">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.25em] text-red-500">Counter Operations</p>
           <h3 className="font-display text-xl sm:text-2xl font-black text-white">⚡ Mobile POS & WhatsApp Bill</h3>
         </div>
         {selectedOutlet && (
-          <div className="rounded-xl border border-white/10 bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-slate-300">
+          <div className="rounded-xl border border-white/10 bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-slate-300 truncate max-w-full">
             Outlet: <span className="text-white font-black">{selectedOutlet.name}</span>
           </div>
         )}
       </div>
 
       {/* Mobile Screen View Switcher Tabs (lg:hidden) */}
-      <div className="flex lg:hidden bg-slate-950 p-1.5 rounded-2xl border border-white/10 gap-1 shadow-lg">
+      <div className="flex lg:hidden bg-slate-950 p-1.5 rounded-2xl border border-white/10 gap-1 shadow-lg w-full max-w-full box-border">
         <button
           onClick={() => setActiveMobileView('menu')}
           className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
@@ -291,20 +293,20 @@ Thank you for dining with Harino's! 🍕`;
       </div>
 
       {/* Main Container: Mobile view tab switching + side-by-side on desktop */}
-      <div className="grid gap-5 lg:grid-cols-12">
+      <div className="grid gap-5 lg:grid-cols-12 w-full max-w-full box-border">
         {/* Left Panel: Fast Item Picker (Visible on Desktop OR when activeMobileView === 'menu') */}
-        <div className={`lg:col-span-7 space-y-3 ${activeMobileView === 'menu' ? 'block' : 'hidden lg:block'}`}>
-          {/* Search Input & Horizontal Category Pills */}
-          <div className="space-y-2 bg-slate-950/60 p-3 rounded-2xl border border-white/10 shadow-xl">
+        <div className={`lg:col-span-7 space-y-3 w-full max-w-full box-border ${activeMobileView === 'menu' ? 'block' : 'hidden lg:block'}`}>
+          {/* Search Input & Flex-Wrapped Category Pills (No horizontal scrolling!) */}
+          <div className="space-y-2 bg-slate-950/60 p-3 rounded-2xl border border-white/10 shadow-xl w-full max-w-full box-border">
             <input
               type="text"
               placeholder="🔍 Search items (e.g. Farmhouse, Burger, Drink)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-red-500 shadow-inner"
+              className="w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-red-500 shadow-inner box-border"
             />
 
-            <div className="flex gap-1.5 overflow-x-auto hide-scrollbar pb-1">
+            <div className="flex flex-wrap gap-1.5 w-full max-w-full">
               {categories.map((cat) => (
                 <button
                   key={cat}
@@ -321,8 +323,8 @@ Thank you for dining with Harino's! 🍕`;
             </div>
           </div>
 
-          {/* Menu Items Grid: Optimized 1-col on mobile, 2-col on sm/md */}
-          <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 max-h-[65vh] lg:max-h-[600px] overflow-y-auto pr-0.5 hide-scrollbar">
+          {/* Menu Items Grid: Vertical scroll only */}
+          <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 max-h-[65vh] lg:max-h-[600px] overflow-y-auto overflow-x-hidden pr-0.5 hide-scrollbar w-full max-w-full box-border">
             {filteredMenuItems.map((item) => {
               const currentSize = sizeSelections[item.id] || (item.sizes?.[0]?.label ?? '');
               const currentPrice = getItemCurrentPrice(item, currentSize);
@@ -333,9 +335,9 @@ Thank you for dining with Harino's! 🍕`;
               return (
                 <div
                   key={item.id}
-                  className="relative flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-950/80 p-3 shadow-lg transition-all hover:border-red-500/30"
+                  className="relative flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-950/80 p-3 shadow-lg transition-all hover:border-red-500/30 w-full max-w-full box-border"
                 >
-                  <div className="flex gap-2.5 items-center">
+                  <div className="flex gap-2.5 items-center w-full max-w-full">
                     <img
                       src={item.image}
                       alt={item.name}
@@ -348,14 +350,14 @@ Thank you for dining with Harino's! 🍕`;
                     </div>
                   </div>
 
-                  {/* Size Selectors (if pizza or item has sizes) */}
+                  {/* Size Selectors: Flex wrap for tight mobile screens */}
                   {item.sizes && item.sizes.length > 0 && (
-                    <div className="mt-2 flex gap-1 bg-slate-900 p-1 rounded-xl border border-white/5">
+                    <div className="mt-2 flex flex-wrap gap-1 bg-slate-900 p-1 rounded-xl border border-white/5 w-full max-w-full box-border">
                       {item.sizes.map((s) => (
                         <button
                           key={s.label}
                           onClick={() => setSizeSelections((prev) => ({ ...prev, [item.id]: s.label }))}
-                          className={`flex-1 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                          className={`flex-1 min-w-[50px] py-1 text-[8px] font-black uppercase tracking-wider rounded-lg transition-all ${
                             currentSize === s.label
                               ? 'bg-red-650 text-white shadow-sm'
                               : 'text-slate-400 hover:text-white'
@@ -368,9 +370,9 @@ Thank you for dining with Harino's! 🍕`;
                   )}
 
                   {/* Add / Stepper Button */}
-                  <div className="mt-2.5">
+                  <div className="mt-2.5 w-full">
                     {inCartQty > 0 ? (
-                      <div className="flex items-center justify-between bg-slate-900 rounded-xl p-1 border border-red-500/30">
+                      <div className="flex items-center justify-between bg-slate-900 rounded-xl p-1 border border-red-500/30 w-full">
                         <button
                           onClick={() => handleUpdateQuantity(cartItemId, -1)}
                           className="h-7 w-8 rounded-lg bg-red-650 text-white font-black text-xs flex items-center justify-center active:scale-95"
@@ -409,7 +411,7 @@ Thank you for dining with Harino's! 🍕`;
 
           {/* Mobile Floating Bottom Cart Bar (Appears when items are in cart and viewing menu) */}
           {cart.length > 0 && activeMobileView === 'menu' && (
-            <div className="lg:hidden sticky bottom-2 inset-x-0 z-40 animate-slide-up">
+            <div className="lg:hidden sticky bottom-2 inset-x-0 z-40 animate-slide-up w-full max-w-full box-border">
               <button
                 onClick={() => setActiveMobileView('cart')}
                 className="w-full rounded-2xl bg-gradient-premium px-4 py-3.5 text-white font-bold shadow-2xl border border-red-500/40 flex items-center justify-between cursor-pointer"
@@ -428,11 +430,11 @@ Thank you for dining with Harino's! 🍕`;
           )}
         </div>
 
-        {/* Right Panel: Counter Cart & WhatsApp Billing (Visible on Desktop OR when activeMobileView === 'cart') */}
-        <div className={`lg:col-span-5 space-y-4 ${activeMobileView === 'cart' ? 'block' : 'hidden lg:block'}`}>
-          <div className="rounded-2xl border border-white/10 bg-slate-950/90 p-4 sm:p-5 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
+        {/* Right Panel: Counter Cart & WhatsApp Billing */}
+        <div className={`lg:col-span-5 space-y-4 w-full max-w-full box-border ${activeMobileView === 'cart' ? 'block' : 'hidden lg:block'}`}>
+          <div className="rounded-2xl border border-white/10 bg-slate-950/90 p-4 sm:p-5 shadow-2xl backdrop-blur-2xl flex flex-col justify-between w-full max-w-full box-border">
             <div>
-              <div className="flex justify-between items-center pb-3 border-b border-white/10">
+              <div className="flex justify-between items-center pb-3 border-b border-white/10 w-full">
                 <h4 className="font-display text-base sm:text-lg font-black text-white flex items-center gap-2">
                   <span>🛍️ Counter Cart</span>
                   {cart.length > 0 && (
@@ -452,11 +454,11 @@ Thank you for dining with Harino's! 🍕`;
               </div>
 
               {/* Cart Items List */}
-              <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1 hide-scrollbar">
+              <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1 hide-scrollbar w-full">
                 {cart.map((item) => (
                   <div
                     key={item.id}
-                    className="flex justify-between items-center p-2.5 rounded-xl bg-white/[0.03] border border-white/5"
+                    className="flex justify-between items-center p-2.5 rounded-xl bg-white/[0.03] border border-white/5 w-full max-w-full box-border"
                   >
                     <div className="min-w-0 pr-2">
                       <div className="text-xs font-bold text-white truncate">
@@ -493,10 +495,10 @@ Thank you for dining with Harino's! 🍕`;
               </div>
 
               {/* Customer Details Form */}
-              <div className="mt-4 space-y-3 pt-3 border-t border-white/10">
+              <div className="mt-4 space-y-3 pt-3 border-t border-white/10 w-full max-w-full box-border">
                 <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">Customer & Payment Info</h5>
 
-                <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2">
+                <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 w-full">
                   <div>
                     <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Customer Name</label>
                     <input
@@ -504,7 +506,7 @@ Thank you for dining with Harino's! 🍕`;
                       placeholder="e.g. Rahul Sharma"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-red-500"
+                      className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-red-500 box-border"
                     />
                   </div>
                   <div>
@@ -514,18 +516,18 @@ Thank you for dining with Harino's! 🍕`;
                       placeholder="e.g. 9876543210"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-red-500"
+                      className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-red-500 box-border"
                     />
                   </div>
                 </div>
 
-                <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2">
+                <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 w-full">
                   <div>
                     <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Counter Order Mode</label>
                     <select
                       value={orderType}
                       onChange={(e) => setOrderType(e.target.value as any)}
-                      className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-red-500"
+                      className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-red-500 box-border"
                     >
                       <option value="counter_takeaway">Counter Takeaway 🛍️</option>
                       <option value="counter_dine_in">Counter Dine-In 🍽️</option>
@@ -537,7 +539,7 @@ Thank you for dining with Harino's! 🍕`;
                     <select
                       value={paymentMethod}
                       onChange={(e) => setPaymentMethod(e.target.value as any)}
-                      className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-red-500"
+                      className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-red-500 box-border"
                     >
                       <option value="Cash">Cash 💵</option>
                       <option value="Counter UPI">Counter UPI / QR 📲</option>
@@ -549,13 +551,13 @@ Thank you for dining with Harino's! 🍕`;
             </div>
 
             {/* Total & Action Buttons */}
-            <div className="mt-5 pt-3 border-t border-white/10 space-y-2.5">
+            <div className="mt-5 pt-3 border-t border-white/10 space-y-2.5 w-full">
               <div className="flex justify-between items-center font-bold">
                 <span className="text-xs text-slate-400 uppercase tracking-wider">Total Amount</span>
                 <span className="text-xl sm:text-2xl font-black text-white">Rs {grandTotal}</span>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 w-full">
                 <button
                   disabled={isSubmitting || cart.length === 0}
                   onClick={() => handleGenerateBill(true)}
@@ -564,7 +566,7 @@ Thank you for dining with Harino's! 🍕`;
                   <span>📲 Generate & Send WhatsApp Bill</span>
                 </button>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 w-full">
                   <button
                     disabled={isSubmitting || cart.length === 0}
                     onClick={() => handleGenerateBill(false)}

@@ -449,7 +449,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
       </header>
 
       {/* Tabs */}
-      <div className="mx-auto max-w-6xl px-4 mt-6 flex gap-2 overflow-x-auto hide-scrollbar">
+      <div className="mx-auto max-w-6xl px-2 sm:px-4 mt-4 sm:mt-6 flex flex-wrap gap-1.5 sm:gap-2 w-full max-w-full overflow-x-hidden">
         <button onClick={() => setActiveTab('orders')} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium ${activeTab === 'orders' ? 'bg-gradient-premium border-red-500/30 text-white' : 'bg-white/[0.03] border-white/5 text-slate-400'}`}>
           Orders
         </button>

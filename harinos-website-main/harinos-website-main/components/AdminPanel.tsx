@@ -380,8 +380,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ session, onSessionChange, onClo
       return orders.filter((o) => {
         const orderDateStr = new Date(o.receivedAt || o.date).toDateString();
         const isToday = orderDateStr === todayStr;
+        const isCounter = !!(o.id && o.id.startsWith('POS-'));
         const isActive = ['new', 'preparing', 'ready', 'out_for_delivery'].includes(o.status || 'new');
-        return isToday && isActive;
+        return isToday && (isActive || isCounter);
       });
     }
     return orders;

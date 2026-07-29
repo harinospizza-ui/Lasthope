@@ -18,7 +18,7 @@ import { MENU_ITEMS, OFFER_CARDS, OUTLET_LOCATIONS } from './constants';
 import { StorageService } from './services/storage';
 import { setDynamicFirebaseConfig } from './services/firebaseClient';
 import { NotificationService } from './services/notification';
-import { getServerOrders, saveCustomerToServer, saveFullOrderToServer, subscribeServerOrder, subscribeServerOrders, getServerMenuItems, seedMenuItemsToServer, subscribeServerMenuItems, getServerOutlets, seedOutletsToServer, subscribeServerOutlets, getServerOffers, seedOffersToServer, subscribeServerOffers, saveWalletTransactionToServer, getServerCustomers, verifyServerCustomer, getServerSettings, getServerCustomerById } from './services/orderApi';
+import { getServerOrders, saveCustomerToServer, saveFullOrderToServer, subscribeServerOrder, subscribeServerOrders, getServerMenuItems, seedMenuItemsToServer, subscribeServerMenuItems, getServerOutlets, seedOutletsToServer, subscribeServerOutlets, getServerOffers, seedOffersToServer, subscribeServerOffers, saveWalletTransactionToServer, getServerCustomers, verifyServerCustomer, getServerSettings, getServerCustomerById, bumpMenuVersionOnServer } from './services/orderApi';
 import { copyTextToClipboard, getNotificationPermission } from './services/browserSupport';
 import { notifyStaffNewOrder, requestNotificationPermission } from './services/notificationService';
 import {
@@ -754,6 +754,22 @@ const App: React.FC = () => {
               localStorage.removeItem('cached_offers');
               localStorage.removeItem('cached_menu_version');
             }
+          }
+        }
+
+        // Force-sync newly updated constants data to the server if not already done
+        const hasSyncedConstants = localStorage.getItem('harinos_synced_constants_2026_07_29_v2');
+        if (!hasSyncedConstants) {
+          console.log('Force-syncing constants.tsx items to server database...');
+          try {
+            await seedMenuItemsToServer(MENU_ITEMS);
+            await seedOffersToServer(OFFER_CARDS);
+            await seedOutletsToServer(OUTLET_LOCATIONS);
+            await bumpMenuVersionOnServer();
+            localStorage.setItem('harinos_synced_constants_2026_07_29_v2', 'true');
+            console.log('Force-sync of constants completed successfully.');
+          } catch (syncErr) {
+            console.error('Force-sync of constants failed:', syncErr);
           }
         }
 

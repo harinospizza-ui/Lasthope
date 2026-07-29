@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MenuItem, Category, AdminSession, OutletConfig, OfferCard, Order } from '../types';
-import { saveMenuItemToServer, saveOutletToServer, saveOfferToServer, deleteOutletFromServer } from '../services/orderApi';
-import { MENU_ITEMS } from '../constants';
+import { saveMenuItemToServer, saveOutletToServer, saveOfferToServer, deleteOutletFromServer, seedMenuItemsToServer, seedOffersToServer, seedOutletsToServer, bumpMenuVersionOnServer } from '../services/orderApi';
+import { MENU_ITEMS, OFFER_CARDS, OUTLET_LOCATIONS } from '../constants';
 
 interface AdminMenuProps {
   session: AdminSession;
@@ -155,6 +155,38 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     return (
       <section className="relative mx-auto max-w-6xl p-4 animate-fade-in">
         <h3 className="mb-4 font-display text-2xl font-bold">Dynamic Menu Management</h3>
+
+        {session.role === 'admin' && (
+          <div className="mb-6 p-4 rounded-3xl border border-white/10 bg-white/[0.02] flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-[280px]">
+              <h4 className="text-sm font-black uppercase tracking-wider text-slate-300">
+                🔄 Sync Database Menu with constants.tsx
+              </h4>
+              <p className="text-slate-400 text-[10px] mt-1 font-semibold">
+                Import and reset database menu items, offers, and outlets directly from constants.tsx.
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                if (confirm("Are you sure you want to force-sync all menu items, offers, and outlets from constants.tsx? This will overwrite the Firestore database data.")) {
+                  try {
+                    await seedMenuItemsToServer(MENU_ITEMS);
+                    await seedOffersToServer(OFFER_CARDS);
+                    await seedOutletsToServer(OUTLET_LOCATIONS);
+                    await bumpMenuVersionOnServer();
+                    alert("Synced successfully! Client caches will automatically clear and refresh.");
+                    onRefresh();
+                  } catch (err: any) {
+                    alert("Failed to sync: " + err.message);
+                  }
+                }
+              }}
+              className="px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-gradient-premium text-white border border-red-500/30 transition-premium shadow-lg shadow-red-900/20 hover:brightness-110 active:scale-95 whitespace-nowrap"
+            >
+              Sync configurations
+            </button>
+          </div>
+        )}
 
         {auditWarnings.length > 0 && (
           <div className="mb-6 p-4 rounded-3xl border border-red-500/20 bg-red-950/20 text-red-200 text-xs font-bold space-y-1.5 shadow-lg shadow-red-950/30">

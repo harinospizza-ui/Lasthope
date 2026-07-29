@@ -1715,7 +1715,10 @@ export const subscribeServerOrders = (
 
       if (session) {
         if (session.role === 'staff') {
-          ordersList = ordersList.filter(o => session.outletId ? o.outletId === session.outletId : true);
+          ordersList = ordersList.filter(o => {
+            const isCounter = o.id && o.id.startsWith('POS-');
+            return isCounter || (session.outletId ? o.outletId === session.outletId : true);
+          });
           ordersList = ordersList.map(o => {
             const sanitized = { ...o };
             delete sanitized.total;

@@ -62,7 +62,12 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
   const visibleOrders = React.useMemo(() => {
     let filtered = orders;
     if (session.role !== 'admin') {
-      filtered = session.outletId ? filtered.filter((order) => order.outletId === session.outletId) : filtered;
+      filtered = session.outletId
+        ? filtered.filter((order) => {
+            const isCounter = order.id && order.id.startsWith('POS-');
+            return isCounter || order.outletId === session.outletId;
+          })
+        : filtered;
     }
     return [...filtered].sort((a, b) => parseOrderDate(b).getTime() - parseOrderDate(a).getTime());
   }, [orders, session]);

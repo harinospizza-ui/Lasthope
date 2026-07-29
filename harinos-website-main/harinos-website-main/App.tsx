@@ -2106,7 +2106,10 @@ const App: React.FC = () => {
       {showTutorial && (
         <FirstTimeUserModal
           isOpen={showTutorial}
-          onClose={() => setShowTutorial(false)}
+          onClose={() => {
+            setShowTutorial(false);
+            localStorage.setItem('harinos_tutorial_completed', 'true');
+          }}
           onDetectLocation={detectLocation}
         />
       )}

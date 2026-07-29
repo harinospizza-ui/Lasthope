@@ -2002,12 +2002,23 @@ export const getServerMenuItems = async (): Promise<MenuItem[]> => {
   }
 };
 
+export const bumpMenuVersionOnServer = async (): Promise<void> => {
+  try {
+    const newVersion = Date.now().toString();
+    await setDoc(doc(db(), 'settings', 'app'), { menuVersion: newVersion }, { merge: true });
+    await setDoc(doc(db(), 'storeConfiguration', 'app'), { menuVersion: newVersion }, { merge: true });
+  } catch (error) {
+    console.warn('Failed to bump menu version on server:', error);
+  }
+};
+
 export const saveMenuItemToServer = async (item: MenuItem): Promise<void> => {
   const localItems = StorageService.getAdminMenuItems().filter((i) => i.id !== item.id);
   StorageService.saveAdminMenuItems([item, ...localItems]);
 
   try {
     await setDoc(doc(db(), FIRESTORE_MENU_ITEMS_COLLECTION, item.id), item, { merge: true });
+    await bumpMenuVersionOnServer();
   } catch (error) {
     console.warn('Direct Firestore save menu item failed:', error);
     throw error;
@@ -2100,6 +2111,7 @@ export const saveOutletToServer = async (outlet: OutletConfig): Promise<void> =>
 
   try {
     await setDoc(doc(db(), FIRESTORE_OUTLETS_COLLECTION, outlet.id), outlet, { merge: true });
+    await bumpMenuVersionOnServer();
   } catch (error) {
     console.warn('Direct Firestore save outlet failed:', error);
     throw error;
@@ -2112,6 +2124,7 @@ export const deleteOutletFromServer = async (outletId: string): Promise<void> =>
 
   try {
     await deleteDoc(doc(db(), FIRESTORE_OUTLETS_COLLECTION, outletId));
+    await bumpMenuVersionOnServer();
   } catch (error) {
     console.warn('Direct Firestore delete outlet failed:', error);
     throw error;
@@ -2190,6 +2203,7 @@ export const saveOfferToServer = async (offer: OfferCard): Promise<void> => {
 
   try {
     await setDoc(doc(db(), FIRESTORE_OFFERS_COLLECTION, offer.id), offer, { merge: true });
+    await bumpMenuVersionOnServer();
   } catch (error) {
     console.warn('Direct Firestore save offer failed:', error);
     throw error;
@@ -2202,6 +2216,7 @@ export const deleteOfferFromServer = async (offerId: string): Promise<void> => {
 
   try {
     await deleteDoc(doc(db(), FIRESTORE_OFFERS_COLLECTION, offerId));
+    await bumpMenuVersionOnServer();
   } catch (error) {
     console.warn('Direct Firestore delete offer failed:', error);
     throw error;

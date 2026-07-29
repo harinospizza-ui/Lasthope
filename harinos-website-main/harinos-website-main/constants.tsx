@@ -522,6 +522,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 's_hp', name: "Honey Chilli Potato", description: "Sweet and spicy crispy potato snack.", price: 100, category: Category.SIDES, image: "/images/chillipotato.jpeg", vegetarian: true, available: true },
 
   // --- BEVERAGES ---
+{ id: 'd_vm', name: "Biscoff", description: "Caramel refresher.", price: 100, category: Category.BEVERAGES, image: "/images/virgin.jpeg", vegetarian: true, available: false },
   {
     id: 'd_cc',
     name: "Cold Coffee",
@@ -531,19 +532,18 @@ export const MENU_ITEMS: MenuItem[] = [
     image: "/images/coldcoffee.jpeg",
     vegetarian: true,
     available: true,
-    sizes: [{ label: 'Regular', price: 70 }]
+    sizes: [{ price: 70 }]
   },
     {
     id: 'd_ccwi',
-    name: "Cold Coffee with Ice-Cream",
+    name: "Chocolate Cold Coffee",
     description: "Iced creamy coffee blend.",
     price: 100,
     category: Category.BEVERAGES,
     image: "/images/coldcoffeeice.jpeg",
     vegetarian: true,
-    available: false,
-    sizes: [{ label: 'Regular', price: 100 }]
+    available: true,
+    sizes: [{ price: 100 }]
   },
-  { id: 'd_vm', name: "Virgin Mojito", description: "Mint and lime refresher.", price: 100, category: Category.BEVERAGES, image: "/images/virgin.jpeg", vegetarian: true, available: false },
   { id: 'd_cm', name: "Curacao Mojito", description: "Blue orange citrus mojito.", price: 100, category: Category.BEVERAGES, image: "/images/blue.jpeg", vegetarian: true, available: false }
 ];

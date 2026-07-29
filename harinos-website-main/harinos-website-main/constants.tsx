@@ -522,7 +522,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 's_hp', name: "Honey Chilli Potato", description: "Sweet and spicy crispy potato snack.", price: 100, category: Category.SIDES, image: "/images/chillipotato.jpeg", vegetarian: true, available: true },
 
   // --- BEVERAGES ---
-{ id: 'd_vm', name: "Biscoff", description: "Caramel refresher.", price: 100, category: Category.BEVERAGES, image: "/images/virgin.jpeg", vegetarian: true, available: false },
+{ id: 'd_vm', name: "Biscoff", description: "Caramel refresher.", price: 100, category: Category.BEVERAGES, image: "/images/biscoff.png", vegetarian: true, available: false },
   {
     id: 'd_cc',
     name: "Cold Coffee",

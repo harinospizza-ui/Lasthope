@@ -532,7 +532,7 @@ export const MENU_ITEMS: MenuItem[] = [
     image: "/images/coldcoffee.jpeg",
     vegetarian: true,
     available: true,
-    sizes: [{ price: 70 }]
+    sizes: [{ label: 'Regular', price: 70 }]
   },
     {
     id: 'd_ccwi',
@@ -543,6 +543,6 @@ export const MENU_ITEMS: MenuItem[] = [
     image: "/images/coldcoffeeice.jpeg",
     vegetarian: true,
     available: true,
-    sizes: [{ price: 100 }]
+    sizes: [{ label: 'Regular', price: 100 }]
   },
 ];

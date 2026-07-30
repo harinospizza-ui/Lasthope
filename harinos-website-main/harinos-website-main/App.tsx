@@ -758,7 +758,7 @@ const App: React.FC = () => {
         }
 
         // Force-sync newly updated constants data to the server if not already done
-        const hasSyncedConstants = localStorage.getItem('harinos_synced_constants_2026_07_29_v2');
+        const hasSyncedConstants = localStorage.getItem('harinos_synced_constants_2026_07_30_v3');
         if (!hasSyncedConstants) {
           console.log('Force-syncing constants.tsx items to server database...');
           try {
@@ -766,7 +766,7 @@ const App: React.FC = () => {
             await seedOffersToServer(OFFER_CARDS);
             await seedOutletsToServer(OUTLET_LOCATIONS);
             await bumpMenuVersionOnServer();
-            localStorage.setItem('harinos_synced_constants_2026_07_29_v2', 'true');
+            localStorage.setItem('harinos_synced_constants_2026_07_30_v3', 'true');
             console.log('Force-sync of constants completed successfully.');
           } catch (syncErr) {
             console.error('Force-sync of constants failed:', syncErr);
@@ -2176,7 +2176,7 @@ const App: React.FC = () => {
                 <div 
                   onClick={() => {
                     setSelectedCategory(dailySpecial.category);
-                    setSearchQuery(dailySpecial.name);
+                    setSearchQuery('');
                     menuRef.current?.scrollIntoView({ behavior: 'smooth' });
                   }}
                   className="group relative cursor-pointer overflow-hidden rounded-[2rem] border border-orange-100 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] flex items-center justify-between gap-4"

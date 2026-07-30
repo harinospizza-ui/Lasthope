@@ -2017,7 +2017,12 @@ export const saveMenuItemToServer = async (item: MenuItem): Promise<void> => {
   StorageService.saveAdminMenuItems([item, ...localItems]);
 
   try {
-    await setDoc(doc(db(), FIRESTORE_MENU_ITEMS_COLLECTION, item.id), item, { merge: true });
+    const { deleteField } = await import('firebase/firestore');
+    const payload: any = { ...item };
+    if (!item.sizes) {
+      payload.sizes = deleteField();
+    }
+    await setDoc(doc(db(), FIRESTORE_MENU_ITEMS_COLLECTION, item.id), payload, { merge: true });
     await bumpMenuVersionOnServer();
   } catch (error) {
     console.warn('Direct Firestore save menu item failed:', error);
@@ -2043,9 +2048,14 @@ export const seedMenuItemsToServer = async (items: MenuItem[]): Promise<void> =>
   StorageService.saveAdminMenuItems(items);
 
   try {
-    const promises = items.map(item =>
-      setDoc(doc(db(), FIRESTORE_MENU_ITEMS_COLLECTION, item.id), item, { merge: true })
-    );
+    const { deleteField } = await import('firebase/firestore');
+    const promises = items.map(item => {
+      const payload: any = { ...item };
+      if (!item.sizes) {
+        payload.sizes = deleteField();
+      }
+      return setDoc(doc(db(), FIRESTORE_MENU_ITEMS_COLLECTION, item.id), payload, { merge: true });
+    });
     await Promise.all(promises);
   } catch (error) {
     console.warn('Direct Firestore seed menu items failed:', error);

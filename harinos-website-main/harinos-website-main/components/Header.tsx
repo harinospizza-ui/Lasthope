@@ -14,6 +14,8 @@ interface HeaderProps {
   onAdminTrigger?: () => void;
   customerProfile?: any;
   onWalletClick?: () => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -27,6 +29,8 @@ const Header: React.FC<HeaderProps> = ({
   onAdminTrigger,
   customerProfile,
   onWalletClick,
+  searchQuery,
+  setSearchQuery,
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
@@ -139,7 +143,23 @@ const Header: React.FC<HeaderProps> = ({
             </div>
           </button>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2.5 xs:space-x-3">
+            {activeView === 'menu' && (
+              <div className="relative w-24 xs:w-32 sm:w-48 md:w-60">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className={`w-full pl-7 pr-3 py-1.5 rounded-xl text-xs font-semibold outline-none transition-all duration-305 ${
+                    isScrolledOrLight
+                      ? 'bg-slate-550/5 border border-slate-200 text-slate-800 focus:bg-slate-50 focus:border-red-500 focus:ring-1 focus:ring-red-500/10'
+                      : 'bg-white/10 border border-white/10 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/30'
+                  }`}
+                />
+              </div>
+            )}
             {!isInstalled && (
               <button
                 onClick={handleInstall}

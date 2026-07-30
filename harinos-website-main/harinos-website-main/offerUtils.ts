@@ -83,15 +83,10 @@ const matchesCategory = (itemCategory: string, targetCategory: string): boolean 
     (targetCat === 'side' && itemCat === 'sides') ||
     (targetCat === 'sides' && itemCat === 'sides')
   );
-};
-
 export const doesOfferConditionMatchCart = (offer: OfferCard, cart: CartItem[]): boolean => {
-  if (!offer.enabled) return false;
-
   const today = new Date().getDay();
-  if (offer.isSundayOffer && today !== 0) {
-    return false;
-  }
+  const isOfferActive = offer.isSundayOffer ? today === 0 : offer.enabled;
+  if (!isOfferActive) return false;
 
   const customerCart = cart.filter((item) => !item.isOfferBonus);
   if (!customerCart.length) {
@@ -140,11 +135,8 @@ export const getMatchingDiscountOffer = (
   const today = new Date().getDay();
 
   return offers.find((offer) => {
-    if (!offer.enabled || !offer.offerPercentage) {
-      return false;
-    }
-
-    if (offer.isSundayOffer && today !== 0) {
+    const isOfferActive = offer.isSundayOffer ? today === 0 : offer.enabled;
+    if (!isOfferActive || !offer.offerPercentage) {
       return false;
     }
 
@@ -200,12 +192,8 @@ export const getApplicableDiscountOffer = (
   const today = new Date().getDay();
 
   for (const offer of offers) {
-    if (!offer.enabled || !offer.offerPercentage) {
-      continue;
-    }
-
-    // Check Sunday rule
-    if (offer.isSundayOffer && today !== 0) {
+    const isOfferActive = offer.isSundayOffer ? today === 0 : offer.enabled;
+    if (!isOfferActive || !offer.offerPercentage) {
       continue;
     }
 
@@ -345,13 +333,8 @@ export const getAutomaticOfferBonusItems = (cart: CartItem[], offers: OfferCard[
   const today = new Date().getDay();
 
   return offers
-    .filter((offer) => offer.enabled && !!offer.additionalItem)
+    .filter((offer) => (offer.isSundayOffer ? today === 0 : offer.enabled) && !!offer.additionalItem)
     .flatMap((offer) => {
-      // Check Sunday rule
-      if (offer.isSundayOffer && today !== 0) {
-        return [];
-      }
-
       if (!doesOfferConditionMatchCart(offer, cart) || !offer.additionalItem) {
         return [];
       }

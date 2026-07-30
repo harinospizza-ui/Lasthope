@@ -172,26 +172,9 @@ const a4InvoiceHtml = (order: Order): string => {
   const grandTotal = Math.round(order.total);
 
   return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Invoice - #${displayId}</title>
+    <div class="invoice-container" style="max-width: 800px; margin: 0 auto; background: #ffffff; color: #333333; padding: 20px; font-family: 'Segoe UI', Roboto, -apple-system, sans-serif; box-sizing: border-box;">
       <style>
-        * { box-sizing: border-box; }
-        body {
-          font-family: 'Segoe UI', Roboto, -apple-system, sans-serif;
-          color: #333;
-          margin: 0;
-          padding: 20px;
-          background: #fff;
-        }
-        .invoice-container {
-          max-width: 800px;
-          margin: 0 auto;
-          background: #fff;
-          padding: 20px;
-        }
+        .invoice-container * { box-sizing: border-box; }
         .header-table {
           width: 100%;
           border-bottom: 3px solid #e53935;
@@ -297,9 +280,7 @@ const a4InvoiceHtml = (order: Order): string => {
           color: #868e96;
         }
       </style>
-    </head>
-    <body>
-      <div class="invoice-container">
+      <div class="invoice-container-inner">
         <!-- Logo and invoice heading -->
         <table class="header-table" style="width: 100%;">
           <tr>
@@ -377,8 +358,7 @@ const a4InvoiceHtml = (order: Order): string => {
           <p style="margin: 5px 0 0 0; font-style: italic;">Because Hari Knows</p>
         </div>
       </div>
-    </body>
-    </html>
+    </div>
   `;
 };
 
@@ -389,18 +369,26 @@ const printOrderReceipt = (order: Order) => {
 
   const runHtml2Pdf = () => {
     const element = document.createElement('div');
+    element.style.background = '#ffffff';
+    element.style.color = '#333333';
     element.innerHTML = a4InvoiceHtml(order);
+    document.body.appendChild(element);
     
     const opt = {
       margin:       [10, 10, 10, 10], // top, left, bottom, right in mm
       filename:     `Order_${displayId}_Bill.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
       jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    (window as any).html2pdf().from(element).set(opt).save();
+    (window as any).html2pdf().from(element).set(opt).save().then(() => {
+      document.body.removeChild(element);
+    }).catch((err: any) => {
+      console.error('html2pdf save failed:', err);
+      document.body.removeChild(element);
+    });
   };
 
   const fallbackPrint = () => {
@@ -1069,9 +1057,10 @@ const App: React.FC = () => {
   const activeOfferCards = useMemo(
     () =>
       offers.filter((offer) => {
-        if (!offer.enabled) return false;
-        if (offer.isSundayOffer && new Date().getDay() !== 0) return false;
-        return true;
+        if (offer.isSundayOffer) {
+          return new Date().getDay() === 0;
+        }
+        return offer.enabled;
       }),
     [offers],
   );
@@ -1271,19 +1260,9 @@ const App: React.FC = () => {
     if (!latest) return null;
     if (dismissedOrderId === latest.id) return null;
 
-    if (latest.status !== 'done' && latest.status !== 'cancelled') {
+    const isActive = ['new', 'preparing', 'ready', 'out_for_delivery'].includes(latest.status || 'new');
+    if (isActive) {
       return latest;
-    }
-
-    try {
-      const orderTime = new Date(latest.date).getTime();
-      const now = new Date().getTime();
-      const ageHours = (now - orderTime) / (1000 * 60 * 60);
-      if (ageHours < 24) {
-        return latest;
-      }
-    } catch (e) {
-      // Fallback
     }
     return null;
   }, [pastOrders, dismissedOrderId]);
@@ -2141,6 +2120,8 @@ const App: React.FC = () => {
         customerProfile={customerProfile}
         onWalletClick={() => setIsWalletModalOpen(true)}
         onHelpTour={() => setShowTutorial(true)}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
       />
       {showTutorial && (
         <FirstTimeUserModal
@@ -2334,7 +2315,7 @@ const App: React.FC = () => {
                       className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-slate-900 hover:bg-slate-800 text-white shadow-md shadow-slate-900/10 transition-premium w-full sm:w-auto justify-center"
                     >
                       <span>🖨️</span>
-                      <span>Download POS Bill</span>
+                      <span>DOWNLOAD BILL</span>
                     </button>
                   </div>
                 </div>
@@ -2342,39 +2323,17 @@ const App: React.FC = () => {
             )}
 
             <div ref={menuRef} className="max-w-7xl mx-auto px-4 mt-8 md:mt-12 pb-24 scroll-mt-24">
-              {/* Search & Filter Bar */}
-              <div className="mb-6 bg-white border border-slate-200/80 rounded-[2rem] p-4 md:p-6 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
-                <div className="relative w-full md:w-96">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search delicious pizzas, momos..."
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-205 rounded-2xl font-semibold text-slate-800 outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500/10 text-sm placeholder:text-slate-400"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-655 font-bold cursor-pointer"
-                    >
-                      &times;
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
-                  <button
-                    onClick={() => setPopularOnly(!popularOnly)}
-                    className={`px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
-                      popularOnly
-                        ? 'bg-amber-50 border-amber-300 text-amber-850 font-black scale-105 shadow-sm'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
-                    }`}
-                  >
-                    ⭐ Popular
-                  </button>
-                </div>
+              <div className="mb-6 flex justify-end">
+                <button
+                  onClick={() => setPopularOnly(!popularOnly)}
+                  className={`px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                    popularOnly
+                      ? 'bg-amber-50 border-amber-300 text-amber-850 font-black scale-105 shadow-sm'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
+                  }`}
+                >
+                  ⭐ Popular Only
+                </button>
               </div>
 
               <div className="relative mb-8 md:mb-12">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MenuItem, Category, AdminSession, OutletConfig, OfferCard, Order } from '../types';
-import { saveMenuItemToServer, saveOutletToServer, saveOfferToServer, deleteOutletFromServer, seedMenuItemsToServer, seedOffersToServer, seedOutletsToServer, bumpMenuVersionOnServer } from '../services/orderApi';
+import { saveMenuItemToServer, saveOutletToServer, saveOfferToServer, deleteOutletFromServer, seedMenuItemsToServer, seedOffersToServer, seedOutletsToServer, bumpMenuVersionOnServer, deleteMenuItemFromServer } from '../services/orderApi';
 import { MENU_ITEMS, OFFER_CARDS, OUTLET_LOCATIONS } from '../constants';
 
 interface AdminMenuProps {
@@ -356,7 +356,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                   )}
                 </div>
 
-                <div className="mt-3 flex justify-between items-center">
+                <div className="mt-3 flex justify-between items-center gap-2">
                   <button
                     disabled={session.role !== 'admin'}
                     onClick={() => toggleItemAvailability(item)}
@@ -368,6 +368,25 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                   >
                     {item.available ? 'In Stock' : 'Out of Stock'}
                   </button>
+
+                  {session.role === 'admin' && (
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Are you sure you want to permanently DELETE "${item.name}" from the menu?`)) {
+                          try {
+                            await deleteMenuItemFromServer(item.id);
+                            alert("Item deleted successfully.");
+                            onRefresh();
+                          } catch (err: any) {
+                            alert("Failed to delete item: " + err.message);
+                          }
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-red-950/20 border border-red-500/30 text-red-400 hover:bg-red-900/30 transition-premium"
+                    >
+                      🗑️ Delete
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

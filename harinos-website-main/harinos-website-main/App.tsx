@@ -1075,6 +1075,14 @@ const App: React.FC = () => {
       }),
     [offers],
   );
+  const dailySpecial = useMemo(() => {
+    const availableItems = menuItems.filter(item => item.available && item.image && item.name);
+    if (availableItems.length === 0) return null;
+    const today = new Date();
+    const daySeed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+    const index = daySeed % availableItems.length;
+    return availableItems[index];
+  }, [menuItems]);
   const activeOutlets = useMemo(
     () => outlets.filter((outlet) => outlet.enabled),
     [outlets],
@@ -1299,34 +1307,49 @@ const App: React.FC = () => {
 
     const handleBrowserNotification = (order: Order) => {
       if (!order.status || !order.id) return;
-      const lastStatus = lastNotifiedStatusRef.current[order.id];
-      if (lastStatus && lastStatus !== order.status) {
-        const titleMap: Record<string, string> = {
-          new: '🍕 Order Placed',
-          preparing: '👨‍🍳 Preparing Your Order',
-          ready: '✅ Order Ready!',
-          out_for_delivery: '🚗 Out for Delivery',
-          done: '🎉 Order Complete',
-          cancelled: '❌ Order Cancelled'
-        };
-        const msgMap: Record<string, string> = {
-          new: 'Your order has been received by Harino\'s.',
-          preparing: 'The kitchen has started preparing your fresh pizza!',
-          ready: 'Your order is hot and ready for pickup!',
-          out_for_delivery: 'Our delivery partner is on the way to your location.',
-          done: 'Thank you for ordering from Harino\'s! Enjoy your meal.',
-          cancelled: 'Your order has been cancelled by the store.'
-        };
-        const title = titleMap[order.status] || 'Order Status Update';
-        const body = msgMap[order.status] || `Your order status is now ${order.status}`;
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification(title, {
-            body,
-            icon: '/icon-192.png',
-            badge: '/icon-192.png',
-            tag: `order-status-${order.id}`
-          });
+      const cacheKey = `harinos_order_notified_status_${order.id}`;
+      const lastStatus = localStorage.getItem(cacheKey);
+
+      if (lastStatus !== order.status) {
+        // If order is old and we haven't tracked it before, don't spam a notification on first load.
+        // We only trigger notifications if it's a fresh update or the order is less than 1 hour old.
+        const orderTime = order.receivedAt ? new Date(order.receivedAt).getTime() : (order.date ? new Date(order.date).getTime() : 0);
+        const ageMinutes = (Date.now() - orderTime) / (1000 * 60);
+
+        if (ageMinutes < 60 || (lastStatus && lastStatus !== order.status)) {
+          const titleMap: Record<string, string> = {
+            new: '🍕 Order Placed',
+            preparing: '👨‍🍳 Preparing Your Order',
+            ready: '✅ Order Ready!',
+            out_for_delivery: '🚗 Out for Delivery',
+            done: '🎉 Order Complete',
+            cancelled: '❌ Order Cancelled'
+          };
+          const msgMap: Record<string, string> = {
+            new: 'Your order has been received by Harino\'s.',
+            preparing: 'The kitchen has started preparing your fresh pizza!',
+            ready: 'Your order is hot and ready for pickup!',
+            out_for_delivery: 'Our delivery partner is on the way to your location.',
+            done: 'Thank you for ordering from Harino\'s! Enjoy your meal.',
+            cancelled: 'Your order has been cancelled by the store.'
+          };
+          const title = titleMap[order.status] || 'Order Status Update';
+          const body = msgMap[order.status] || `Your order status is now ${order.status}`;
+          
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification(title, {
+                body,
+                icon: '/icon-192.png',
+                badge: '/icon-192.png',
+                tag: `order-status-${order.id}`
+              });
+            } catch (e) {
+              console.error('Browser notification failed:', e);
+            }
+          }
         }
+        localStorage.setItem(cacheKey, order.status);
       }
       lastNotifiedStatusRef.current[order.id] = order.status;
     };
@@ -2146,6 +2169,48 @@ const App: React.FC = () => {
           <>
             <Hero onShare={handleShare} onExploreMenu={openCategoryView} />
             <OfferCarousel offers={activeOfferCards} onAction={handleOfferAction} />
+
+            {/* Give it a try Daily Recommendation */}
+            {dailySpecial && (
+              <div className="max-w-md mx-auto px-4 mt-6">
+                <div 
+                  onClick={() => {
+                    setSelectedCategory(dailySpecial.category);
+                    setSearchQuery(dailySpecial.name);
+                    menuRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="group relative cursor-pointer overflow-hidden rounded-[2rem] border border-orange-100 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] flex items-center justify-between gap-4"
+                >
+                  <div className="absolute top-0 right-0 rounded-bl-[1.5rem] bg-gradient-premium border-l border-b border-red-500/30 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-white shadow-sm">
+                    Give it a try ✨
+                  </div>
+                  
+                  <div className="flex gap-4 items-center flex-1 min-w-0">
+                    <img 
+                      src={dailySpecial.image} 
+                      alt={dailySpecial.name} 
+                      className="w-16 h-16 rounded-2xl object-cover shadow-sm border border-orange-50 transition-transform duration-500 group-hover:scale-105"
+                      onError={(e) => { e.currentTarget.src = '/icon-192.png'; }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[8px] font-black uppercase tracking-wider text-red-650 block">Daily Recommendation</span>
+                      <h4 className="text-base font-display font-bold text-slate-800 truncate mt-0.5 group-hover:text-red-600 transition-colors">
+                        {dailySpecial.name}
+                      </h4>
+                      <p className="text-xs text-slate-500 truncate mt-0.5 font-medium">
+                        {dailySpecial.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">From</div>
+                    <div className="text-base font-display font-black text-red-600 mt-0.5">
+                      Rs {dailySpecial.sizes && dailySpecial.sizes.length > 0 ? dailySpecial.sizes[0].price : dailySpecial.price}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Active Order Tracking Card */}
             {activeOrder && (

@@ -2025,6 +2025,20 @@ export const saveMenuItemToServer = async (item: MenuItem): Promise<void> => {
   }
 };
 
+export const deleteMenuItemFromServer = async (itemId: string): Promise<void> => {
+  const localItems = StorageService.getAdminMenuItems().filter((i) => i.id !== itemId);
+  StorageService.saveAdminMenuItems(localItems);
+
+  try {
+    const { deleteDoc, doc } = await import('firebase/firestore');
+    await deleteDoc(doc(db(), FIRESTORE_MENU_ITEMS_COLLECTION, itemId));
+    await bumpMenuVersionOnServer();
+  } catch (error) {
+    console.warn('Direct Firestore delete menu item failed:', error);
+    throw error;
+  }
+};
+
 export const seedMenuItemsToServer = async (items: MenuItem[]): Promise<void> => {
   StorageService.saveAdminMenuItems(items);
 

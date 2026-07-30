@@ -83,6 +83,8 @@ const matchesCategory = (itemCategory: string, targetCategory: string): boolean 
     (targetCat === 'side' && itemCat === 'sides') ||
     (targetCat === 'sides' && itemCat === 'sides')
   );
+};
+
 export const doesOfferConditionMatchCart = (offer: OfferCard, cart: CartItem[]): boolean => {
   const today = new Date().getDay();
   const isOfferActive = offer.isSundayOffer ? today === 0 : offer.enabled;

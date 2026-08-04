@@ -903,6 +903,14 @@ export const saveCustomerToServer = async (profile: CustomerProfile): Promise<vo
       cleanProfile,
       { merge: true }
     );
+
+    if (profile.walletBalance !== undefined) {
+      await setDoc(
+        doc(db(), 'wallets', profile.id),
+        { customerId: profile.id, balance: profile.walletBalance },
+        { merge: true }
+      );
+    }
   } catch (error) {
     console.warn('Direct Firestore save customer failed:', error);
     throw error;
@@ -2365,24 +2373,6 @@ export const saveWalletTransactionToServer = async (transaction: WalletTransacti
 
   try {
     await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, transaction.id), transaction, { merge: true });
-
-    const custRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, transaction.customerId);
-    const custSnap = await getDoc(custRef);
-    if (custSnap.exists()) {
-      const custData = custSnap.data() as CustomerProfile;
-      const currentBalance = custData.walletBalance || 0;
-      let newBalance = currentBalance;
-      if (transaction.status === 'completed') {
-        if (transaction.type === 'topup' || transaction.type === 'credit' || transaction.type === 'reward' || transaction.type === 'admin_adjustment') {
-          newBalance += transaction.amount;
-        } else if (transaction.type === 'debit') {
-          newBalance -= transaction.amount;
-        }
-      }
-      await updateDoc(custRef, { walletBalance: newBalance });
-      await updateDoc(doc(db(), 'customerProfiles', transaction.customerId), { walletBalance: newBalance });
-      await setDoc(doc(db(), 'wallets', transaction.customerId), { customerId: transaction.customerId, balance: newBalance }, { merge: true });
-    }
   } catch (error) {
     console.warn('Direct Firestore save transaction failed:', error);
   }

@@ -1966,7 +1966,7 @@ const App: React.FC = () => {
       customerEmail: customerProfile?.email,
       walletAmountRedeemed: walletDiscount,
       rewardPointsRedeemed: pointsDiscount,
-      rewardPointsEarned: subtotal > 200 ? Math.floor(subtotal / 10) : 0,
+      rewardPointsEarned: Math.floor(subtotal / 10),
       paymentMethod: paymentMethod || 'UPI',
     };
 
@@ -2009,7 +2009,7 @@ const App: React.FC = () => {
         void saveWalletTransactionToServer(tx).catch(console.error);
       }
 
-      const pointsEarned = subtotal > 200 ? Math.floor(subtotal / 10) : 0;
+      const pointsEarned = Math.floor(subtotal / 10);
       if (pointsEarned > 0) {
         updatedProfile.rewardPoints = (updatedProfile.rewardPoints ?? 0) + pointsEarned;
         updatedProfile.coins = updatedProfile.rewardPoints; // Sync coins with rewardPoints

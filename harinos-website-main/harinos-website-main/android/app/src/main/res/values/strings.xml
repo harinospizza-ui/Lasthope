@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Harino\'s Pizza</string>
+    <string name="title_activity_main">Harino\'s Pizza</string>
+    <string name="package_name">com.harinos.app</string>
+    <string name="custom_url_scheme">com.harinos.app</string>
+</resources>

@@ -11,7 +11,15 @@ const POPUP_DELAY_MS = 3500;
 const POPUP_COOLDOWN_MS = 1000 * 60 * 60 * 12;
 
 const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
-  const { canPromptInstall, needsIosInstructions, isInstalled, promptInstall } = useInstallPrompt();
+  const {
+    canPromptInstall,
+    needsIosInstructions,
+    isInstalled,
+    promptInstall,
+    downloadProgress,
+    isDownloading,
+    showApkGuide
+  } = useInstallPrompt();
   const [isVisible, setIsVisible] = useState(false);
   const [showIosSteps, setShowIosSteps] = useState(false);
 
@@ -47,16 +55,15 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
   }, [needsIosInstructions]);
 
   const dismissPopup = () => {
+    if (isDownloading) return; // Prevent dismissing while downloading APK
     safeStorage.setItem(window.localStorage, POPUP_DISMISS_KEY, Date.now().toString());
     setIsVisible(false);
   };
 
   const handlePrimaryAction = async () => {
+    if (isDownloading) return;
     if (canPromptInstall) {
-      const outcome = await promptInstall();
-      if (outcome === 'accepted') {
-        dismissPopup();
-      }
+      await promptInstall();
       return;
     }
 
@@ -95,8 +102,9 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
             <button
               type="button"
               onClick={dismissPopup}
+              disabled={isDownloading}
               aria-label="Close install popup"
-              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/70 transition-colors hover:text-white"
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/70 transition-colors hover:text-white disabled:opacity-30"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 6l12 12M18 6L6 18" />
@@ -136,18 +144,48 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
             </div>
           )}
 
+          {showApkGuide && (
+            <div className="mt-5 rounded-[1.5rem] border border-amber-300/20 bg-amber-400/10 p-4 text-left animate-fade-in">
+              <div className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-300">
+                Android Installation steps
+              </div>
+              <div className="mt-3 space-y-2 text-sm leading-6 text-white/75">
+                <p>1. Open the downloaded <b>Harinos.apk</b> from notification drawer or downloads.</p>
+                <p>2. Toggle <b>&quot;Allow from this source&quot;</b> if prompted by your device security.</p>
+                <p>3. Click <b>&quot;Install&quot;</b> and launch the Harino&apos;s app!</p>
+              </div>
+              {downloadProgress !== null && (
+                <div className="mt-4">
+                  <div className="flex justify-between text-[10px] font-bold text-white/60 mb-1">
+                    <span>Downloading APK file...</span>
+                    <span>{downloadProgress}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-red-650 transition-all duration-300" style={{ width: `${downloadProgress}%` }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
               onClick={handlePrimaryAction}
-              className="cta-glow flex-1 rounded-2xl bg-red-600 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-white shadow-lg transition-transform active:scale-[0.98]"
+              disabled={isDownloading}
+              className="cta-glow flex-1 rounded-2xl bg-red-600 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-white shadow-lg transition-transform active:scale-[0.98] disabled:opacity-50"
             >
-              {canPromptInstall ? 'Install Now' : 'Show Install Steps'}
+              {isDownloading
+                ? `Downloading (${downloadProgress}%)`
+                : canPromptInstall
+                ? 'Install Now'
+                : 'Show Install Steps'}
             </button>
             <button
               type="button"
               onClick={dismissPopup}
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-white/70 transition-colors hover:text-white"
+              disabled={isDownloading}
+              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-white/70 transition-colors hover:text-white disabled:opacity-30"
             >
               Maybe Later
             </button>

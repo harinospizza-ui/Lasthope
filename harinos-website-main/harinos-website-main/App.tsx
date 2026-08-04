@@ -49,6 +49,10 @@ import AdminPanel from './components/AdminPanel';
 import { WalletModal } from './components/WalletModal';
 import FirstTimeUserModal from './components/FirstTimeUserModal';
 import { useSwipeDismiss } from './hooks/useSwipeDismiss';
+import DownloadPage from './components/DownloadPage';
+import UpdateModal from './components/UpdateModal';
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 
 interface InAppNotification {
   id: string;
@@ -529,6 +533,13 @@ const App: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState('');
   const [nearestOutletMatch, setNearestOutletMatch] = useState<OutletMatch | null>(null);
   const [isResolvingOutletMatch, setIsResolvingOutletMatch] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateConfig, setUpdateConfig] = useState<{
+    latestVersion: string;
+    releaseNotes: string;
+    isForceUpdate: boolean;
+    apkUrl: string;
+  } | null>(null);
 
   // Wallet and Discounts State
   const [useWallet, setUseWallet] = useState(false);
@@ -861,6 +872,53 @@ const App: React.FC = () => {
     
     return () => unsubscribe();
   }, [configLoaded]);
+
+  // Native Android Update Checking logic
+  useEffect(() => {
+    if (!Capacitor.isNative || Capacitor.getPlatform() !== 'android') return;
+
+    const checkAppUpdate = async () => {
+      try {
+        const info = await CapApp.getInfo();
+        const localVer = info.version;
+
+        const response = await fetch('https://harinos.store/app/version.json');
+        if (!response.ok) return;
+        const data = await response.json();
+
+        const normalizeVersion = (v: string) => v.split('.').map(Number);
+        const localParts = normalizeVersion(localVer);
+        const serverParts = normalizeVersion(data.version);
+
+        let isNewer = false;
+        for (let i = 0; i < Math.max(localParts.length, serverParts.length); i++) {
+          const localPart = localParts[i] || 0;
+          const serverPart = serverParts[i] || 0;
+          if (serverPart > localPart) {
+            isNewer = true;
+            break;
+          } else if (localPart > serverPart) {
+            break;
+          }
+        }
+
+        if (isNewer) {
+          setUpdateConfig({
+            latestVersion: data.version,
+            releaseNotes: data.message || 'Performance improvements and bug fixes.',
+            isForceUpdate: data.force || false,
+            apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk'
+          });
+          setShowUpdateModal(true);
+        }
+      } catch (err) {
+        console.warn('Update check failed:', err);
+      }
+    };
+
+    const timer = setTimeout(checkAppUpdate, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Real-time synchronization of Menu, Outlets, and Offers
   useEffect(() => {
@@ -2102,6 +2160,10 @@ const App: React.FC = () => {
     void saveCustomerToServer(profile).catch(() => undefined);
   }, [customerProfile]);
 
+  if (window.location.pathname === '/app' || window.location.pathname === '/app/') {
+    return <DownloadPage />;
+  }
+
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-cream-50 text-slate-900">
       <style>{`
@@ -2161,6 +2223,15 @@ const App: React.FC = () => {
           view === 'orders'
         }
       />
+      {showUpdateModal && updateConfig && (
+        <UpdateModal
+          latestVersion={updateConfig.latestVersion}
+          releaseNotes={updateConfig.releaseNotes}
+          isForceUpdate={updateConfig.isForceUpdate}
+          apkUrl={updateConfig.apkUrl}
+          onLater={() => setShowUpdateModal(false)}
+        />
+      )}
 
       <main className="relative z-10 pt-20">
         {view === 'menu' ? (

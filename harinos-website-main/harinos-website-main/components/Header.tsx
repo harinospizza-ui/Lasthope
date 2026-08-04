@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { NotificationService } from '../services/notification';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import { Capacitor } from '@capacitor/core';
 import { getNotificationPermission } from '../services/browserSupport';
 
 interface HeaderProps {
@@ -72,6 +73,10 @@ const Header: React.FC<HeaderProps> = ({
     }
 
     setShowInstallHelp((current) => !current);
+  };
+
+  const handleOpenApp = () => {
+    window.location.href = "intent://open#Intent;scheme=harinos;package=com.harinos.app;S.browser_fallback_url=https%3A%2F%2Fharinos.store%2Fapp;end";
   };
 
   const handleLogoClick = (e: React.MouseEvent) => {
@@ -160,7 +165,7 @@ const Header: React.FC<HeaderProps> = ({
                 />
               </div>
             )}
-            {!isInstalled && (
+            {!isInstalled ? (
               <button
                 onClick={handleInstall}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale ${
@@ -172,6 +177,20 @@ const Header: React.FC<HeaderProps> = ({
               >
                 📥 <span className="hidden xs:inline">Install App</span>
               </button>
+            ) : (
+              !Capacitor.isNative && (
+                <button
+                  onClick={handleOpenApp}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale ${
+                    isScrolledOrLight
+                      ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100/50 shadow-sm'
+                      : 'bg-white/10 border-white/10 text-white hover:bg-white/20 backdrop-blur-md'
+                  }`}
+                  title="Open Harino's App"
+                >
+                  🚀 <span className="hidden xs:inline">Open App</span>
+                </button>
+              )
             )}
 
             {customerProfile && onWalletClick && (

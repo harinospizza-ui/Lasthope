@@ -1067,10 +1067,27 @@ const App: React.FC = () => {
   const dailySpecial = useMemo(() => {
     const availableItems = menuItems.filter(item => item.available && item.image && item.name);
     if (availableItems.length === 0) return null;
+
+    const pizzas = availableItems.filter(item => item.category === Category.PIZZA);
+    const nonPizzas = availableItems.filter(item => item.category !== Category.PIZZA);
+
     const today = new Date();
-    const daySeed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
-    const index = daySeed % availableItems.length;
-    return availableItems[index];
+    const hourSeed = today.getFullYear() * 1000000 + (today.getMonth() + 1) * 10000 + today.getDate() * 100 + today.getHours();
+    const isPizzaDecided = (hourSeed % 10) < 7;
+
+    let selectedItem = null;
+    if (isPizzaDecided && pizzas.length > 0) {
+      const idx = hourSeed % pizzas.length;
+      selectedItem = pizzas[idx];
+    } else if (nonPizzas.length > 0) {
+      const idx = hourSeed % nonPizzas.length;
+      selectedItem = nonPizzas[idx];
+    } else if (pizzas.length > 0) {
+      const idx = hourSeed % pizzas.length;
+      selectedItem = pizzas[idx];
+    }
+
+    return selectedItem;
   }, [menuItems]);
   const activeOutlets = useMemo(
     () => outlets.filter((outlet) => outlet.enabled),

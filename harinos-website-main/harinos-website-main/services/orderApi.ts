@@ -160,7 +160,7 @@ export const checkBusinessHours = (): boolean => {
   const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
   const ist = new Date(utc + (3600000 * 5.5)); // IST is UTC+5.5
   const hours = ist.getHours();
-  return hours >= 11 && hours < 21;
+  return hours >= 11 && hours < 20; // 11:00 AM to 08:00 PM IST
 };
 
 export const isOrderApiConfigured = (): boolean => true;
@@ -710,19 +710,24 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
             const referredBy = customerData.referredBy;
             const referralCodeUsed = customerData.referralCodeUsed;
 
-            if (referredBy && !referralCodeUsed) {
-              const ordersQuery = query(
-                collection(db(), FIRESTORE_ORDERS_COLLECTION),
-                where('customerPhone', '==', customerPhone),
-                where('status', '==', 'done')
-              );
-              const ordersSnap = await getDocs(ordersQuery);
-              
-              const previousCompletedCount = ordersSnap.docs.filter(
-                (d) => d.id !== cleanId && d.data().isDeleted !== true
-              ).length;
+            // Check if this is the customer's 1st successful completed order
+            const ordersQuery = query(
+              collection(db(), FIRESTORE_ORDERS_COLLECTION),
+              where('customerPhone', '==', customerPhone),
+              where('status', '==', 'done')
+            );
+            const ordersSnap = await getDocs(ordersQuery);
+            
+            const previousCompletedCount = ordersSnap.docs.filter(
+              (d) => d.id !== cleanId && d.data().isDeleted !== true
+            ).length;
 
-              if (previousCompletedCount === 0) {
+            if (previousCompletedCount === 0) {
+              const refereeUpdate: any = {
+                verified: true
+              };
+
+              if (referredBy && !referralCodeUsed) {
                 const referrerQuery = query(
                   collection(db(), FIRESTORE_CUSTOMERS_COLLECTION),
                   where('referralCode', '==', referredBy)
@@ -748,16 +753,12 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
 
                 if (referrerDoc && referrerRef) {
                   const updatedReferrerCoins = (referrerDoc.rewardPoints ?? 0) + 100;
-                  const updatedReferrerWallet = (referrerDoc.walletBalance ?? 0) + 10;
                   const updatedReferralCount = (referrerDoc.referralCount ?? 0) + 1;
-                  const updatedReferralEarnings = (referrerDoc.referralEarnings ?? 0) + 10;
 
                   const referrerUpdate = {
                     rewardPoints: updatedReferrerCoins,
-                    walletBalance: updatedReferrerWallet,
                     coins: updatedReferrerCoins,
-                    referralCount: updatedReferralCount,
-                    referralEarnings: updatedReferralEarnings
+                    referralCount: updatedReferralCount
                   };
 
                   await updateDoc(referrerRef, referrerUpdate);
@@ -777,54 +778,37 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
                     createdAt: new Date().toISOString()
                   };
                   await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txIdRef), referrerTx);
-
-                  const updatedRefereeCoins = (customerData.rewardPoints ?? 0) + 100;
-                  const updatedRefereeWallet = (customerData.walletBalance ?? 0) + 10;
-
-                  const refereeUpdate = {
-                    referralApplied: true,
-                    referralCodeUsed: true,
-                    referralLocked: true,
-                    rewardPoints: updatedRefereeCoins,
-                    walletBalance: updatedRefereeWallet,
-                    coins: updatedRefereeCoins,
-                    referralAppliedAt: new Date().toISOString()
-                  };
-
-                  await updateDoc(customerRef, refereeUpdate);
-                  try {
-                    await updateDoc(doc(db(), 'customerProfiles', cleanPhone), refereeUpdate);
-                  } catch (e) {}
-
-                  const txIdSelf = `tx_${Date.now()}_self_${Math.random().toString(36).slice(2, 6)}`;
-                  const refereeTx: WalletTransaction = {
-                    id: txIdSelf,
-                    customerId: customerData.id,
-                    customerName: customerData.name,
-                    customerPhone: customerData.phone,
-                    amount: 10,
-                    type: 'reward',
-                    status: 'completed',
-                    createdAt: new Date().toISOString()
-                  };
-                  await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txIdSelf), refereeTx);
-
-                  const localCusts = StorageService.getAdminCustomers();
-                  let changed = false;
-                  const refIdx = localCusts.findIndex(c => c.id === referrerDoc.id);
-                  if (refIdx >= 0) {
-                    localCusts[refIdx] = { ...localCusts[refIdx], ...referrerUpdate };
-                    changed = true;
-                  }
-                  const selfIdx = localCusts.findIndex(c => c.id === cleanPhone);
-                  if (selfIdx >= 0) {
-                    localCusts[selfIdx] = { ...localCusts[selfIdx], ...refereeUpdate };
-                    changed = true;
-                  }
-                  if (changed) {
-                    StorageService.saveAdminCustomers(localCusts);
-                  }
                 }
+
+                refereeUpdate.referralApplied = true;
+                refereeUpdate.referralCodeUsed = true;
+                refereeUpdate.referralLocked = true;
+                refereeUpdate.referralAppliedAt = new Date().toISOString();
+              }
+
+              await updateDoc(customerRef, refereeUpdate);
+              try {
+                await updateDoc(doc(db(), 'customerProfiles', cleanPhone), refereeUpdate);
+              } catch (e) {}
+
+              try {
+                await setDoc(doc(db(), 'customerVerificationRequests', cleanPhone), {
+                  status: 'verified',
+                  verifiedAt: new Date().toISOString(),
+                  verifiedBy: 'system'
+                }, { merge: true });
+              } catch (e) {}
+
+              // Sync local admin storage if relevant
+              const localCusts = StorageService.getAdminCustomers();
+              let changed = false;
+              const selfIdx = localCusts.findIndex(c => c.id === cleanPhone);
+              if (selfIdx >= 0) {
+                localCusts[selfIdx] = { ...localCusts[selfIdx], ...refereeUpdate };
+                changed = true;
+              }
+              if (changed) {
+                StorageService.saveAdminCustomers(localCusts);
               }
             }
           }
@@ -1198,9 +1182,6 @@ export const registerCustomer = async (
   phone: string,
   name: string
 ): Promise<{ success: boolean; customer: CustomerProfile; requestId: string; message?: string }> => {
-  if (!checkBusinessHours()) {
-    throw new Error("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
-  }
 
   const cleanPhone = phone.replace(/\D/g, '');
   if (cleanPhone.length !== 10) {
@@ -1282,9 +1263,6 @@ export const initCustomerLogin = async (
   isRegistering?: boolean,
   referralCodeUsedInput?: string
 ): Promise<{ success: boolean; exists: boolean; customer?: CustomerProfile; requestId?: string; message?: string }> => {
-  if (!checkBusinessHours()) {
-    throw new Error("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
-  }
 
   const cleanPhone = phone.split('-')[0].replace(/\D/g, '').slice(0, 10);
   if (cleanPhone.length !== 10) {
@@ -1535,14 +1513,15 @@ export const initCustomerLogin = async (
     verified: false,
     walletBalance: 0,
     loyaltyPoints: 0,
-    rewardPoints: 0,
+    rewardPoints: referredByVal ? 50 : 0,
+    coins: referredByVal ? 50 : 0,
     active: true,
     status: 'active',
     createdAt: nowStr,
     lastLogin: nowStr,
     referralAttemptsRemaining: 3,
-    referralCodeUsed: false,
-    referralLocked: false,
+    referralCodeUsed: referredByVal ? true : false,
+    referralLocked: referredByVal ? true : false,
     referralCode: referralCode,
     referredBy: referredByVal ?? null
   };

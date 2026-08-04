@@ -1122,13 +1122,13 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkStoreStatus = () => {
       const now = new Date();
-      const currentTimeInMins = now.getHours() * 60 + now.getMinutes();
-      const openingTime = 11 * 60;
-      const closingTime = 21 * 60;
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const ist = new Date(utc + (3600000 * 5.5)); // IST is UTC+5.5
+      const hours = ist.getHours();
 
-      if (currentTimeInMins < openingTime || currentTimeInMins >= closingTime) {
+      if (hours < 11 || hours >= 20) {
         setIsStoreOpen(false);
-        setStatusMessage('Store is currently closed. Open: 11:00 AM - 08:00 PM.');
+        setStatusMessage('Store is currently closed. Open: 11:00 AM - 08:00 PM IST.');
         return;
       }
 
@@ -1289,7 +1289,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!configLoaded || !trackedOrderId) return;
     const handleCancellationRefreshes = (orderStatus: string) => {
-      if (orderStatus === 'cancelled' && customerProfile?.id) {
+      if ((orderStatus === 'cancelled' || orderStatus === 'done') && customerProfile?.id) {
         void import('./services/orderApi').then(({ getServerCustomerById }) => {
           getServerCustomerById(customerProfile.id).then((fresh) => {
             if (fresh) {

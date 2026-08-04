@@ -2,13 +2,7 @@ import React, { useState, useRef } from 'react';
 import { CustomerProfile } from '../types';
 import { initCustomerLogin } from '../services/orderApi';
 
-const checkBusinessHours = (): boolean => {
-  const now = new Date();
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const ist = new Date(utc + (3600000 * 5.5)); // IST is UTC+5.5
-  const hours = ist.getHours();
-  return hours >= 11 && hours < 21;
-};
+
 
 interface CustomerLoginModalProps {
   onSave: (profile: CustomerProfile) => void;
@@ -18,6 +12,7 @@ interface CustomerLoginModalProps {
 const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdminTrigger }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -47,10 +42,7 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
     event.preventDefault();
     setError('');
 
-    if (!checkBusinessHours()) {
-      setError("Harino's online ordering is available between 11:00 AM and 9:00 PM.");
-      return;
-    }
+
 
     const cleanPhone = phone.replace(/\D/g, '');
     const trimmedName = name.trim();
@@ -66,7 +58,7 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
 
     setLoading(true);
     try {
-      const result = await initCustomerLogin(cleanPhone, trimmedName, true);
+      const result = await initCustomerLogin(cleanPhone, trimmedName, true, referralCode.trim());
       
       if (result.success && result.customer) {
         onSave(result.customer);
@@ -144,6 +136,20 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
               disabled={loading}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
               required
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 ml-1">
+              Referral Code (Optional)
+            </label>
+            <input
+              type="text"
+              value={referralCode}
+              onChange={(event) => setReferralCode(event.target.value)}
+              placeholder="Enter referral code"
+              disabled={loading}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
             />
           </div>
           

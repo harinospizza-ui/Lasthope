@@ -17,20 +17,11 @@ const isIosDevice = (): boolean => {
   return isAppleMobile || isTouchMac;
 };
 
-const isAndroidDevice = (): boolean => {
-  const userAgent = window.navigator.userAgent.toLowerCase();
-  return /android/i.test(userAgent);
-};
-
 export const useInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [showApkGuide, setShowApkGuide] = useState(false);
 
   const isNative = Capacitor.isNative;
-  const isAndroid = isAndroidDevice();
 
   useEffect(() => {
     if (isNative) {
@@ -51,9 +42,7 @@ export const useInstallPrompt = () => {
     };
 
     const refreshInstallState = () => {
-      const isStandalone = isRunningStandalone();
-      const hasLocalFlag = localStorage.getItem('harinos_apk_installed') === 'true';
-      setIsInstalled(isStandalone || hasLocalFlag);
+      setIsInstalled(isRunningStandalone());
     };
 
     refreshInstallState();
@@ -79,85 +68,33 @@ export const useInstallPrompt = () => {
   }, [isNative]);
 
   const canPromptInstall = useMemo(() => {
-    if (isInstalled) return false;
-    if (isNative) return false;
-    if (isAndroid) return true;
+    if (isInstalled || isNative) return false;
     return !!deferredPrompt;
-  }, [deferredPrompt, isInstalled, isAndroid, isNative]);
+  }, [deferredPrompt, isInstalled, isNative]);
 
   const needsIosInstructions = useMemo(
     () => !canPromptInstall && !isInstalled && isIosDevice(),
     [canPromptInstall, isInstalled],
   );
 
-  const downloadApk = async (): Promise<'accepted' | 'dismissed' | 'unsupported'> => {
-    try {
-      setIsDownloading(true);
-      setDownloadProgress(0);
-      setShowApkGuide(true);
-
-      const apkUrl = 'https://harinos.store/downloads/Harinos.apk';
-      const response = await fetch(apkUrl);
-      if (!response.ok) throw new Error('Download failed');
-
-      const contentLength = response.headers.get('content-length');
-      const total = contentLength ? parseInt(contentLength, 10) : 0;
-      
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No body stream');
-
-      let receivedLength = 0;
-      const chunks = [];
-
-      while(true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        receivedLength += value.length;
-        if (total > 0) {
-          setDownloadProgress(Math.round((receivedLength / total) * 100));
-        }
-      }
-
-      const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'Harinos.apk';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      setDownloadProgress(100);
-      localStorage.setItem('harinos_apk_installed', 'true');
-      return 'accepted';
-    } catch (err) {
-      console.error(err);
-      window.location.href = 'https://harinos.store/downloads/Harinos.apk';
-      return 'accepted';
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
   const promptInstall = async (): Promise<'accepted' | 'dismissed' | 'unsupported'> => {
-    if (isAndroid && !isNative) {
-      return await downloadApk();
-    }
-
     if (!deferredPrompt) {
       return 'unsupported';
     }
 
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
+    try {
+      await deferredPrompt.prompt();
+      const choiceResult = await deferredPrompt.userChoice;
+      if (choiceResult.outcome === 'accepted') {
+        setIsInstalled(true);
+        setDeferredPrompt(null);
+        return 'accepted';
+      }
+      return 'dismissed';
+    } catch (err) {
+      console.error(err);
+      return 'unsupported';
     }
-
-    return outcome;
   };
 
   return {
@@ -165,10 +102,5 @@ export const useInstallPrompt = () => {
     needsIosInstructions,
     isInstalled,
     promptInstall,
-    downloadProgress,
-    isDownloading,
-    showApkGuide,
-    setShowApkGuide,
-    downloadApk
   };
 };

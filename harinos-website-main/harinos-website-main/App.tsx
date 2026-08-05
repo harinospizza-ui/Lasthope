@@ -533,8 +533,8 @@ const App: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState('');
   const [nearestOutletMatch, setNearestOutletMatch] = useState<OutletMatch | null>(null);
   const [isResolvingOutletMatch, setIsResolvingOutletMatch] = useState(false);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [updateConfig, setUpdateConfig] = useState<{
+  const [showAndroidUpdateModal, setShowAndroidUpdateModal] = useState(false);
+  const [androidUpdateConfig, setAndroidUpdateConfig] = useState<{
     latestVersion: string;
     releaseNotes: string;
     isForceUpdate: boolean;
@@ -903,13 +903,13 @@ const App: React.FC = () => {
         }
 
         if (isNewer) {
-          setUpdateConfig({
+          setAndroidUpdateConfig({
             latestVersion: data.version,
             releaseNotes: data.message || 'Performance improvements and bug fixes.',
             isForceUpdate: data.force || false,
             apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk'
           });
-          setShowUpdateModal(true);
+          setShowAndroidUpdateModal(true);
         }
       } catch (err) {
         console.warn('Update check failed:', err);
@@ -2223,13 +2223,13 @@ const App: React.FC = () => {
           view === 'orders'
         }
       />
-      {showUpdateModal && updateConfig && (
+      {showAndroidUpdateModal && androidUpdateConfig && (
         <UpdateModal
-          latestVersion={updateConfig.latestVersion}
-          releaseNotes={updateConfig.releaseNotes}
-          isForceUpdate={updateConfig.isForceUpdate}
-          apkUrl={updateConfig.apkUrl}
-          onLater={() => setShowUpdateModal(false)}
+          latestVersion={androidUpdateConfig.latestVersion}
+          releaseNotes={androidUpdateConfig.releaseNotes}
+          isForceUpdate={androidUpdateConfig.isForceUpdate}
+          apkUrl={androidUpdateConfig.apkUrl}
+          onLater={() => setShowAndroidUpdateModal(false)}
         />
       )}
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CustomerLocation, Order, OrderType, OutletConfig, PricedCartItem, CustomerProfile } from '../types';
 import { DeliveryPricingSummary } from '../deliveryPricing';
 import { useSwipeDismiss } from '../hooks/useSwipeDismiss';
@@ -61,6 +61,27 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   walletDiscount,
   pointsDiscount,
 }) => {
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null);
+  const [animatePrice, setAnimatePrice] = useState(false);
+  const prevTotal = useRef(total);
+
+  useEffect(() => {
+    if (total !== prevTotal.current) {
+      setAnimatePrice(true);
+      const timer = setTimeout(() => setAnimatePrice(false), 300);
+      return () => clearTimeout(timer);
+    }
+    prevTotal.current = total;
+  }, [total]);
+
+  const handleRemove = (cartItemId: string) => {
+    setRemovingItemId(cartItemId);
+    setTimeout(() => {
+      onRemove(cartItemId);
+      setRemovingItemId(null);
+    }, 380);
+  };
+
   const isDeliveryLocationMissing = orderType === 'delivery' && customerLocation === null;
   const isDeliveryImpossible = orderType === 'delivery' && (deliveryFee === -1 || isDeliveryLocationMissing);
   const isDeliveryRoutePending = orderType === 'delivery' && outletDistanceKm === null;
@@ -84,14 +105,14 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   return (
     <>
       <div
-        className={`fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-md transition-opacity duration-500 ${
+        className={`fixed inset-0 z-[70] bg-slate-950/60 backdrop-blur-sm transition-opacity duration-400 ${
           isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         onClick={onClose}
       />
 
       <aside
-        className={`fixed top-0 right-0 z-[80] flex h-screen supports-[height:100dvh]:h-[100dvh] w-full max-w-full flex-col bg-white shadow-[0_0_100px_rgba(0,0,0,0.3)] transition-transform duration-500 md:max-w-md ${
+        className={`fixed top-0 right-0 z-[80] flex h-screen supports-[height:100dvh]:h-[100dvh] w-full max-w-full flex-col bg-white border-l border-slate-100 shadow-[0_0_80px_rgba(0,0,0,0.22)] transition-transform duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] md:max-w-md ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         style={isOpen ? swipeDismiss.style : undefined}
@@ -340,8 +361,16 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                   const cartItemId = getCartItemId(item);
                   const isBonusItem = !!item.isOfferBonus;
 
+                  const isRemoving = removingItemId === cartItemId;
+
                   return (
-                    <div key={cartItemId} className="flex space-x-3" style={{ animationDelay: `${index * 40}ms` }}>
+                    <div
+                      key={cartItemId}
+                      className={`flex space-x-3 transition-all duration-300 ${
+                        isRemoving ? 'animate-item-out' : 'animate-item-in'
+                      }`}
+                      style={{ animationDelay: isRemoving ? '0ms' : `${index * 40}ms` }}
+                    >
                       <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl bg-slate-100">
                         <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
                       </div>
@@ -368,7 +397,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                             </div>
                           </div>
                           {!isBonusItem && (
-                            <button onClick={() => onRemove(cartItemId)} className="p-1 text-slate-300 transition-colors hover:text-red-500">
+                            <button onClick={() => handleRemove(cartItemId)} className="p-1 text-slate-300 transition-colors hover:text-red-500">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
                               </svg>
@@ -402,7 +431,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                                   +
                                 </button>
                               </div>
-                              <span className="font-display text-sm font-bold text-slate-900">Rs {item.totalPrice}</span>
+                              <span className={`font-display text-sm font-bold text-slate-900 transition-all ${animatePrice ? 'animate-text-pulse' : ''}`}>Rs {item.totalPrice}</span>
                             </>
                           )}
                         </div>
@@ -514,7 +543,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                 <div className="my-2 h-px border-t border-dashed border-white/20" />
                 <div className="flex justify-between text-xl font-display font-bold text-white">
                   <span>Grand Total</span>
-                  <span className="text-red-500">Rs {finalTotal.toFixed(2)}</span>
+                  <span className={`text-red-500 transition-all ${animatePrice ? 'animate-text-pulse' : ''}`}>Rs {finalTotal.toFixed(2)}</span>
                 </div>
               </div>
               <button

@@ -2233,7 +2233,7 @@ const App: React.FC = () => {
         />
       )}
 
-      <main className="relative z-10 pt-20">
+      <main className={`relative z-10 transition-all duration-300 ${view === 'menu' ? 'pt-36 md:pt-[9.5rem]' : 'pt-20'}`}>
         {view === 'menu' ? (
           <>
             <Hero onShare={handleShare} onExploreMenu={openCategoryView} />

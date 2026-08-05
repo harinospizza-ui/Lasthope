@@ -125,3 +125,19 @@ self.addEventListener('notificationclose', (event) => {
   console.log('Notification closed:', event.notification.tag);
 });
 
+// PWA fetch handler for caching and offline routing fallback
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    fetch(event.request).catch(async () => {
+      if (event.request.mode === 'navigate') {
+        const cache = await caches.open('harinos-offline-cache');
+        const cachedResponse = await cache.match('/index.html');
+        if (cachedResponse) return cachedResponse;
+      }
+      return caches.match(event.request).then((response) => response || Response.error());
+    })
+  );
+});
+

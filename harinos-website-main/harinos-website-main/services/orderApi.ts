@@ -981,7 +981,6 @@ export const getServerCustomers = async (): Promise<CustomerProfile[]> => {
     return sortCustomers(StorageService.getAdminCustomers());
   }
 };
-
 export const getServerCustomerById = async (customerId: string): Promise<CustomerProfile | null> => {
   try {
     let cleanId = customerId.trim();
@@ -990,40 +989,37 @@ export const getServerCustomerById = async (customerId: string): Promise<Custome
     }
     if (!cleanId || cleanId === '_init_placeholder') return null;
 
-    // 1. Search customerProfiles
-    const profileRef = doc(db(), 'customerProfiles', cleanId);
-    const profileSnap = await getDoc(profileRef);
-    if (profileSnap.exists()) {
-      const profile = profileSnap.data() as CustomerProfile;
-      const customerRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId);
-      const customerSnap = await getDoc(customerRef);
-      if (!customerSnap.exists()) {
-        await setDoc(customerRef, profile);
-      }
-      return profile;
-    }
-
-    // 2. Search customers
+    // 1. Search customers (primary source of truth) first
     const customerRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanId);
     const customerSnap = await getDoc(customerRef);
     if (customerSnap.exists()) {
       const customerData = customerSnap.data() as CustomerProfile;
       const newProfile: CustomerProfile = { ...customerData, legacyUser: false };
-      await setDoc(profileRef, newProfile);
-
-      const walletRef = doc(db(), 'wallets', cleanId);
-      const walletSnap = await getDoc(walletRef);
-      if (!walletSnap.exists()) {
-        await setDoc(walletRef, {
+      
+      // Auto-sync customerProfiles and wallets collections to prevent stale data mismatch
+      try {
+        await setDoc(doc(db(), 'customerProfiles', cleanId), newProfile, { merge: true });
+      } catch (err) {}
+      try {
+        await setDoc(doc(db(), 'wallets', cleanId), {
           customerId: cleanId,
-          balance: customerData.walletBalance || 0,
-          createdAt: customerData.createdAt || new Date().toISOString()
-        });
-      }
+          balance: customerData.walletBalance || 0
+        }, { merge: true });
+      } catch (err) {}
+
       return newProfile;
     }
 
-    // 3. Search legacy sources
+    // 2. Fallback to customerProfiles
+    const profileRef = doc(db(), 'customerProfiles', cleanId);
+    const profileSnap = await getDoc(profileRef);
+    if (profileSnap.exists()) {
+      const profile = profileSnap.data() as CustomerProfile;
+      if (!customerSnap.exists()) {
+        await setDoc(customerRef, profile);
+      }
+      return profile;
+    }    // 3. Search legacy sources
     let legacyData: any = null;
     let legacySourceCol = '';
     let legacySourceId = '';

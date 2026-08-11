@@ -9,31 +9,48 @@ import {
 } from './types';
 
 export const getItemBasePrice = (
-  item: Pick<MenuItem, 'price' | 'sizes'>,
+  item: Pick<MenuItem, 'price' | 'sizes' | 'options'>,
   selectedSize?: string,
+  selectedOptions?: SelectedOptionSnapshot[],
 ): number => {
-  if (!selectedSize || !item.sizes?.length) {
-    return item.price;
+  let price = item.price;
+  if (selectedOptions && selectedOptions.length > 0) {
+    selectedOptions.forEach((opt) => {
+      price += opt.priceModifier;
+    });
+    return price;
   }
-
-  const matchedSize = item.sizes.find((size) => size.label === selectedSize);
-  return matchedSize ? matchedSize.price : item.price;
+  if (selectedSize && item.sizes?.length) {
+    const matchedSize = item.sizes.find((size) => size.label === selectedSize);
+    return matchedSize ? matchedSize.price : item.price;
+  }
+  return price;
 };
 
 export const getCartItemId = (
-  item: Pick<CartItem, 'id' | 'selectedSize' | 'isOfferBonus' | 'sourceOfferId'>,
+  item: Pick<CartItem, 'id' | 'selectedSize' | 'isOfferBonus' | 'sourceOfferId' | 'selectedOptions'>,
 ): string => {
   const sizeSuffix = item.selectedSize ? `-${item.selectedSize}` : '';
+  let optionSuffix = '';
+  if (item.selectedOptions && item.selectedOptions.length > 0) {
+    const sortedChoiceIds = [...item.selectedOptions]
+      .sort((a, b) => a.choiceId.localeCompare(b.choiceId))
+      .map((opt) => opt.choiceId)
+      .join(',');
+    optionSuffix = `#${sortedChoiceIds}`;
+  }
   return item.isOfferBonus
-    ? `bonus-${item.sourceOfferId ?? 'offer'}-${item.id}${sizeSuffix}`
-    : `${item.id}${sizeSuffix}`;
+    ? `bonus-${item.sourceOfferId ?? 'offer'}-${item.id}${sizeSuffix}${optionSuffix}`
+    : `${item.id}${sizeSuffix}${optionSuffix}`;
 };
 
 export const normalizeStoredCartItem = (item: MenuItem & Partial<CartItem>): CartItem => ({
   ...item,
   quantity: Math.max(1, item.quantity ?? 1),
   selectedSize: item.selectedSize,
-  basePrice: item.basePrice ?? getItemBasePrice(item, item.selectedSize),
+  selectedOptions: item.selectedOptions || [],
+  specialInstructions: item.specialInstructions || '',
+  basePrice: item.basePrice ?? getItemBasePrice(item, item.selectedSize, item.selectedOptions),
 });
 
 export const getOfferConditionLabel = (offer: OfferCard): string => {

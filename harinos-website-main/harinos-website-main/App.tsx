@@ -47,6 +47,7 @@ import ServiceModeModal from './components/ServiceModeModal';
 import CustomerLoginModal from './components/CustomerLoginModal';
 import AdminPanel from './components/AdminPanel';
 import { WalletModal } from './components/WalletModal';
+import { CustomizeModal } from './components/CustomizeModal';
 import FirstTimeUserModal from './components/FirstTimeUserModal';
 import { useSwipeDismiss } from './hooks/useSwipeDismiss';
 import DownloadPage from './components/DownloadPage';
@@ -140,11 +141,23 @@ const a4InvoiceHtml = (order: Order): string => {
   const itemRows = order.items.map(item => {
     const sizeStr = item.selectedSize ? ` (${item.selectedSize})` : '';
     const name = `${item.name}${sizeStr}`;
+    const optionsText = item.selectedOptions && item.selectedOptions.length > 0
+      ? item.selectedOptions
+          .filter((opt: any) => opt.optionName.toLowerCase() !== 'size')
+          .map((opt: any) => `+ ${opt.choiceLabel}`)
+          .join(', ')
+      : '';
+    const instrText = item.specialInstructions ? `Note: ${item.specialInstructions}` : '';
+    const detailDiv = (optionsText || instrText)
+      ? `<div style="font-size: 11px; color: #c2410c; margin-top: 4px; font-weight: 500;">${[optionsText, instrText].filter(Boolean).join(' | ')}</div>`
+      : '';
+
     return `
       <tr>
         <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 13px; vertical-align: top;">
           <div style="font-weight: bold; color: #333;">${name}</div>
-          ${item.description ? `<div style="font-size: 11px; color: #777; margin-top: 2px;">${item.description}</div>` : ''}
+          ${detailDiv}
+          ${item.description ? `<div style="font-size: 11px; color: #777; margin-top: 4px;">${item.description}</div>` : ''}
         </td>
         <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; color: #555; vertical-align: top;">Rs ${Math.round(item.discountedPrice ?? item.price)}</td>
         <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; color: #555; vertical-align: top;">${item.quantity}</td>
@@ -153,7 +166,13 @@ const a4InvoiceHtml = (order: Order): string => {
     `;
   }).join('');
 
-  const subtotal = Math.round(order.total - (order.deliveryFee ?? 0) + (order.walletAmountRedeemed ?? 0) + (order.rewardPointsRedeemed ?? 0));
+  const subtotal = Math.round(order.subtotal ?? (order.total - (order.deliveryFee ?? 0) + (order.walletAmountRedeemed ?? 0) + (order.rewardPointsRedeemed ?? 0)));
+  const discountRow = order.discount
+    ? `<tr>
+         <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Discount</td>
+         <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #e53935;">-Rs ${Math.round(order.discount)}</td>
+       </tr>`
+    : '';
   const deliveryFeeRow = order.deliveryFee 
     ? `<tr>
          <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Delivery Fee</td>
@@ -347,6 +366,7 @@ const a4InvoiceHtml = (order: Order): string => {
             <td style="padding: 8px 10px; text-align: left; font-size: 13px; color: #666;">Subtotal</td>
             <td style="padding: 8px 10px; text-align: right; font-size: 13px; font-weight: bold; color: #333;">Rs ${subtotal}</td>
           </tr>
+          ${discountRow}
           ${deliveryFeeRow}
           ${walletRow}
           ${pointsRow}
@@ -544,6 +564,8 @@ const App: React.FC = () => {
   // Wallet and Discounts State
   const [useWallet, setUseWallet] = useState(false);
   const [usePoints, setUsePoints] = useState(false);
+  const [customizeItem, setCustomizeItem] = useState<MenuItem | null>(null);
+  const [customizeItemSize, setCustomizeItemSize] = useState<string | undefined>(undefined);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
@@ -1729,7 +1751,12 @@ const App: React.FC = () => {
   };
 
   const addToCart = useCallback(
-    (item: MenuItem, selectedSize?: string) => {
+    (
+      item: MenuItem,
+      selectedSize?: string,
+      selectedOptions?: SelectedOptionSnapshot[],
+      specialInstructions?: string
+    ) => {
       if (item.category === Category.BEVERAGES && orderType !== 'dinein') {
         showNotification('Beverages are available for dine-in only.');
         return;
@@ -1739,11 +1766,27 @@ const App: React.FC = () => {
         return;
       }
 
+      const hasOptions =
+        (item.options && item.options.length > 0) ||
+        (item.sizes && item.sizes.length > 0) ||
+        item.category === Category.MOMOS ||
+        item.category === Category.FRIES;
+
+      if (hasOptions && !selectedOptions) {
+        setCustomizeItem(item);
+        setCustomizeItemSize(selectedSize);
+        return;
+      }
+
       const normalizedSize = selectedSize ?? item.sizes?.[0]?.label;
-      const basePrice = getItemBasePrice(item, normalizedSize);
+      const basePrice = getItemBasePrice(item, normalizedSize, selectedOptions);
 
       setCart((currentCart) => {
-        const cartItemId = getCartItemId({ id: item.id, selectedSize: normalizedSize });
+        const cartItemId = getCartItemId({
+          id: item.id,
+          selectedSize: normalizedSize,
+          selectedOptions,
+        });
         const existingItem = currentCart.find((cartItem) => getCartItemId(cartItem) === cartItemId);
 
         if (existingItem) {
@@ -1761,6 +1804,8 @@ const App: React.FC = () => {
             quantity: 1,
             selectedSize: normalizedSize,
             basePrice,
+            selectedOptions: selectedOptions || [],
+            specialInstructions: specialInstructions || '',
           },
         ];
       });
@@ -2025,6 +2070,8 @@ const App: React.FC = () => {
     const orderItems: OrderItem[] = pricedCart.map((item) => ({ ...item }));
     const orderPayload = {
       items: orderItems,
+      subtotal: baseSubtotal,
+      discount: Math.round(baseSubtotal - subtotal),
       total: grandTotal,
       date: new Date().toLocaleString(),
       orderType,
@@ -2653,6 +2700,23 @@ const App: React.FC = () => {
             <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
           </svg>
         </a>
+      )}
+
+      {customizeItem && (
+        <CustomizeModal
+          item={customizeItem}
+          isOpen={!!customizeItem}
+          preSelectedSize={customizeItemSize}
+          onClose={() => {
+            setCustomizeItem(null);
+            setCustomizeItemSize(undefined);
+          }}
+          onConfirm={(selectedSize, selectedOptions, specialInstructions) => {
+            addToCart(customizeItem, selectedSize, selectedOptions, specialInstructions);
+            setCustomizeItem(null);
+            setCustomizeItemSize(undefined);
+          }}
+        />
       )}
 
       {isWalletModalOpen && customerProfile && (

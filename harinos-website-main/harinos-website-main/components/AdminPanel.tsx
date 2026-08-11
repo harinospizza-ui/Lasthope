@@ -51,7 +51,14 @@ interface AdminPanelProps {
 
 const statusLabel = (status?: OrderStatus): string => (status ?? 'new').replace(/_/g, ' ').toUpperCase();
 
-const receiptHtml = (order: Order): string => `
+const receiptHtml = (order: Order, role?: string): string => {
+  const phoneText = role === 'staff' && order.customerPhone
+    ? order.customerPhone.trim().slice(0, 5) + '*****' + order.customerPhone.trim().slice(-2)
+    : (order.customerPhone ?? '');
+
+  const displayId = order.displayOrderId || getDisplayOrderId(order.id);
+
+  return `
 <!doctype html><html><head><meta charset="utf-8"><title>Receipt ${order.id}</title>
 <style>
   *{box-sizing:border-box}
@@ -84,15 +91,29 @@ const receiptHtml = (order: Order): string => `
 </style></head><body>
 <div class="center"><div class="brand">HARINO'S PIZZA</div><div>${order.outletName ?? ''}</div></div>
 <div class="dash"></div>
-<div class="center"><b>ORDER: #${getDisplayOrderId(order.id)}</b><br>${order.orderType.toUpperCase()}<br>${new Date(order.receivedAt ?? order.date).toLocaleString()}</div>
+<div class="center"><b>ORDER: #${displayId}</b><br>${order.orderType.toUpperCase()}<br>${new Date(order.receivedAt ?? order.date).toLocaleString()}</div>
 <div class="dash"></div>
 <div>Cust: ${order.customerName ?? 'Customer'}</div>
-<div>Ph: ${order.customerPhone ?? ''}</div>
+<div>Ph: ${phoneText}</div>
 <div>Payment: ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}</div>
 <div class="dash"></div>
-${order.items.map((item) => `<div class="row"><span>${item.quantity}x ${item.name}${item.selectedSize ? ` [${item.selectedSize}]` : ''}</span><b>Rs ${Math.round(item.totalPrice)}</b></div>`).join('')}
+${order.items.map((item) => {
+  const sizeText = item.selectedSize ? ` [${item.selectedSize}]` : '';
+  const optionsText = item.selectedOptions && item.selectedOptions.length > 0
+    ? item.selectedOptions
+        .filter((opt: any) => opt.optionName.toLowerCase() !== 'size')
+        .map((opt: any) => `+${opt.choiceLabel}`)
+        .join(', ')
+    : '';
+  const instrText = item.specialInstructions ? ` *Note: ${item.specialInstructions}` : '';
+  const detailHtml = (optionsText || instrText)
+    ? `<div style="font-size:8px;color:#333;padding-left:8px;line-height:1.1;">${[optionsText, instrText].filter(Boolean).join(' | ')}</div>`
+    : '';
+  return `<div class="row"><span>${item.quantity}x ${item.name}${sizeText}</span><b>Rs ${Math.round(item.totalPrice)}</b></div>${detailHtml}`;
+}).join('')}
 <div class="dash"></div>
-<div class="row"><span>Subtotal</span><b>Rs ${Math.round(order.total - (order.deliveryFee ?? 0) + (order.walletAmountRedeemed ?? 0) + (order.rewardPointsRedeemed ?? 0))}</b></div>
+<div class="row"><span>Subtotal</span><b>Rs ${Math.round(order.subtotal ?? (order.total - (order.deliveryFee ?? 0) + (order.walletAmountRedeemed ?? 0) + (order.rewardPointsRedeemed ?? 0)))}</b></div>
+${order.discount ? `<div class="row"><span>Discount</span><b>-Rs ${Math.round(order.discount)}</b></div>` : ''}
 ${order.deliveryFee ? `<div class="row"><span>Delivery Fee</span><b>Rs ${Math.round(order.deliveryFee)}</b></div>` : ''}
 ${order.walletAmountRedeemed ? `<div class="row"><span>Wallet Paid</span><b>-Rs ${Math.round(order.walletAmountRedeemed)}</b></div>` : ''}
 ${order.rewardPointsRedeemed ? `<div class="row"><span>Points Paid</span><b>-Rs ${Math.round(order.rewardPointsRedeemed)}</b></div>` : ''}
@@ -101,11 +122,13 @@ ${order.rewardPointsRedeemed ? `<div class="row"><span>Points Paid</span><b>-Rs 
 <div class="dash"></div>
 <div class="center">Thank you! Come again!<br>Because Hari Knows</div>
 </body></html>`;
+};
 
 const printOrder = (order: Order) => {
+  const session = StorageService.getAdminSession();
   const win = window.open('', '_blank');
   if (!win) return;
-  win.document.write(receiptHtml(order));
+  win.document.write(receiptHtml(order, session?.role));
   win.document.close();
   win.focus();
   window.setTimeout(() => {

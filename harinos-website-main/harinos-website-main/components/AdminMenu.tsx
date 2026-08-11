@@ -22,6 +22,9 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 }) => {
   // Menu Item Form State
   const [isAddingItem, setIsAddingItem] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [newItemOptionsText, setNewItemOptionsText] = useState('');
+  const [editingOptionsItemId, setEditingOptionsItemId] = useState<string | null>(null);
 
   const auditWarnings = React.useMemo(() => {
     const warnings: string[] = [];
@@ -107,7 +110,8 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   // Sort menuItems: by Category order first, then by Price ascending
   const sortedMenuItems = React.useMemo(() => {
     const categoryOrder = [Category.PIZZA, Category.BURGERS, Category.FRIES, Category.MOMOS, Category.SIDES, Category.BEVERAGES];
-    return [...menuItems].sort((a, b) => {
+    const filtered = menuItems.filter(item => showArchived ? item.isArchived : !item.isArchived);
+    return [...filtered].sort((a, b) => {
       const idxA = categoryOrder.indexOf(a.category);
       const idxB = categoryOrder.indexOf(b.category);
       if (idxA !== idxB) {
@@ -115,7 +119,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
       }
       return a.price - b.price;
     });
-  }, [menuItems]);
+  }, [menuItems, showArchived]);
 
   // Operations
   const toggleItemAvailability = async (item: MenuItem) => {
@@ -200,6 +204,18 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
             </ul>
           </div>
         )}
+        <div className="flex justify-between items-center mb-6 bg-slate-950/40 p-4 border border-white/5 rounded-2xl">
+          <div className="text-xs font-bold text-slate-400">
+            Currently showing: <span className="text-slate-200 uppercase font-black">{showArchived ? 'Archived Items 📂' : 'Active Menu Items 🍕'}</span>
+          </div>
+          <button
+            onClick={() => setShowArchived(!showArchived)}
+            className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-900 border border-white/10 text-slate-350 hover:bg-slate-800 transition-premium cursor-pointer"
+          >
+            {showArchived ? 'View Active Menu' : 'View Archived Items'}
+          </button>
+        </div>
+
              {/* Add Menu Item Panel */}
         {session.role === 'admin' && (
           <div className="mb-6 rounded-3xl border border-white/10 bg-white/[0.02] p-5 shadow-lg">
@@ -257,6 +273,17 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                   </label>
                 </div>
 
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Options Config (JSON List - Optional)</label>
+                  <textarea
+                    value={newItemOptionsText}
+                    onChange={e => setNewItemOptionsText(e.target.value)}
+                    placeholder={`[\n  {\n    "id": "opt_toppings",\n    "name": "Add Toppings",\n    "minSelections": 0,\n    "maxSelections": 5,\n    "choices": [\n      {"id": "cheese", "label": "Extra Cheese", "priceModifier": 50},\n      {"id": "onion", "label": "Onion", "priceModifier": 20}\n    ]\n  }\n]`}
+                    rows={4}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500 font-mono text-[10px]"
+                  />
+                </div>
+
                 <button
                   type="button"
                   onClick={async () => {
@@ -265,6 +292,20 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                       return;
                     }
                     
+                    let options = undefined;
+                    if (newItemOptionsText.trim()) {
+                      try {
+                        options = JSON.parse(newItemOptionsText);
+                        if (!Array.isArray(options)) {
+                          alert('Options Config must be a JSON array.');
+                          return;
+                        }
+                      } catch (err: any) {
+                        alert('Invalid JSON in Options Config: ' + err.message);
+                        return;
+                      }
+                    }
+
                     const priceNum = parseFloat(newItemPrice);
                     const sizes = newItemCategory === Category.PIZZA ? [
                       { label: 'Regular', price: priceNum },
@@ -283,7 +324,8 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                       spicy: newItemSpicy,
                       popular: newItemPopular,
                       available: true,
-                      sizes
+                      sizes,
+                      options
                     };
 
                     try {
@@ -294,6 +336,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                       setNewItemDesc('');
                       setNewItemPrice('');
                       setNewItemImage('');
+                      setNewItemOptionsText('');
                       setIsAddingItem(false);
                       onRefresh();
                     } catch (err) {
@@ -372,22 +415,77 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                   {session.role === 'admin' && (
                     <button
                       onClick={async () => {
-                        if (confirm(`Are you sure you want to permanently DELETE "${item.name}" from the menu?`)) {
-                          try {
-                            await deleteMenuItemFromServer(item.id);
-                            alert("Item deleted successfully.");
-                            onRefresh();
-                          } catch (err: any) {
-                            alert("Failed to delete item: " + err.message);
+                        if (item.isArchived) {
+                          if (confirm(`Are you sure you want to restore "${item.name}" to the active menu?`)) {
+                            try {
+                              const updated = { ...item, isArchived: false };
+                              await saveMenuItemToServer(updated);
+                              alert("Item restored successfully.");
+                              onRefresh();
+                            } catch (err: any) {
+                              alert("Failed to restore item: " + err.message);
+                            }
+                          }
+                        } else {
+                          if (confirm(`Are you sure you want to archive "${item.name}"? Archived items will be hidden from customers but preserved for operational integrity.`)) {
+                            try {
+                              const updated = { ...item, isArchived: true };
+                              await saveMenuItemToServer(updated);
+                              alert("Item archived successfully.");
+                              onRefresh();
+                            } catch (err: any) {
+                              alert("Failed to archive item: " + err.message);
+                            }
                           }
                         }
                       }}
                       className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-red-950/20 border border-red-500/30 text-red-400 hover:bg-red-900/30 transition-premium"
                     >
-                      🗑️ Delete
+                      {item.isArchived ? '🔄 Restore' : '🗑️ Archive'}
                     </button>
                   )}
                 </div>
+
+                {session.role === 'admin' && (
+                  <div className="mt-3 border-t border-white/5 pt-2">
+                    <button 
+                      onClick={() => setEditingOptionsItemId(editingOptionsItemId === item.id ? null : item.id)}
+                      className="text-[9px] text-red-400 font-bold uppercase tracking-wider underline hover:text-red-350 outline-none cursor-pointer"
+                    >
+                      {editingOptionsItemId === item.id ? 'Close Option Group Editor' : 'Configure Option Groups'}
+                    </button>
+                    {editingOptionsItemId === item.id && (
+                      <div className="mt-2 space-y-1">
+                        <textarea
+                          defaultValue={JSON.stringify(item.options || [], null, 2)}
+                          onBlur={async (e) => {
+                            const val = e.target.value.trim();
+                            let parsed = undefined;
+                            if (val) {
+                              try {
+                                parsed = JSON.parse(val);
+                                if (!Array.isArray(parsed)) {
+                                  alert('Options must be a JSON array.');
+                                  return;
+                                }
+                              } catch (err: any) {
+                                alert('Invalid JSON: ' + err.message);
+                                return;
+                              }
+                            }
+                            const updated = { ...item, options: parsed };
+                            await saveMenuItemToServer(updated);
+                            onRefresh();
+                          }}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl p-2 text-[9px] text-white outline-none focus:border-red-500 font-mono"
+                          rows={6}
+                          placeholder="JSON options list..."
+                        />
+                        <p className="text-[8px] text-slate-500 italic">Unfocus (blur) text area to save options automatically.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}

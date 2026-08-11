@@ -2,7 +2,7 @@ import path from 'path';
 import { Plugin, defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const appRoot = path.resolve(__dirname, 'harinos-website-main/harinos-website-main');
+const appRoot = __dirname;
 
 
 

@@ -447,11 +447,11 @@ export const getServerOrders = async (): Promise<Order[]> => {
     const snapshot = await getDocs(q);
     let ordersList = snapshot.docs
       .map((docDoc) => {
-        const data = docDoc.data() as Order;
-        return {
+        const data = docDoc.data();
+        return normalizeOrder({
           ...data,
           id: data.id || docDoc.id
-        };
+        });
       })
       .filter(o => o.id !== '_init_placeholder' && !o.isDeleted);
 
@@ -495,8 +495,12 @@ export const getServerOrderById = async (orderId: string): Promise<Order | null>
   try {
     const snap = await getDoc(doc(db(), FIRESTORE_ORDERS_COLLECTION, orderId));
     if (!snap.exists()) return null;
-    const order = snap.data() as Order;
-    if (order.isDeleted) return null;
+    const orderRaw = snap.data();
+    if (orderRaw.isDeleted) return null;
+    const order = normalizeOrder({
+      ...orderRaw,
+      id: orderRaw.id || snap.id
+    });
 
     const session = StorageService.getAdminSession();
     if (session && session.role === 'staff') {
@@ -517,6 +521,133 @@ export const getServerOrderById = async (orderId: string): Promise<Order | null>
   } catch (error) {
     console.warn('Direct Firestore get order by id failed, using cached orders:', error);
     return StorageService.getAdminOrders().find(o => o.id === orderId) || null;
+  }
+};
+
+export const updateDailyStats = async (order: Order, previousStatus: OrderStatus, newStatus: OrderStatus) => {
+  const dbInstance = db();
+  const dateStr = (order.receivedAt || new Date().toISOString()).slice(0, 10);
+  const statsRef = doc(dbInstance, 'dailySalesStats', dateStr);
+  
+  try {
+    await runTransaction(dbInstance, async (tx) => {
+      const statsSnap = await tx.get(statsRef);
+      let stats = statsSnap.exists() ? statsSnap.data() : {
+        date: dateStr,
+        totalSales: 0,
+        netSales: 0,
+        orderCount: 0,
+        cancelledCount: 0,
+        cancelledValue: 0,
+        cashSales: 0,
+        onlineSales: 0,
+        deliveryCount: 0,
+        takeawayCount: 0,
+        dineinCount: 0,
+        discountsGiven: 0,
+        deliveryFeesCollected: 0,
+        topProducts: {}
+      };
+      
+      const orderTotal = order.total || 0;
+      const orderSubtotal = order.subtotal ?? (order.total - (order.deliveryFee ?? 0) + (order.walletAmountRedeemed ?? 0) + (order.rewardPointsRedeemed ?? 0));
+      const orderDiscount = order.discount ?? 0;
+      const orderDeliveryFee = order.deliveryFee ?? 0;
+      const isOnline = order.paymentMethod !== 'Cash';
+      
+      let totalChange = 0;
+      let netChange = 0;
+      let countChange = 0;
+      let cancelCountChange = 0;
+      let cancelValueChange = 0;
+      let cashChange = 0;
+      let onlineChange = 0;
+      let deliveryChange = 0;
+      let takeawayChange = 0;
+      let dineinChange = 0;
+      let discountChange = 0;
+      let feeChange = 0;
+      const productQtyChanges: Record<string, number> = {};
+      
+      if (newStatus === 'done' && previousStatus !== 'done') {
+        totalChange = orderTotal;
+        netChange = orderSubtotal - orderDiscount;
+        countChange = 1;
+        if (isOnline) {
+          onlineChange = orderTotal;
+        } else {
+          cashChange = orderTotal;
+        }
+        
+        if (order.orderType === 'delivery') deliveryChange = 1;
+        else if (order.orderType === 'takeaway') takeawayChange = 1;
+        else if (order.orderType === 'dinein') dineinChange = 1;
+        
+        discountChange = orderDiscount;
+        feeChange = orderDeliveryFee;
+        
+        if (order.items) {
+          order.items.forEach(item => {
+            productQtyChanges[item.id] = (productQtyChanges[item.id] || 0) + (item.quantity || 1);
+          });
+        }
+      }
+      else if (newStatus === 'cancelled' && previousStatus === 'done') {
+        totalChange = -orderTotal;
+        netChange = -(orderSubtotal - orderDiscount);
+        countChange = -1;
+        cancelCountChange = 1;
+        cancelValueChange = orderTotal;
+        if (isOnline) {
+          onlineChange = -orderTotal;
+        } else {
+          cashChange = -orderTotal;
+        }
+        
+        if (order.orderType === 'delivery') deliveryChange = -1;
+        else if (order.orderType === 'takeaway') takeawayChange = -1;
+        else if (order.orderType === 'dinein') dineinChange = -1;
+        
+        discountChange = -orderDiscount;
+        feeChange = -orderDeliveryFee;
+        
+        if (order.items) {
+          order.items.forEach(item => {
+            productQtyChanges[item.id] = (productQtyChanges[item.id] || 0) - (item.quantity || 1);
+          });
+        }
+      }
+      else if (newStatus === 'cancelled' && previousStatus !== 'done' && previousStatus !== 'cancelled') {
+        cancelCountChange = 1;
+        cancelValueChange = orderTotal;
+      }
+      
+      const updatedTopProducts = { ...(stats.topProducts || {}) };
+      Object.keys(productQtyChanges).forEach(pid => {
+        updatedTopProducts[pid] = Math.max(0, (updatedTopProducts[pid] || 0) + productQtyChanges[pid]);
+      });
+      
+      const newStats = {
+        date: dateStr,
+        totalSales: Math.max(0, (stats.totalSales || 0) + totalChange),
+        netSales: Math.max(0, (stats.netSales || 0) + netChange),
+        orderCount: Math.max(0, (stats.orderCount || 0) + countChange),
+        cancelledCount: Math.max(0, (stats.cancelledCount || 0) + cancelCountChange),
+        cancelledValue: Math.max(0, (stats.cancelledValue || 0) + cancelValueChange),
+        cashSales: Math.max(0, (stats.cashSales || 0) + cashChange),
+        onlineSales: Math.max(0, (stats.onlineSales || 0) + onlineChange),
+        deliveryCount: Math.max(0, (stats.deliveryCount || 0) + deliveryChange),
+        takeawayCount: Math.max(0, (stats.takeawayCount || 0) + takeawayChange),
+        dineinCount: Math.max(0, (stats.dineinCount || 0) + dineinChange),
+        discountsGiven: Math.max(0, (stats.discountsGiven || 0) + discountChange),
+        deliveryFeesCollected: Math.max(0, (stats.deliveryFeesCollected || 0) + feeChange),
+        topProducts: updatedTopProducts
+      };
+      
+      tx.set(statsRef, newStats, { merge: true });
+    });
+  } catch (err) {
+    console.error('Failed to update daily sales statistics:', err);
   }
 };
 
@@ -651,6 +782,7 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
       auditTrail
     };
 
+    await updateDailyStats(orderData, orderData.status, 'cancelled');
     await updateDoc(orderRef, cancelledUpdate);
     try {
       await updateDoc(doc(db(), 'orderHistory', cleanId), cancelledUpdate);
@@ -692,6 +824,7 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
       reason: reason || ''
     });
 
+    await updateDailyStats(orderData, orderData.status, status);
     await updateDoc(orderRef, {
       status,
       statusUpdatedAt: new Date().toISOString(),
@@ -1712,11 +1845,11 @@ export const subscribeServerOrders = (
     (snapshot) => {
       let ordersList = snapshot.docs
         .map((docDoc) => {
-          const data = docDoc.data() as Order;
-          return {
+          const data = docDoc.data();
+          return normalizeOrder({
             ...data,
             id: data.id || docDoc.id
-          };
+          });
         })
         .filter(o => o.id !== '_init_placeholder' && !o.isDeleted);
 
@@ -1817,11 +1950,15 @@ export const subscribeServerOrder = (
         onOrder(null);
         return;
       }
-      const order = snapshot.data() as Order;
-      if (order.isDeleted) {
+      const orderRaw = snapshot.data();
+      if (orderRaw.isDeleted) {
         onOrder(null);
         return;
       }
+      const order = normalizeOrder({
+        ...orderRaw,
+        id: orderRaw.id || snapshot.id
+      });
       if (session && session.role === 'staff') {
         delete order.total;
         delete order.deliveryFee;
@@ -2966,4 +3103,48 @@ export const disableReferralCodeForCustomer = async (customerId: string): Promis
   try {
     await updateDoc(doc(db(), 'customerProfiles', cleanId), { referralCode: '' });
   } catch (e) { }
+};
+
+export const normalizeOrder = (order: any): Order => {
+  if (!order) return order;
+  const idStr = order.id || '';
+  const parts = idStr.split('-');
+  const displayId = order.displayOrderId || (parts.length >= 3 ? parts[2] : idStr.slice(-5));
+  
+  return {
+    ...order,
+    id: idStr,
+    displayOrderId: displayId,
+    status: order.status || 'new',
+    auditTrail: order.auditTrail || [],
+    subtotal: order.subtotal ?? order.total ?? 0,
+    discount: order.discount ?? 0,
+    walletAmountRedeemed: order.walletAmountRedeemed || 0,
+    rewardPointsRedeemed: order.rewardPointsRedeemed || 0,
+    items: (order.items || []).map((item: any) => {
+      const itemBasePrice = item.basePrice ?? item.price ?? 0;
+      const itemUnitPrice = item.unitPrice ?? item.price ?? 0;
+      const itemTotalPrice = item.totalPrice ?? (itemUnitPrice * item.quantity) ?? 0;
+      
+      let selectedOptions = item.selectedOptions || [];
+      if (selectedOptions.length === 0 && item.selectedSize) {
+        selectedOptions = [{
+          optionId: 'legacy_size',
+          optionName: 'Size',
+          choiceId: 'legacy_' + item.selectedSize.toLowerCase(),
+          choiceLabel: item.selectedSize,
+          priceModifier: 0
+        }];
+      }
+      
+      return {
+        ...item,
+        basePrice: itemBasePrice,
+        unitPrice: itemUnitPrice,
+        totalPrice: itemTotalPrice,
+        selectedOptions,
+        specialInstructions: item.specialInstructions || ''
+      };
+    })
+  };
 };

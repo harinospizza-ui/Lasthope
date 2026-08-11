@@ -395,6 +395,19 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                                 </span>
                               )}
                             </div>
+                            {item.selectedOptions && item.selectedOptions.length > 0 && (
+                              <div className="mt-1 text-[10px] text-slate-500 font-semibold leading-tight">
+                                {item.selectedOptions
+                                  .filter((opt) => opt.optionName.toLowerCase() !== 'size')
+                                  .map((opt) => opt.choiceLabel)
+                                  .join(', ')}
+                              </div>
+                            )}
+                            {item.specialInstructions && (
+                              <div className="mt-1 text-[9px] text-orange-600 font-bold italic">
+                                * "{item.specialInstructions}"
+                              </div>
+                            )}
                           </div>
                           {!isBonusItem && (
                             <button onClick={() => handleRemove(cartItemId)} className="p-1 text-slate-300 transition-colors hover:text-red-500">

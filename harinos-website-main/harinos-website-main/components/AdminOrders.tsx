@@ -59,6 +59,18 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
     return digits.length === 10 ? `91${digits}` : digits;
   };
 
+  const formatPhoneForRole = (phone: string, role: string): string => {
+    if (!phone) return '';
+    if (role === 'staff') {
+      const cleaned = phone.trim();
+      if (cleaned.length >= 10) {
+        return `${cleaned.slice(0, 5)}*****${cleaned.slice(-2)}`;
+      }
+      return 'Hidden';
+    }
+    return phone;
+  };
+
   const visibleOrders = React.useMemo(() => {
     let filtered = orders;
     if (session.role !== 'admin') {
@@ -177,7 +189,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                       )}
 
                       <div className="mt-3 text-sm font-semibold text-slate-200">
-                        {order.customerName} (📞 {order.customerPhone})
+                        {order.customerName} (📞 {formatPhoneForRole(order.customerPhone || '', session.role)})
                       </div>
 
                       {order.orderType === 'delivery' && (
@@ -196,9 +208,30 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                         </div>
                       )}
 
-                      <div className="mt-2 pl-3 border-l-2 border-slate-700 space-y-1 text-xs text-slate-350">
+                      <div className="mt-2 pl-3 border-l-2 border-slate-700 space-y-2 text-xs text-slate-350">
                         {order.items.map((item, i) => (
-                          <div key={i}>{item.quantity}x {item.name}{item.selectedSize ? ` [${item.selectedSize}]` : ''}</div>
+                          <div key={i} className="space-y-0.5">
+                            <div className="font-bold text-slate-200">
+                              {item.quantity}x {item.name}
+                              {session.role !== 'staff' && item.unitPrice !== undefined && (
+                                <span className="text-slate-500 font-medium ml-1.5">(Rs {Math.round(item.unitPrice)} each)</span>
+                              )}
+                            </div>
+                            {item.selectedOptions && item.selectedOptions.length > 0 && (
+                              <div className="text-[10px] text-slate-400 pl-3 flex flex-wrap gap-1.5">
+                                {item.selectedOptions.map((opt: any) => (
+                                  <span key={opt.choiceId} className="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-slate-300 font-semibold uppercase tracking-wider text-[8px]">
+                                    {opt.optionName}: {opt.choiceLabel}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {item.specialInstructions && (
+                              <div className="text-[10px] text-orange-400 italic pl-3 font-semibold">
+                                * Instruction: "{item.specialInstructions}"
+                              </div>
+                            )}
+                          </div>
                         ))}
                       </div>
 
@@ -293,7 +326,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                           );
                         })()}
                         <button onClick={() => onPrint(order)} className="rounded-xl border border-slate-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/10 transition-premium">Print</button>
-                        {order.customerPhone && (
+                        {session.role !== 'staff' && order.customerPhone && (
                           <a
                             href={`https://wa.me/${normalizePhoneForWhatsApp(order.customerPhone)}`}
                             target="_blank"

@@ -15,6 +15,28 @@ export interface SizeOption {
   price: number;
 }
 
+export interface OptionChoice {
+  id: string;
+  label: string;
+  priceModifier: number;
+}
+
+export interface MenuItemOption {
+  id: string;
+  name: string;
+  type: 'select_one' | 'select_many';
+  required: boolean;
+  choices: OptionChoice[];
+}
+
+export interface SelectedOptionSnapshot {
+  optionId: string;
+  optionName: string;
+  choiceId: string;
+  choiceLabel: string;
+  priceModifier: number;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -27,6 +49,8 @@ export interface MenuItem {
   vegetarian: true;
   available: boolean;
   sizes?: SizeOption[];
+  options?: MenuItemOption[];
+  isArchived?: boolean;
 }
 
 export interface OfferCard {
@@ -76,6 +100,8 @@ export interface CartItem extends MenuItem {
   isOfferBonus?: boolean;
   sourceOfferId?: string;
   originalPrice?: number;
+  selectedOptions?: SelectedOptionSnapshot[];
+  specialInstructions?: string;
 }
 
 export interface PricedCartItem extends CartItem {
@@ -89,7 +115,10 @@ export interface OrderItem extends PricedCartItem {}
 
 export interface Order {
   id: string;
+  displayOrderId?: string;
   items: OrderItem[];
+  subtotal?: number;
+  discount?: number;
   total: number;
   date: string;
   orderType: OrderType;

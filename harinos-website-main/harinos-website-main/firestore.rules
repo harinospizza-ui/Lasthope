@@ -2,17 +2,23 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Check roles based on Firebase Auth email address
+    // Check roles based on Firebase Auth email address domain and prefix pattern
     function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'admin@harinos.local';
+      return request.auth != null && 
+             request.auth.token.email.endsWith('@harinos.local') && 
+             request.auth.token.email.matches('^admin.*');
     }
     
     function isManager() {
-      return request.auth != null && request.auth.token.email == 'manager@harinos.local';
+      return request.auth != null && 
+             request.auth.token.email.endsWith('@harinos.local') && 
+             request.auth.token.email.matches('^manager.*');
     }
     
     function isStaff() {
-      return request.auth != null && request.auth.token.email == 'staff@harinos.local';
+      return request.auth != null && 
+             request.auth.token.email.endsWith('@harinos.local') && 
+             request.auth.token.email.matches('^staff.*');
     }
     
     function isAdminOrManager() {
@@ -23,9 +29,13 @@ service cloud.firestore {
       return isAdmin() || isManager() || isStaff();
     }
 
-    // Orders Rules: Customers need public read/write access (unauthenticated)
+    // Orders Rules: Customers place/read orders; staff updates statuses; only manager/admin can cancel
     match /orders/{orderId} {
-      allow read, write: if true;
+      allow read, create: if true;
+      allow update: if isStaffUser() && (
+        request.resource.data.status != 'cancelled' || isAdminOrManager()
+      );
+      allow delete: if isAdminOrManager();
     }
 
     // Customers Rules: Customers need public read/write access (unauthenticated)
@@ -37,23 +47,27 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Verification Requests Rules
+    // Verification Requests Rules: Customers can request; staff/admin manages
     match /customerVerificationRequests/{requestId} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read, update, delete: if isStaffUser();
     }
 
-    // Wallets Rules
+    // Wallets Rules: Public read; staff/system write
     match /wallets/{walletId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isStaffUser() || !exists(/databases/$(database)/documents/admins/Admin_Harinos);
     }
 
     // Wallet Transactions Rules
     match /wallet_transactions/{transactionId} {
-      allow read, write: if true;
+      allow read, create: if true;
+      allow update, delete: if isAdminOrManager();
     }
 
     match /walletTransactions/{transactionId} {
-      allow read, write: if true;
+      allow read, create: if true;
+      allow update, delete: if isAdminOrManager();
     }
 
     // Menu Items Rules: Public read, Admin/Manager write or bootstrapping
@@ -154,7 +168,9 @@ service cloud.firestore {
 
     // Order History
     match /orderHistory/{orderId} {
-      allow read, write: if true;
+      allow read, create: if true;
+      allow update: if isStaffUser();
+      allow delete: if isAdminOrManager();
     }
     
     // Business Data
@@ -187,6 +203,12 @@ service cloud.firestore {
     // Analytics Rules
     match /analytics/{analyticsId} {
       allow read, write: if true;
+    }
+
+    // Daily Sales stats Rules: Only staff/admin can update; only manager/admin can view dashboard
+    match /dailySalesStats/{dateStr} {
+      allow read: if isAdminOrManager();
+      allow write: if isStaffUser();
     }
   }
 }

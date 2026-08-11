@@ -726,7 +726,7 @@ export const AdminWallets: React.FC<AdminWalletsProps> = ({
                           customerName: cust.name,
                           customerPhone: cust.phone,
                           amount: val * 0.1,
-                          type: 'admin_adjustment',
+                          type: 'reward',
                           status: 'completed',
                           createdAt: new Date().toISOString()
                         };

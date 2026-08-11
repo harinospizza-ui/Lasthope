@@ -545,90 +545,93 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
     // 1. Process customer wallet and coins refund
     if (orderData.customerPhone) {
       const cleanPhone = orderData.customerPhone.replace(/\D/g, '');
-      const custRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone);
-      const custSnap = await getDoc(custRef);
-      if (custSnap.exists()) {
-        const custData = custSnap.data() as CustomerProfile;
-        
-        const walletRefund = orderData.walletAmountRedeemed ?? 0;
-        const coinsRefundValue = orderData.rewardPointsRedeemed ?? 0; // Rs value of coins redeemed
-        const coinsRefundPoints = Math.round(coinsRefundValue * 10);
-        const coinsEarnedPoints = orderData.rewardPointsEarned ?? 0;
+      const dbInstance = db();
+      const custRef = doc(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone);
+      const profileRef = doc(dbInstance, 'customerProfiles', cleanPhone);
+      const walletRef = doc(dbInstance, 'wallets', cleanPhone);
+      
+      try {
+        await runTransaction(dbInstance, async (tx) => {
+          const custSnap = await tx.get(custRef);
+          if (!custSnap.exists()) return;
+          const custData = custSnap.data() as CustomerProfile;
 
-        let walletBalance = custData.walletBalance ?? 0;
-        let rewardPoints = custData.rewardPoints ?? 0;
+          const walletRefund = orderData.walletAmountRedeemed ?? 0;
+          const coinsRefundValue = orderData.rewardPointsRedeemed ?? 0; // Rs value of coins redeemed
+          const coinsRefundPoints = Math.round(coinsRefundValue * 10);
+          const coinsEarnedPoints = orderData.rewardPointsEarned ?? 0;
 
-        if (walletRefund > 0) {
-          walletBalance += walletRefund;
-        }
-        if (coinsRefundPoints > 0) {
-          rewardPoints += coinsRefundPoints;
-        }
-        if (coinsEarnedPoints > 0) {
-          rewardPoints = Math.max(0, rewardPoints - coinsEarnedPoints);
-        }
+          let walletBalance = custData.walletBalance ?? 0;
+          let rewardPoints = custData.rewardPoints ?? 0;
 
-        const updatedFields = {
-          walletBalance,
-          rewardPoints,
-          coins: rewardPoints
-        };
-        
-        await updateDoc(custRef, updatedFields);
-        try {
-          await updateDoc(doc(db(), 'customerProfiles', cleanPhone), updatedFields);
-        } catch (err) { }
-        try {
-          await setDoc(doc(db(), 'wallets', cleanPhone), { customerId: cleanPhone, balance: walletBalance }, { merge: true });
-        } catch (err) { }
+          if (walletRefund > 0) {
+            walletBalance += walletRefund;
+          }
+          if (coinsRefundPoints > 0) {
+            rewardPoints += coinsRefundPoints;
+          }
+          if (coinsEarnedPoints > 0) {
+            rewardPoints = Math.max(0, rewardPoints - coinsEarnedPoints);
+          }
 
-        const localCusts = StorageService.getAdminCustomers();
-        const cIdx = localCusts.findIndex(c => c.id === cleanPhone);
-        if (cIdx >= 0) {
-          localCusts[cIdx] = {
-            ...localCusts[cIdx],
-            ...updatedFields
+          const updatedFields = {
+            walletBalance,
+            rewardPoints,
+            coins: rewardPoints
           };
-          StorageService.saveAdminCustomers(localCusts);
-        }
 
-        // Log wallet transactions for audit
-        if (walletRefund > 0) {
-          const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-          const walletTx: WalletTransaction = {
-            id: txId,
-            customerId: cleanPhone,
-            customerName: custData.name || orderData.customerName || 'Customer',
-            customerPhone: orderData.customerPhone,
-            amount: walletRefund,
-            type: 'credit',
-            status: 'completed',
-            createdAt: new Date().toISOString()
-          };
-          const localTxs = StorageService.getAdminTransactions().filter(t => t.id !== txId);
-          StorageService.saveAdminTransactions([walletTx, ...localTxs]);
-          await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId), walletTx, { merge: true });
-        }
+          tx.update(custRef, updatedFields);
+          tx.update(profileRef, updatedFields);
+          tx.set(walletRef, { customerId: cleanPhone, balance: walletBalance }, { merge: true });
 
-        if (coinsRefundPoints > 0) {
-          const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-          const coinsTx: WalletTransaction = {
-            id: txId,
-            customerId: cleanPhone,
-            customerName: custData.name || orderData.customerName || 'Customer',
-            customerPhone: orderData.customerPhone,
-            amount: coinsRefundValue,
-            type: 'reward',
-            status: 'completed',
-            createdAt: new Date().toISOString()
-          };
-          const localTxs = StorageService.getAdminTransactions().filter(t => t.id !== txId);
-          StorageService.saveAdminTransactions([coinsTx, ...localTxs]);
-          await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId), coinsTx, { merge: true });
-        }
+          // Log wallet transactions for audit
+          if (walletRefund > 0) {
+            const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const walletTx: WalletTransaction = {
+              id: txId,
+              customerId: cleanPhone,
+              customerName: custData.name || orderData.customerName || 'Customer',
+              customerPhone: orderData.customerPhone,
+              amount: walletRefund,
+              type: 'credit',
+              status: 'completed',
+              createdAt: new Date().toISOString()
+            };
+            const txIdRef = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
+            tx.set(txIdRef, walletTx, { merge: true });
+          }
+
+          if (coinsRefundPoints > 0) {
+            const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const coinsTx: WalletTransaction = {
+              id: txId,
+              customerId: cleanPhone,
+              customerName: custData.name || orderData.customerName || 'Customer',
+              customerPhone: orderData.customerPhone,
+              amount: coinsRefundValue,
+              type: 'reward',
+              status: 'completed',
+              createdAt: new Date().toISOString()
+            };
+            const txIdRef = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
+            tx.set(txIdRef, coinsTx, { merge: true });
+          }
+
+          // Sync local admin storage if relevant
+          const localCusts = StorageService.getAdminCustomers();
+          const cIdx = localCusts.findIndex(c => c.id === cleanPhone);
+          if (cIdx >= 0) {
+            localCusts[cIdx] = {
+              ...localCusts[cIdx],
+              ...updatedFields
+            };
+            StorageService.saveAdminCustomers(localCusts);
+          }
+        });
+      } catch (err) {
+        console.error('Failed atomic refund on cancellation:', err);
       }
     }
-
     // 2. Update order document with status: 'cancelled' and details
     const auditTrail = orderData.auditTrail || [];
     auditTrail.push({
@@ -727,21 +730,26 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
                 verified: true
               };
 
+              const dbInstance = db();
+              const profileRef = doc(dbInstance, 'customerProfiles', cleanPhone);
+              const verifyRef = doc(dbInstance, 'customerVerificationRequests', cleanPhone);
+
+              let referrerDoc: CustomerProfile | null = null;
+              let referrerRef: any = null;
+
               if (referredBy && !referralCodeUsed) {
                 const referrerQuery = query(
-                  collection(db(), FIRESTORE_CUSTOMERS_COLLECTION),
+                  collection(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION),
                   where('referralCode', '==', referredBy)
                 );
                 const referrerSnap = await getDocs(referrerQuery);
-                let referrerDoc = null;
-                let referrerRef = null;
 
                 if (!referrerSnap.empty) {
                   referrerDoc = referrerSnap.docs[0].data() as CustomerProfile;
                   referrerRef = referrerSnap.docs[0].ref;
                 } else {
                   const pQuery = query(
-                    collection(db(), 'customerProfiles'),
+                    collection(dbInstance, 'customerProfiles'),
                     where('referralCode', '==', referredBy)
                   );
                   const pSnap = await getDocs(pQuery);
@@ -752,63 +760,68 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
                 }
 
                 if (referrerDoc && referrerRef) {
-                  const updatedReferrerCoins = (referrerDoc.rewardPoints ?? 0) + 100;
-                  const updatedReferralCount = (referrerDoc.referralCount ?? 0) + 1;
-
-                  const referrerUpdate = {
-                    rewardPoints: updatedReferrerCoins,
-                    coins: updatedReferrerCoins,
-                    referralCount: updatedReferralCount
-                  };
-
-                  await updateDoc(referrerRef, referrerUpdate);
-                  try {
-                    await updateDoc(doc(db(), 'customerProfiles', referrerDoc.id), referrerUpdate);
-                  } catch (e) {}
-
-                  const txIdRef = `tx_${Date.now()}_ref_${Math.random().toString(36).slice(2, 6)}`;
-                  const referrerTx: WalletTransaction = {
-                    id: txIdRef,
-                    customerId: referrerDoc.id,
-                    customerName: referrerDoc.name,
-                    customerPhone: referrerDoc.phone,
-                    amount: 10,
-                    type: 'reward',
-                    status: 'completed',
-                    createdAt: new Date().toISOString()
-                  };
-                  await setDoc(doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txIdRef), referrerTx);
+                  refereeUpdate.referralApplied = true;
+                  refereeUpdate.referralCodeUsed = true;
+                  refereeUpdate.referralLocked = true;
+                  refereeUpdate.referralAppliedAt = new Date().toISOString();
                 }
-
-                refereeUpdate.referralApplied = true;
-                refereeUpdate.referralCodeUsed = true;
-                refereeUpdate.referralLocked = true;
-                refereeUpdate.referralAppliedAt = new Date().toISOString();
               }
 
-              await updateDoc(customerRef, refereeUpdate);
               try {
-                await updateDoc(doc(db(), 'customerProfiles', cleanPhone), refereeUpdate);
-              } catch (e) {}
+                await runTransaction(dbInstance, async (tx) => {
+                  // Update referee
+                  tx.update(customerRef, refereeUpdate);
+                  tx.update(profileRef, refereeUpdate);
+                  tx.set(verifyRef, {
+                    status: 'verified',
+                    verifiedAt: new Date().toISOString(),
+                    verifiedBy: 'system'
+                  }, { merge: true });
 
-              try {
-                await setDoc(doc(db(), 'customerVerificationRequests', cleanPhone), {
-                  status: 'verified',
-                  verifiedAt: new Date().toISOString(),
-                  verifiedBy: 'system'
-                }, { merge: true });
-              } catch (e) {}
+                  // Update referrer if exists
+                  if (referrerDoc && referrerRef) {
+                    const referrerProfileRef = doc(dbInstance, 'customerProfiles', referrerDoc.id);
+                    const refSnap = await tx.get(referrerRef);
+                    if (refSnap.exists()) {
+                      const refData = refSnap.data() as CustomerProfile;
+                      const updatedReferrerCoins = (refData.rewardPoints ?? 0) + 100;
+                      const updatedReferralCount = (refData.referralCount ?? 0) + 1;
 
-              // Sync local admin storage if relevant
-              const localCusts = StorageService.getAdminCustomers();
-              let changed = false;
-              const selfIdx = localCusts.findIndex(c => c.id === cleanPhone);
-              if (selfIdx >= 0) {
-                localCusts[selfIdx] = { ...localCusts[selfIdx], ...refereeUpdate };
-                changed = true;
-              }
-              if (changed) {
-                StorageService.saveAdminCustomers(localCusts);
+                      const referrerUpdate = {
+                        rewardPoints: updatedReferrerCoins,
+                        coins: updatedReferrerCoins,
+                        referralCount: updatedReferralCount
+                      };
+
+                      tx.update(referrerRef, referrerUpdate);
+                      tx.update(referrerProfileRef, referrerUpdate);
+
+                      const txIdRef = `tx_${Date.now()}_ref_${Math.random().toString(36).slice(2, 6)}`;
+                      const referrerTx: WalletTransaction = {
+                        id: txIdRef,
+                        customerId: referrerDoc.id,
+                        customerName: referrerDoc.name,
+                        customerPhone: referrerDoc.phone,
+                        amount: 10,
+                        type: 'reward',
+                        status: 'completed',
+                        createdAt: new Date().toISOString()
+                      };
+                      const txIdRefDoc = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txIdRef);
+                      tx.set(txIdRefDoc, referrerTx);
+                    }
+                  }
+                });
+
+                // Sync local admin storage if relevant
+                const localCusts = StorageService.getAdminCustomers();
+                const selfIdx = localCusts.findIndex(c => c.id === cleanPhone);
+                if (selfIdx >= 0) {
+                  localCusts[selfIdx] = { ...localCusts[selfIdx], ...refereeUpdate };
+                  StorageService.saveAdminCustomers(localCusts);
+                }
+              } catch (e) {
+                console.error('Failed to run atomic transaction for referral reward first order:', e);
               }
             }
           }
@@ -1626,6 +1639,10 @@ export const mergeCustomersOnServer = async (primaryId: string, secondaryId: str
 
   const primaryRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, pId);
   const secondaryRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, sId);
+  const primaryProfileRef = doc(db(), 'customerProfiles', pId);
+  const secondaryProfileRef = doc(db(), 'customerProfiles', sId);
+  const primaryWalletRef = doc(db(), 'wallets', pId);
+  const secondaryWalletRef = doc(db(), 'wallets', sId);
 
   await runTransaction(db(), async (transaction) => {
     const primarySnap = await transaction.get(primaryRef);
@@ -1650,7 +1667,20 @@ export const mergeCustomersOnServer = async (primaryId: string, secondaryId: str
       loyaltyPoints: mergedPoints
     });
 
+    transaction.update(primaryProfileRef, {
+      walletBalance: mergedBalance,
+      rewardPoints: mergedPoints,
+      loyaltyPoints: mergedPoints
+    });
+
+    transaction.set(primaryWalletRef, {
+      customerId: pId,
+      balance: mergedBalance
+    }, { merge: true });
+
     transaction.delete(secondaryRef);
+    transaction.delete(secondaryProfileRef);
+    transaction.delete(secondaryWalletRef);
 
     const txId = `tx_merge_${Date.now()}`;
     const txRef = doc(db(), FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);

@@ -1,7 +1,0 @@
-{
-  "name": "Harino's Pizza",
-  "description": "Mobile-first ordering app for Harino's Pizza with live offers, outlet routing, and WhatsApp checkout.",
-  "requestFramePermissions": [
-    "geolocation"
-  ]
-}

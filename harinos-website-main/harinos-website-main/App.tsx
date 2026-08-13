@@ -1766,17 +1766,7 @@ const App: React.FC = () => {
         return;
       }
 
-      const hasOptions =
-        (item.options && item.options.length > 0) ||
-        (item.sizes && item.sizes.length > 0) ||
-        item.category === Category.MOMOS ||
-        item.category === Category.FRIES;
-
-      if (hasOptions && !selectedOptions) {
-        setCustomizeItem(item);
-        setCustomizeItemSize(selectedSize);
-        return;
-      }
+      // Direct add-to-cart without popups for a simpler ordering flow.
 
       const normalizedSize = selectedSize ?? item.sizes?.[0]?.label;
       const basePrice = getItemBasePrice(item, normalizedSize, selectedOptions);

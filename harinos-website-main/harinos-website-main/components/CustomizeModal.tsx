@@ -241,6 +241,8 @@ export const CustomizeModal: React.FC<CustomizeModalProps> = ({
                             ? `+Rs ${choice.priceModifier}`
                             : choice.priceModifier < 0
                             ? `-Rs ${Math.abs(choice.priceModifier)}`
+                            : (opt.name.toLowerCase() === 'size' || opt.name.toLowerCase() === 'portion')
+                            ? `Rs ${item.price}`
                             : 'Free'}
                         </span>
                       </button>

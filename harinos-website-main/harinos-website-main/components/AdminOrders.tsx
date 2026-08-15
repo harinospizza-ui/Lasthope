@@ -175,10 +175,11 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                       </div>
 
                       {/* Wallet adjustments logs */}
-                      {session.role !== 'staff' && (order.walletAmountRedeemed || order.rewardPointsRedeemed) ? (
-                        <div className="mt-2 text-xs font-semibold text-green-400 space-x-3">
-                          {order.walletAmountRedeemed ? <span>👛 Wallet Redeem: -Rs {order.walletAmountRedeemed}</span> : null}
-                          {order.rewardPointsRedeemed ? <span>⭐ Points Redeem: -Rs {order.rewardPointsRedeemed}</span> : null}
+                      {session.role !== 'staff' && (order.walletAmountRedeemed || order.rewardPointsRedeemed || order.promotion) ? (
+                        <div className="mt-2 text-xs font-semibold text-green-400 space-x-3 flex flex-wrap gap-2">
+                          {order.promotion ? <span className="bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-md text-emerald-300">🎉 {order.promotion.name}: -Rs {order.promotion.discountAmount} ({order.promotion.discountValue}%)</span> : null}
+                          {order.walletAmountRedeemed ? <span>👛 Wallet: -Rs {order.walletAmountRedeemed}</span> : null}
+                          {order.rewardPointsRedeemed ? <span>⭐ Points: -Rs {order.rewardPointsRedeemed}</span> : null}
                         </div>
                       ) : null}
 

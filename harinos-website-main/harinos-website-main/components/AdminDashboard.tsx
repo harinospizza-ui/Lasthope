@@ -3,6 +3,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebaseClient';
 import { Order, CustomerProfile, AdminSession } from '../types';
 import { compressYearlySalesSummary } from '../services/orderApi';
+import { getActiveFestivalCampaign, getNextUpcomingFestivalCampaign, formatISTDate } from '../services/festivalEngine';
 
 interface AdminDashboardProps {
   session: AdminSession;
@@ -314,9 +315,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const isAdmin = session.role === 'admin';
+  const currentFestival = useMemo(() => getActiveFestivalCampaign(), []);
+  const nextFestival = useMemo(() => getNextUpcomingFestivalCampaign(), []);
 
   return (
     <section className="relative mx-auto max-w-6xl p-4 animate-fade-in space-y-6 text-white">
+      {/* Festival Campaign System Card */}
+      <div className="rounded-3xl border border-orange-500/20 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-orange-950/20 p-5 shadow-2xl backdrop-blur-md">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🎉</span>
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-orange-400">
+                Festival Campaign Engine (FY 2026-27)
+              </span>
+              <h4 className="text-lg font-display font-bold text-white">
+                {currentFestival ? currentFestival.name : 'Normal Theme (No Active Festival)'}
+              </h4>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+              currentFestival
+                ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                : 'bg-slate-800 border-white/10 text-slate-400'
+            }`}>
+              {currentFestival ? '● ACTIVE' : '○ INACTIVE'}
+            </span>
+            {currentFestival && (
+              <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-orange-500/20 border border-orange-500/30 text-orange-300">
+                {currentFestival.offer.discountValue}% DISCOUNT
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs">
+          <div className="rounded-2xl bg-white/[0.03] p-3 border border-white/5">
+            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Campaign Window (IST)</span>
+            <span className="mt-1 font-bold text-slate-200 block">
+              {currentFestival
+                ? `${formatISTDate(currentFestival.startDate)} – ${formatISTDate(currentFestival.endDate)}`
+                : 'Standard Harino’s Schedule'}
+            </span>
+          </div>
+
+          <div className="rounded-2xl bg-white/[0.03] p-3 border border-white/5">
+            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Active Theme & Media</span>
+            <span className="mt-1 font-bold text-slate-200 block truncate">
+              {currentFestival
+                ? `${currentFestival.theme.heroTag} (${currentFestival.media.video ? 'Video + Image' : 'Image'})`
+                : 'Standard Wood-Fired Theme'}
+            </span>
+          </div>
+
+          <div className="rounded-2xl bg-white/[0.03] p-3 border border-white/5">
+            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Next Scheduled Campaign</span>
+            <span className="mt-1 font-bold text-orange-300 block truncate">
+              {nextFestival
+                ? `${nextFestival.name} (${formatISTDate(nextFestival.startDate)})`
+                : 'All FY 2026-27 campaigns configured'}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Header and filters */}
       <div className="flex flex-wrap gap-4 items-center justify-between bg-slate-900/40 p-4 border border-white/5 rounded-3xl">
         <div>

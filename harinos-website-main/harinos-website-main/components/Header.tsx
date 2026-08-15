@@ -4,6 +4,8 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { Capacitor } from '@capacitor/core';
 import { getNotificationPermission } from '../services/browserSupport';
 
+import { FestivalCampaign } from '../config/festivalCampaigns';
+
 interface HeaderProps {
   cartCount: number;
   onCartClick: () => void;
@@ -17,6 +19,8 @@ interface HeaderProps {
   onWalletClick?: () => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  campaign?: FestivalCampaign | null;
+  onHelpTour?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -32,6 +36,7 @@ const Header: React.FC<HeaderProps> = ({
   onWalletClick,
   searchQuery,
   setSearchQuery,
+  campaign,
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
@@ -166,6 +171,11 @@ const Header: React.FC<HeaderProps> = ({
               >
                 Because Hari Knows
               </span>
+              {campaign && (
+                <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-orange-500 text-white shadow-sm animate-pulse">
+                  {campaign.offer.discountValue}% OFF ACTIVE
+                </span>
+              )}
             </div>
           </button>
 

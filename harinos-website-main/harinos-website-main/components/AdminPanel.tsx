@@ -113,7 +113,7 @@ ${order.items.map((item) => {
 }).join('')}
 <div class="dash"></div>
 <div class="row"><span>Subtotal</span><b>Rs ${Math.round(order.subtotal ?? (order.total - (order.deliveryFee ?? 0) + (order.walletAmountRedeemed ?? 0) + (order.rewardPointsRedeemed ?? 0)))}</b></div>
-${order.discount ? `<div class="row"><span>Discount</span><b>-Rs ${Math.round(order.discount)}</b></div>` : ''}
+${order.promotion ? `<div class="row"><span>${order.promotion.name} (${order.promotion.discountValue}%)</span><b>-Rs ${Math.round(order.promotion.discountAmount)}</b></div>` : order.discount ? `<div class="row"><span>Discount</span><b>-Rs ${Math.round(order.discount)}</b></div>` : ''}
 ${order.deliveryFee ? `<div class="row"><span>Delivery Fee</span><b>Rs ${Math.round(order.deliveryFee)}</b></div>` : ''}
 ${order.walletAmountRedeemed ? `<div class="row"><span>Wallet Paid</span><b>-Rs ${Math.round(order.walletAmountRedeemed)}</b></div>` : ''}
 ${order.rewardPointsRedeemed ? `<div class="row"><span>Points Paid</span><b>-Rs ${Math.round(order.rewardPointsRedeemed)}</b></div>` : ''}

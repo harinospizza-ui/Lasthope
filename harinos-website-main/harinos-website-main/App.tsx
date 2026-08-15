@@ -52,6 +52,8 @@ import FirstTimeUserModal from './components/FirstTimeUserModal';
 import { useSwipeDismiss } from './hooks/useSwipeDismiss';
 import DownloadPage from './components/DownloadPage';
 import UpdateModal from './components/UpdateModal';
+import { FestivalOfferCard } from './components/FestivalOfferCard';
+import { getActiveFestivalCampaign, calculateFestivalDiscount } from './services/festivalEngine';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
@@ -1970,14 +1972,24 @@ const App: React.FC = () => {
     [activeOfferCards, cartWithBonuses],
   );
 
+  const activeCampaign = useMemo(() => getActiveFestivalCampaign(), []);
+
   const subtotal = useMemo(
     () => pricedCart.reduce((sum, item) => sum + item.totalPrice, 0),
     [pricedCart],
   );
 
+  const {
+    discountAmount: festivalDiscountAmount,
+    discountedSubtotal: foodSubtotalAfterFestival,
+  } = useMemo(
+    () => calculateFestivalDiscount(activeCampaign, subtotal),
+    [activeCampaign, subtotal],
+  );
+
   const deliveryPricing = useMemo(
-    () => getDeliveryPricingSummary(nearestOutlet, outletDistanceKm, subtotal),
-    [nearestOutlet, outletDistanceKm, subtotal],
+    () => getDeliveryPricingSummary(nearestOutlet, outletDistanceKm, foodSubtotalAfterFestival),
+    [nearestOutlet, outletDistanceKm, foodSubtotalAfterFestival],
   );
 
   const deliveryFee = useMemo(() => {
@@ -1989,7 +2001,7 @@ const App: React.FC = () => {
   }, [deliveryPricing.fee, orderType]);
 
   const finalDeliveryFee = orderType === 'delivery' && deliveryFee > 0 ? deliveryFee : 0;
-  const currentTotal = subtotal + finalDeliveryFee;
+  const currentTotal = foodSubtotalAfterFestival + finalDeliveryFee;
 
   const customerWalletBalance = customerProfile?.walletBalance ?? 0;
   const customerRewardPoints = customerProfile?.rewardPoints ?? 0;
@@ -1999,7 +2011,7 @@ const App: React.FC = () => {
   const pointsDiscount = usePoints ? Math.min(rewardPointsValue, currentTotal - walletDiscount) : 0;
   const grandTotal = Math.max(0, currentTotal - walletDiscount - pointsDiscount);
 
-  const includedGst = subtotal - subtotal / 1.05;
+  const includedGst = foodSubtotalAfterFestival - foodSubtotalAfterFestival / 1.05;
   const totalCartItems = pricedCart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCheckoutInitiate = async () => {
@@ -2061,7 +2073,14 @@ const App: React.FC = () => {
     const orderPayload = {
       items: orderItems,
       subtotal: baseSubtotal,
-      discount: Math.round(baseSubtotal - subtotal),
+      discount: Math.round(baseSubtotal - foodSubtotalAfterFestival),
+      promotion: activeCampaign && activeCampaign.offer.enabled ? {
+        id: activeCampaign.id,
+        name: activeCampaign.offer.title,
+        discountType: 'percentage' as const,
+        discountValue: activeCampaign.offer.discountValue,
+        discountAmount: festivalDiscountAmount,
+      } : undefined,
       total: grandTotal,
       date: new Date().toLocaleString(),
       orderType,
@@ -2078,7 +2097,7 @@ const App: React.FC = () => {
       customerEmail: customerProfile?.email,
       walletAmountRedeemed: walletDiscount,
       rewardPointsRedeemed: pointsDiscount,
-      rewardPointsEarned: Math.floor(subtotal / 10),
+      rewardPointsEarned: Math.floor(foodSubtotalAfterFestival / 10),
       paymentMethod: paymentMethod || 'UPI',
     };
 
@@ -2238,6 +2257,7 @@ const App: React.FC = () => {
         onHelpTour={() => setShowTutorial(true)}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        campaign={activeCampaign}
       />
       {showTutorial && (
         <FirstTimeUserModal
@@ -2273,7 +2293,10 @@ const App: React.FC = () => {
       <main className={`relative z-10 transition-all duration-300 ${view === 'menu' ? 'pt-36 md:pt-[9.5rem]' : 'pt-20'}`}>
         {view === 'menu' ? (
           <>
-            <Hero onShare={handleShare} onExploreMenu={openCategoryView} />
+            <Hero onShare={handleShare} onExploreMenu={openCategoryView} campaign={activeCampaign} />
+            {activeCampaign && (
+              <FestivalOfferCard campaign={activeCampaign} onExploreMenu={openCategoryView} />
+            )}
             <OfferCarousel offers={activeOfferCards} onAction={handleOfferAction} />
 
             {/* Give it a try Daily Recommendation */}
@@ -2575,7 +2598,7 @@ const App: React.FC = () => {
               <span className="text-[10px] font-black uppercase tracking-widest">View Basket</span>
             </div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-display font-bold text-red-500">Rs {subtotal.toFixed(0)}</span>
+              <span className="text-xs font-display font-bold text-red-500">Rs {foodSubtotalAfterFestival.toFixed(0)}</span>
               <svg className="w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
               </svg>
@@ -2590,7 +2613,10 @@ const App: React.FC = () => {
         items={pricedCart}
         onUpdateQuantity={updateQuantity}
         onRemove={removeFromCart}
-        total={subtotal}
+        total={foodSubtotalAfterFestival}
+        rawFoodSubtotal={subtotal}
+        festivalDiscountAmount={festivalDiscountAmount}
+        campaign={activeCampaign}
         onCheckout={handleCheckoutInitiate}
         orderType={orderType}
         setOrderType={handleOrderTypeChange}

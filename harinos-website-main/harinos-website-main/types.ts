@@ -111,6 +111,14 @@ export interface PricedCartItem extends CartItem {
   appliedOfferTitle?: string;
 }
 
+export interface OrderPromotion {
+  id: string;
+  name: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  discountAmount: number;
+}
+
 export interface OrderItem extends PricedCartItem {}
 
 export interface Order {
@@ -119,6 +127,7 @@ export interface Order {
   items: OrderItem[];
   subtotal?: number;
   discount?: number;
+  promotion?: OrderPromotion;
   total: number;
   date: string;
   orderType: OrderType;

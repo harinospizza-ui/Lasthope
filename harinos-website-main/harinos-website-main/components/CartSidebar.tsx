@@ -3,6 +3,7 @@ import { CustomerLocation, Order, OrderType, OutletConfig, PricedCartItem, Custo
 import { DeliveryPricingSummary } from '../deliveryPricing';
 import { useSwipeDismiss } from '../hooks/useSwipeDismiss';
 import { getCartItemId } from '../offerUtils';
+import { FestivalCampaign } from '../config/festivalCampaigns';
 
 interface CartSidebarProps {
   isOpen: boolean;
@@ -31,6 +32,9 @@ interface CartSidebarProps {
   setUsePoints: (use: boolean) => void;
   walletDiscount: number;
   pointsDiscount: number;
+  campaign?: FestivalCampaign | null;
+  festivalDiscountAmount?: number;
+  rawFoodSubtotal?: number;
 }
 
 const CartSidebar: React.FC<CartSidebarProps> = ({
@@ -60,6 +64,9 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   setUsePoints,
   walletDiscount,
   pointsDiscount,
+  campaign,
+  festivalDiscountAmount = 0,
+  rawFoodSubtotal,
 }) => {
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [animatePrice, setAnimatePrice] = useState(false);
@@ -95,7 +102,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
       const normalSavings = (item.basePrice - item.discountedPrice) * item.quantity;
       return sum + normalSavings;
     }
-  }, 0);
+  }, 0) + festivalDiscountAmount;
   const lastOrder = pastOrders.length > 0 ? pastOrders[0] : null;
   const outletForDisplay = orderType === 'delivery' ? nearestOutlet : selectedOutlet;
   const requiredMinimumOrder =
@@ -514,7 +521,16 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
               )}
 
               <div className="mb-5 space-y-2 font-mono text-[10px] uppercase tracking-widest opacity-80">
-                <div className="flex justify-between"><span>Subtotal</span><span>Rs {total.toFixed(2)}</span></div>
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>Rs {(rawFoodSubtotal !== undefined ? rawFoodSubtotal : total).toFixed(2)}</span>
+                </div>
+                {festivalDiscountAmount > 0 && campaign && (
+                  <div className="flex justify-between text-emerald-400 font-black">
+                    <span>{campaign.offer.title} ({campaign.offer.discountValue}%)</span>
+                    <span>-Rs {festivalDiscountAmount.toFixed(2)}</span>
+                  </div>
+                )}
                 {orderType === 'delivery' && (
                   <div className="flex justify-between gap-3">
                     <span>

@@ -3,6 +3,7 @@ import { MenuItem, AdminSession, Category, OutletConfig, OrderItem } from '../ty
 import { saveFullOrderToServer } from '../services/orderApi';
 import { MENU_ITEMS } from '../constants';
 import { extendMenuItemsWithGeneratedSeries } from '../App';
+import { getActiveFestivalCampaign, calculateFestivalDiscount } from '../services/festivalEngine';
 
 interface AdminPOSProps {
   session: AdminSession;
@@ -118,11 +119,20 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
 
+  const activeCampaign = useMemo(() => getActiveFestivalCampaign(), []);
+
   const subtotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
 
-  const grandTotal = Math.round(subtotal);
+  const { discountAmount: festivalDiscountAmount, discountedSubtotal: finalSubtotal } = useMemo(() => {
+    if (activeCampaign && activeCampaign.offer.enabled) {
+      return calculateFestivalDiscount(activeCampaign, subtotal);
+    }
+    return { discountAmount: 0, discountedSubtotal: subtotal };
+  }, [activeCampaign, subtotal]);
+
+  const grandTotal = Math.round(finalSubtotal);
 
   const normalizePhone = (phone: string) => {
     const digits = phone.replace(/\D/g, '');
@@ -169,6 +179,15 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
     const payload = {
       id: posId,
       items: orderItems,
+      subtotal,
+      discount: festivalDiscountAmount,
+      promotion: activeCampaign && activeCampaign.offer.enabled && festivalDiscountAmount > 0 ? {
+        id: activeCampaign.id,
+        name: activeCampaign.offer.title,
+        discountType: 'percentage' as const,
+        discountValue: activeCampaign.offer.discountValue,
+        discountAmount: festivalDiscountAmount,
+      } : undefined,
       total: grandTotal,
       date: formattedDate,
       receivedAt: nowIso,
@@ -204,7 +223,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
 *Items Ordered:*
 ${itemsListText}
 ------------------------------------
-*Total Amount:* Rs ${grandTotal}
+${festivalDiscountAmount > 0 ? `*Subtotal:* Rs ${subtotal}\n*${activeCampaign?.offer.title || 'Festival Offer'} (${activeCampaign?.offer.discountValue || 20}%):* -Rs ${festivalDiscountAmount}\n------------------------------------\n` : ''}*Total Amount:* Rs ${grandTotal}
 *Payment Status:* Paid (${paymentMethod})
 
 Thank you for dining with Harino's! 🍕`;

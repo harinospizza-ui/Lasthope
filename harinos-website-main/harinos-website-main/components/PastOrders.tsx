@@ -58,6 +58,13 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
                       Routed to {order.outletName}
                     </p>
                   )}
+                  {order.promotion && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">
+                        🎉 {order.promotion.name}: -₹{order.promotion.discountAmount} ({order.promotion.discountValue}%)
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-4 md:mt-0 px-4 py-2 bg-orange-50 rounded-xl">
                   <span className="text-xs font-black uppercase tracking-widest text-orange-600">{order.orderType}</span>

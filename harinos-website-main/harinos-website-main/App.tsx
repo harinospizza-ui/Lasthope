@@ -4,7 +4,6 @@ import {
   Category,
   CategoryFilter,
   CustomerLocation,
-  AdminSession,
   CustomerProfile,
   MenuItem,
   OfferCard,
@@ -45,7 +44,6 @@ import PaymentModal from './components/PaymentModal';
 import InstallPopup from './components/InstallPopup';
 import ServiceModeModal from './components/ServiceModeModal';
 import CustomerLoginModal from './components/CustomerLoginModal';
-import AdminPanel from './components/AdminPanel';
 import { WalletModal } from './components/WalletModal';
 import { CustomizeModal } from './components/CustomizeModal';
 import FirstTimeUserModal from './components/FirstTimeUserModal';
@@ -536,8 +534,6 @@ const App: React.FC = () => {
   const [showOrderSuccess, setShowOrderSuccess] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(StorageService.getCustomerProfile());
-  const [adminSession, setAdminSession] = useState<AdminSession | null>(StorageService.getAdminSession());
-  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
   const [isServiceModeModalOpen, setIsServiceModeModalOpen] = useState(true);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -577,7 +573,6 @@ const App: React.FC = () => {
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [instagramUrl, setInstagramUrl] = useState<string>('');
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
-  const [uncompletedOrdersCount, setUncompletedOrdersCount] = useState(0);
 
   const customerProfileRef = useRef(customerProfile);
   customerProfileRef.current = customerProfile;
@@ -616,118 +611,12 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Listen to new orders for logged-in Admin/Manager/Staff devices
-  useEffect(() => {
-    if (!adminSession) {
-      setUncompletedOrdersCount(0);
-      if ('clearAppBadge' in navigator) {
-        navigator.clearAppBadge().catch(err => console.error('Error clearing app badge:', err));
-      }
-      return;
-    }
-    
-    // Request notification permission automatically if not set
-    if ('Notification' in window && Notification.permission === 'default') {
-      void Notification.requestPermission();
-    }
-
-    const notifiedIds = new Set<string>();
-    let initialLoad = true;
-
-    const unsubscribe = subscribeServerOrders((serverOrders) => {
-      let playSound = false;
-      serverOrders.forEach((o) => {
-        if (o.id && !notifiedIds.has(o.id)) {
-          notifiedIds.add(o.id);
-          // Only trigger alert if this is NOT the initial load and it's a new status order
-          if (!initialLoad && o.status === 'new') {
-            playSound = true;
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification('🍕 New Order Received', {
-                body: `Order #${o.id.replace('HRN-', '')} from ${o.customerName || 'Customer'} - Rs ${Math.round(o.total)}`,
-                icon: '/icon-192.png',
-                badge: '/icon-192.png',
-                requireInteraction: true,
-              });
-            }
-          }
-        }
-      });
-
-      // Calculate uncompleted orders count
-      const activeOrders = serverOrders.filter((o) => {
-        if (!o) return false;
-        if (o.isDeleted || String(o.isDeleted) === 'true') return false;
-        const status = (o.status || 'new').toLowerCase().trim();
-        if (status === 'done' || status === 'cancelled' || status === 'delete' || status === 'deleted') {
-          return false;
-        }
-        return ['new', 'preparing', 'ready', 'out_for_delivery'].includes(status);
-      });
-      const count = activeOrders.length;
-      setUncompletedOrdersCount(count);
-
-      // Set App Badge on Device
-      if ('setAppBadge' in navigator) {
-        if (count > 0) {
-          navigator.setAppBadge(count).catch(err => console.error('Error setting app badge:', err));
-        } else {
-          navigator.clearAppBadge().catch(err => console.error('Error clearing app badge:', err));
-        }
-      }
-
-      if (playSound) {
-        // play order sound/chime
-        try {
-          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-120.wav');
-          void audio.play();
-        } catch (e) {
-          console.warn('Failed to play chime:', e);
-        }
-      }
-      initialLoad = false;
-    }, (err) => {
-      console.warn('Orders notification subscription failed:', err);
-    });
-
-    return () => {
-      unsubscribe();
-      if ('clearAppBadge' in navigator) {
-        navigator.clearAppBadge().catch(err => console.error('Error clearing app badge:', err));
-      }
-    };
-  }, [adminSession]);
-
   // Fetch application settings and static data (menu, outlets, offers) on startup with caching
   useEffect(() => {
     if (!configLoaded) return;
 
     const loadData = async () => {
       try {
-        // Failsafe DB Recovery, Menu Verification & Repairs (Staff/Admin only to prevent guest permission errors)
-        if (adminSession) {
-          try {
-            const { initializeFirebaseCollections } = await import('./services/orderApi');
-            await initializeFirebaseCollections();
-          } catch (dbErr) {
-            console.warn('Failsafe collection initialization error (non-fatal):', dbErr);
-          }
-
-          try {
-            const { recoverMenuItems } = await import('./services/orderApi');
-            await recoverMenuItems(MENU_ITEMS);
-          } catch (menuErr) {
-            console.warn('Failsafe menu items recovery error (non-fatal):', menuErr);
-          }
-
-          try {
-            const { repairMissingCustomerProfiles } = await import('./services/orderApi');
-            await repairMissingCustomerProfiles();
-          } catch (repairErr) {
-            console.warn('Failsafe repair missing customer profiles error (non-fatal):', repairErr);
-          }
-        }
-
         // Fetch settings once to get instagramUrl and current menuVersion
         const settings = await getServerSettings();
         if (settings.instagramUrl) {
@@ -1249,110 +1138,6 @@ const App: React.FC = () => {
       window.removeEventListener('harinos-unauthorized', handleUnauthorized);
     };
   }, []);
-
-  // Real-time single-device session sync listener for Admin & Manager, plus Firebase Auth for all staff
-  useEffect(() => {
-    if (!configLoaded || !adminSession) {
-      return;
-    }
- 
-    let isMounted = true;
-    let unsubscribe: (() => void) | undefined;
-    let unsubscribeUser: (() => void) | undefined;
- 
-    const setupSessionListener = async () => {
-      try {
-        const { doc, onSnapshot } = await import('firebase/firestore');
-        const { db } = await import('./services/firebaseClient');
-        const { reauthenticateStaffSession } = await import('./services/orderApi');
- 
-        // Authenticate client with Firebase Auth using role-based credentials
-        await reauthenticateStaffSession();
- 
-        if (!isMounted) return;
- 
-        // 1. Single device sync for Admin & Manager
-        if (adminSession.role === 'admin' || adminSession.role === 'manager') {
-          const docRef = doc(db(), 'userSessions', adminSession.username);
-          unsubscribe = onSnapshot(docRef, (docSnap) => {
-            if (!isMounted) return;
- 
-            if (!docSnap.exists()) {
-              console.warn('Session document missing. Forcing logout.');
-              triggerForcedLogout();
-              return;
-            }
- 
-            const data = docSnap.data();
-            if (data?.sessionId !== adminSession.sessionId) {
-              console.warn('Session ID mismatch. Local:', adminSession.sessionId, 'Remote:', data?.sessionId);
-              triggerForcedLogout();
-            }
-          }, (error) => {
-            console.error('Session sync error:', error);
-          });
-        }
-
-        // 2. Real-time password change sync listener for all roles
-        const collectionName = adminSession.role === 'admin' ? 'admins' : adminSession.role === 'manager' ? 'managers' : 'staff';
-        const userDocRef = doc(db(), collectionName, adminSession.username);
-        unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
-          if (!isMounted) return;
-          if (!docSnap.exists()) {
-            console.warn('User document missing. Forcing logout due to password change.');
-            triggerPasswordLogout();
-            return;
-          }
-          const data = docSnap.data();
-          if (adminSession.passwordHash && data?.passwordHash !== adminSession.passwordHash) {
-            console.warn('Password hash changed. Forcing logout.');
-            triggerPasswordLogout();
-          }
-        }, (error) => {
-          console.error('User doc sync error:', error);
-        });
-      } catch (err) {
-        console.error('Failed to setup session listener:', err);
-      }
-    };
- 
-    const triggerForcedLogout = () => {
-      // Clean local storage
-      StorageService.clearAdminSession();
-      setAdminSession(null);
-      setIsAdminPanelOpen(false);
- 
-      // Call API logout endpoint to clean up backend
-      const apiBase = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
-      fetch(`${apiBase}/auth/logout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminSession.token}`,
-          'X-Session-Id': adminSession.sessionId || '',
-        },
-        body: JSON.stringify({ forced: true }),
-      }).catch(() => {});
- 
-      // Alert user
-      alert('Your account was logged in from another device.');
-    };
-
-    const triggerPasswordLogout = () => {
-      StorageService.clearAdminSession();
-      setAdminSession(null);
-      setIsAdminPanelOpen(false);
-      alert('Your password was changed by the administrator. Please log in again with your new password.');
-    };
- 
-    setupSessionListener();
- 
-    return () => {
-      isMounted = false;
-      if (unsubscribe) unsubscribe();
-      if (unsubscribeUser) unsubscribeUser();
-    };
-  }, [configLoaded, adminSession]);
 
   const activeOrder = useMemo(() => {
     const latest = pastOrders[0];
@@ -2251,10 +2036,8 @@ const App: React.FC = () => {
         activeView={view}
         onShare={handleShare}
         onNotificationsEnabled={handleNotificationsEnabled}
-        onAdminTrigger={() => setIsAdminPanelOpen(true)}
         customerProfile={customerProfile}
         onWalletClick={() => setIsWalletModalOpen(true)}
-        onHelpTour={() => setShowTutorial(true)}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         campaign={activeCampaign}
@@ -2269,7 +2052,7 @@ const App: React.FC = () => {
           onDetectLocation={detectLocation}
         />
       )}
-      {!customerProfile && <CustomerLoginModal onSave={saveCustomerProfile} onAdminTrigger={() => setIsAdminPanelOpen(true)} />}
+      {!customerProfile && <CustomerLoginModal onSave={saveCustomerProfile} />}
       <InstallPopup
         blocked={
           isCartOpen ||
@@ -2691,7 +2474,7 @@ const App: React.FC = () => {
         }}
       />
       {/* Floating Customer Care Social Buttons (Only in Menu view when Cart & Modals are closed) */}
-      {view === 'menu' && !isCartOpen && !isPaymentOpen && !showOrderSuccess && !isAdminPanelOpen && !isWalletModalOpen && !isCategoryModalOpen && !showTutorial && (
+      {view === 'menu' && !isCartOpen && !isPaymentOpen && !showOrderSuccess && !isWalletModalOpen && !isCategoryModalOpen && !showTutorial && (
         <>
           <a
             href={CUSTOMER_CARE_WHATSAPP_URL}
@@ -2848,29 +2631,6 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-      {adminSession && uncompletedOrdersCount > 0 && !isAdminPanelOpen && (
-        <div className="fixed bottom-24 right-6 z-[180] animate-bounce">
-          <button
-            onClick={() => setIsAdminPanelOpen(true)}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl border-2 border-white hover:bg-slate-800 transition-all cursor-pointer relative"
-            title="Active Uncompleted Orders"
-          >
-            <span className="text-xl">🍕</span>
-            <span className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-655 border-2 border-white text-[10px] font-black text-white">
-              {uncompletedOrdersCount}
-            </span>
-          </button>
-        </div>
-      )}
-
-      {isAdminPanelOpen && (
-        <AdminPanel
-          session={adminSession}
-          onSessionChange={setAdminSession}
-          onClose={() => setIsAdminPanelOpen(false)}
-          storeMenuItems={menuItems}
-        />
-      )}
 
       {showUpdateModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -2920,7 +2680,7 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-      {view === 'menu' && totalCartItems > 0 && !isCartOpen && !isPaymentOpen && !showOrderSuccess && !isServiceModeModalOpen && !showTutorial && !isAdminPanelOpen && !isWalletModalOpen && (
+      {view === 'menu' && totalCartItems > 0 && !isCartOpen && !isPaymentOpen && !showOrderSuccess && !isServiceModeModalOpen && !showTutorial && !isWalletModalOpen && (
         <div className="fixed bottom-6 inset-x-4 z-50 md:left-auto md:right-6 md:w-96 animate-slide-up">
           <button
             onClick={openCartView}

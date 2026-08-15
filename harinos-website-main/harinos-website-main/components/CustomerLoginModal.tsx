@@ -6,43 +6,18 @@ import { initCustomerLogin } from '../services/orderApi';
 
 interface CustomerLoginModalProps {
   onSave: (profile: CustomerProfile) => void;
-  onAdminTrigger?: () => void;
 }
 
-const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdminTrigger }) => {
+const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Logo click counter for Admin Portal (9 rapid clicks)
-  const [logoClicks, setLogoClicks] = useState(0);
-  const lastLogoClickTime = useRef(0);
-
-  const handleLogoClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!onAdminTrigger) return;
-    const now = Date.now();
-    if (now - lastLogoClickTime.current > 3000) {
-      setLogoClicks(1);
-    } else {
-      const nextCount = logoClicks + 1;
-      setLogoClicks(nextCount);
-      if (nextCount >= 9) {
-        setLogoClicks(0);
-        navigator.vibrate?.(200);
-        onAdminTrigger();
-      }
-    }
-    lastLogoClickTime.current = now;
-  };
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
-
-
 
     const cleanPhone = phone.replace(/\D/g, '');
     const trimmedName = name.trim();
@@ -78,19 +53,13 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave, onAdmin
         
         {/* Brand Logo Header */}
         <div className="flex flex-col items-center">
-          <button
-            onClick={handleLogoClick}
-            onContextMenu={(event) => event.preventDefault()}
-            className="select-none rounded-2xl cursor-pointer mt-2 focus:outline-none"
-            aria-label="Harino's Logo"
-            style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
-          >
+          <div className="rounded-2xl mt-2 select-none">
             <img 
               src="/icon-192.png" 
               alt="Harino's" 
               className="h-20 w-20 rounded-2xl shadow-xl hover:scale-105 transition-transform" 
             />
-          </button>
+          </div>
 
           <h2 className="mt-5 text-center font-display text-3xl font-black tracking-tight text-slate-900">
             Welcome to Harino's Pizza

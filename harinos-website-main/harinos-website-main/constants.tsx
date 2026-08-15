@@ -207,17 +207,6 @@ export const MENU_ITEMS: MenuItem[] = [
     sizes: [{ label: 'Regular', price: 149 }, { label: 'Medium', price: 289 }, { label: 'Large', price: 409 }]
   },
   {
-    id: 'p2_pm',
-    name: "Paneer Masala (Paneer + Blended Spices)",
-    description: "Masala spiced paneer chunks paired with tangy Blended Spices.",
-    price: 149,
-    category: Category.PIZZA,
-    image: "/images/paneermasala.jpeg",
-    vegetarian: true,
-    available: false,
-    sizes: [{ label: 'Regular', price: 149 }, { label: 'Medium', price: 289 }, { label: 'Large', price: 409 }]
-  },
-  {
     id: 'p2_tkp',
     name: "Teekha Paneer (Paneer + Hot Chilly)",
     description: "Spicy paneer pizza for those who love a hot kick.",

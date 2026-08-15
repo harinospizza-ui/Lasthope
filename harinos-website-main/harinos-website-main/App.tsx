@@ -1983,8 +1983,8 @@ const App: React.FC = () => {
     discountAmount: festivalDiscountAmount,
     discountedSubtotal: foodSubtotalAfterFestival,
   } = useMemo(
-    () => calculateFestivalDiscount(activeCampaign, subtotal),
-    [activeCampaign, subtotal],
+    () => calculateFestivalDiscount(activeCampaign, pricedCart),
+    [activeCampaign, pricedCart],
   );
 
   const deliveryPricing = useMemo(
@@ -2690,32 +2690,37 @@ const App: React.FC = () => {
           }
         }}
       />
-      <a
-        href={CUSTOMER_CARE_WHATSAPP_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="fixed bottom-6 right-4 z-[90] flex h-14 w-14 items-center justify-center rounded-2xl bg-[#25D366] text-white shadow-2xl shadow-green-900/25 transition-transform active:scale-95"
-        aria-label="Chat with customer care on WhatsApp"
-      >
-        <svg className="h-8 w-8" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
-          <path d="M16.02 3.2A12.65 12.65 0 005.19 22.36L3.2 29l6.82-1.79A12.65 12.65 0 1016.02 3.2zm0 2.3a10.35 10.35 0 018.77 15.86 10.34 10.34 0 01-13.98 3.4l-.49-.29-4.05 1.06 1.08-3.94-.32-.51A10.35 10.35 0 0116.02 5.5zm-4.2 4.84c-.23 0-.6.08-.91.43-.31.34-1.2 1.17-1.2 2.86 0 1.68 1.23 3.31 1.4 3.54.17.23 2.38 3.8 5.86 5.18 2.9 1.15 3.49.92 4.12.86.63-.06 2.02-.83 2.31-1.63.29-.8.29-1.49.2-1.63-.08-.14-.31-.23-.66-.4-.34-.17-2.02-1-2.34-1.11-.31-.12-.54-.17-.77.17-.23.34-.88 1.11-1.08 1.34-.2.23-.4.26-.74.09-.34-.17-1.45-.53-2.76-1.7-1.02-.91-1.71-2.03-1.91-2.37-.2-.34-.02-.53.15-.7.15-.15.34-.4.51-.6.17-.2.23-.34.34-.57.11-.23.06-.43-.03-.6-.09-.17-.77-1.85-1.05-2.54-.28-.67-.56-.58-.77-.59h-.67z" />
-        </svg>
-      </a>
+      {/* Floating Customer Care Social Buttons (Only in Menu view when Cart & Modals are closed) */}
+      {view === 'menu' && !isCartOpen && !isPaymentOpen && !showOrderSuccess && !isAdminPanelOpen && !isWalletModalOpen && !isCategoryModalOpen && !showTutorial && (
+        <>
+          <a
+            href={CUSTOMER_CARE_WHATSAPP_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="fixed bottom-6 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#25D366] text-white shadow-2xl shadow-green-900/25 transition-transform active:scale-95"
+            aria-label="Chat with customer care on WhatsApp"
+          >
+            <svg className="h-8 w-8" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+              <path d="M16.02 3.2A12.65 12.65 0 005.19 22.36L3.2 29l6.82-1.79A12.65 12.65 0 1016.02 3.2zm0 2.3a10.35 10.35 0 018.77 15.86 10.34 10.34 0 01-13.98 3.4l-.49-.29-4.05 1.06 1.08-3.94-.32-.51A10.35 10.35 0 0116.02 5.5zm-4.2 4.84c-.23 0-.6.08-.91.43-.31.34-1.2 1.17-1.2 2.86 0 1.68 1.23 3.31 1.4 3.54.17.23 2.38 3.8 5.86 5.18 2.9 1.15 3.49.92 4.12.86.63-.06 2.02-.83 2.31-1.63.29-.8.29-1.49.2-1.63-.08-.14-.31-.23-.66-.4-.34-.17-2.02-1-2.34-1.11-.31-.12-.54-.17-.77.17-.23.34-.88 1.11-1.08 1.34-.2.23-.4.26-.74.09-.34-.17-1.45-.53-2.76-1.7-1.02-.91-1.71-2.03-1.91-2.37-.2-.34-.02-.53.15-.7.15-.15.34-.4.51-.6.17-.2.23-.34.34-.57.11-.23.06-.43-.03-.6-.09-.17-.77-1.85-1.05-2.54-.28-.67-.56-.58-.77-.59h-.67z" />
+            </svg>
+          </a>
 
-      {instagramUrl && (
-        <a
-          href={instagramUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="fixed bottom-24 right-4 z-[90] flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] text-white shadow-2xl transition-transform active:scale-95 animate-fade-in"
-          aria-label="Follow us on Instagram"
-        >
-          <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
-          </svg>
-        </a>
+          {instagramUrl && (
+            <a
+              href={instagramUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] text-white shadow-2xl transition-transform active:scale-95 animate-fade-in"
+              aria-label="Follow us on Instagram"
+            >
+              <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+              </svg>
+            </a>
+          )}
+        </>
       )}
 
       {customizeItem && (

@@ -78,8 +78,15 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
 
               <div className="mt-5 rounded-2xl border border-orange-100/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white font-black text-base shadow-md shadow-orange-500/20">
-                    {campaign.offer.discountValue}%
+                  <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-red-600 text-white font-black text-xs shadow-md shadow-orange-500/20 leading-tight">
+                    {campaign.offer.pizzaDiscountValue && campaign.offer.otherDiscountValue ? (
+                      <>
+                        <span className="text-[11px] font-black">{campaign.offer.pizzaDiscountValue}%</span>
+                        <span className="text-[7px] font-bold opacity-90">PIZZA</span>
+                      </>
+                    ) : (
+                      <span>{campaign.offer.discountValue}%</span>
+                    )}
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">

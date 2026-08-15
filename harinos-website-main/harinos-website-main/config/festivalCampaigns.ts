@@ -22,7 +22,9 @@ export interface FestivalMedia {
 export interface FestivalOffer {
   enabled: boolean;
   discountType: 'percentage';
-  discountValue: number; // 20 for 20%
+  discountValue: number; // headline discount (e.g. 20)
+  pizzaDiscountValue?: number; // e.g. 20% on pizzas
+  otherDiscountValue?: number; // e.g. 10% on all other items
   title: string;
   badge: string;
   description: string;
@@ -55,7 +57,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
   // 🇮🇳 1. Independence Day 2026 (Active Today: 15 August 2026)
   {
     id: 'independence-day-2026',
-    name: 'Independence Day',
+    name: '80th Independence Day',
     eventType: 'national',
     financialYear: '2026-27',
     startDate: '2026-08-15T00:00:00+05:30',
@@ -67,11 +69,11 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
       secondaryAccent: '#16a34a', // Indian Emerald Green
       badgeBg: 'bg-gradient-to-r from-orange-500 via-amber-400 to-emerald-600',
       badgeText: 'text-white font-black',
-      heroTag: '🇮🇳 79th Independence Day Special',
+      heroTag: '🇮🇳 80th Independence Day Special',
       heroHeadline: 'Celebrate India.',
       heroHeadlineHighlight: 'Celebrate with Harino’s.',
       heroSubheadline:
-        'Honoring the spirit of freedom with pure vegetarian culinary excellence. Enjoy flat 20% OFF automatically applied on your entire order.',
+        'Honoring 80 years of freedom with pure vegetarian culinary excellence. Enjoy flat 20% OFF on all handcrafted Pizzas & 10% OFF on all other items.',
       heroGradient: 'from-slate-950/90 via-slate-900/60 to-slate-900/20',
       accentBorder: 'border-orange-500/30',
       themeGlow: 'rgba(249, 115, 22, 0.25)',
@@ -86,10 +88,12 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
       enabled: true,
       discountType: 'percentage',
       discountValue: 20,
-      title: 'Independence Day 20% Off',
-      badge: '🇮🇳 20% OFF FESTIVAL FEAST',
-      description: 'Get Flat 20% discount automatically applied across your entire basket.',
-      terms: 'Automatically applied on food subtotal. Valid for Dine-in, Takeaway & Delivery.',
+      pizzaDiscountValue: 20,
+      otherDiscountValue: 10,
+      title: '80th Independence Day Offer',
+      badge: '🇮🇳 20% OFF PIZZAS • 10% OFF OTHERS',
+      description: 'Get Flat 20% OFF on all Pizzas and 10% OFF on all Burgers, Momos, Fries & Sides.',
+      terms: '20% OFF on Pizzas + 10% OFF on other items. Automatically applied on food subtotal. Valid for Dine-in, Takeaway & Delivery.',
     },
   },
 

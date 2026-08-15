@@ -527,7 +527,12 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                 </div>
                 {festivalDiscountAmount > 0 && campaign && (
                   <div className="flex justify-between text-emerald-400 font-black">
-                    <span>{campaign.offer.title} ({campaign.offer.discountValue}%)</span>
+                    <span>
+                      {campaign.offer.title}{' '}
+                      {campaign.offer.pizzaDiscountValue && campaign.offer.otherDiscountValue
+                        ? `(${campaign.offer.pizzaDiscountValue}% Pizza, ${campaign.offer.otherDiscountValue}% Others)`
+                        : `(${campaign.offer.discountValue}%)`}
+                    </span>
                     <span>-Rs {festivalDiscountAmount.toFixed(2)}</span>
                   </div>
                 )}

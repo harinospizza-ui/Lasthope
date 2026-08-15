@@ -127,10 +127,10 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
 
   const { discountAmount: festivalDiscountAmount, discountedSubtotal: finalSubtotal } = useMemo(() => {
     if (activeCampaign && activeCampaign.offer.enabled) {
-      return calculateFestivalDiscount(activeCampaign, subtotal);
+      return calculateFestivalDiscount(activeCampaign, cart);
     }
     return { discountAmount: 0, discountedSubtotal: subtotal };
-  }, [activeCampaign, subtotal]);
+  }, [activeCampaign, cart, subtotal]);
 
   const grandTotal = Math.round(finalSubtotal);
 

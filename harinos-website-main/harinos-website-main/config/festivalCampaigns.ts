@@ -67,7 +67,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2026-08-15T00:00:00+05:30',
     endDate: '2026-08-21T23:59:59+05:30',
     offerStartDate: '2026-08-15T00:00:00+05:30',
-    offerEndDate: '2026-08-16T23:59:59+05:30',
+    offerEndDate: '2026-08-15T23:59:59+05:30',
     priority: 100,
     enabled: true,
     theme: {
@@ -112,7 +112,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2026-08-27T00:00:00+05:30',
     endDate: '2026-08-31T23:59:59+05:30',
     offerStartDate: '2026-08-27T00:00:00+05:30',
-    offerEndDate: '2026-08-28T23:59:59+05:30',
+    offerEndDate: '2026-08-27T23:59:59+05:30',
     priority: 85,
     enabled: true,
     theme: {
@@ -150,7 +150,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2026-09-04T00:00:00+05:30',
     endDate: '2026-09-08T23:59:59+05:30',
     offerStartDate: '2026-09-04T00:00:00+05:30',
-    offerEndDate: '2026-09-05T23:59:59+05:30',
+    offerEndDate: '2026-09-04T23:59:59+05:30',
     priority: 85,
     enabled: true,
     theme: {
@@ -188,7 +188,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2026-09-14T00:00:00+05:30',
     endDate: '2026-09-19T23:59:59+05:30',
     offerStartDate: '2026-09-14T00:00:00+05:30',
-    offerEndDate: '2026-09-15T23:59:59+05:30',
+    offerEndDate: '2026-09-14T23:59:59+05:30',
     priority: 90,
     enabled: true,
     theme: {
@@ -226,7 +226,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2026-10-11T00:00:00+05:30',
     endDate: '2026-10-19T23:59:59+05:30',
     offerStartDate: '2026-10-11T00:00:00+05:30',
-    offerEndDate: '2026-10-13T23:59:59+05:30',
+    offerEndDate: '2026-10-12T23:59:59+05:30',
     priority: 90,
     enabled: true,
     theme: {
@@ -264,7 +264,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2026-10-20T00:00:00+05:30',
     endDate: '2026-10-23T23:59:59+05:30',
     offerStartDate: '2026-10-20T00:00:00+05:30',
-    offerEndDate: '2026-10-21T23:59:59+05:30',
+    offerEndDate: '2026-10-20T23:59:59+05:30',
     priority: 90,
     enabled: true,
     theme: {
@@ -419,7 +419,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2027-01-13T00:00:00+05:30',
     endDate: '2027-01-16T23:59:59+05:30',
     offerStartDate: '2027-01-14T00:00:00+05:30',
-    offerEndDate: '2027-01-15T23:59:59+05:30',
+    offerEndDate: '2027-01-14T23:59:59+05:30',
     priority: 85,
     enabled: true,
     theme: {
@@ -457,7 +457,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2027-01-25T00:00:00+05:30',
     endDate: '2027-01-31T23:59:59+05:30',
     offerStartDate: '2027-01-26T00:00:00+05:30',
-    offerEndDate: '2027-01-27T23:59:59+05:30',
+    offerEndDate: '2027-01-26T23:59:59+05:30',
     priority: 100,
     enabled: true,
     theme: {
@@ -498,7 +498,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2027-03-05T00:00:00+05:30',
     endDate: '2027-03-08T23:59:59+05:30',
     offerStartDate: '2027-03-05T00:00:00+05:30',
-    offerEndDate: '2027-03-06T23:59:59+05:30',
+    offerEndDate: '2027-03-05T23:59:59+05:30',
     priority: 85,
     enabled: true,
     theme: {
@@ -536,7 +536,7 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     startDate: '2027-03-21T00:00:00+05:30',
     endDate: '2027-03-26T23:59:59+05:30',
     offerStartDate: '2027-03-21T00:00:00+05:30',
-    offerEndDate: '2027-03-22T23:59:59+05:30',
+    offerEndDate: '2027-03-21T23:59:59+05:30',
     priority: 100,
     enabled: true,
     theme: {

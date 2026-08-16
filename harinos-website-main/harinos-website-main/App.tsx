@@ -120,6 +120,7 @@ const receiptHtml = (order: Order): string => `
 <div class="dash"></div>
 <div>Cust: ${order.customerName ?? 'Customer'}</div>
 <div>Ph: ${order.customerPhone ?? ''}</div>
+${order.orderType === 'delivery' ? `<div>Delivery Loc: ${order.customerLocation?.latitude && order.customerLocation?.longitude ? `${order.customerLocation.latitude.toFixed(5)}, ${order.customerLocation.longitude.toFixed(5)}` : 'GPS Point'}</div>` : ''}
 <div>Payment: ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}</div>
 <div class="dash"></div>
 ${order.items.map((item) => `<div class="row"><span>${item.quantity}x ${item.name}${item.selectedSize ? ` [${item.selectedSize}]` : ''}</span><b>Rs ${Math.round(item.totalPrice)}</b></div>`).join('')}
@@ -338,7 +339,15 @@ const a4InvoiceHtml = (order: Order): string => {
                 <p class="card-text">
                   <strong>Type:</strong> ${order.orderType.toUpperCase()}<br>
                   <strong>Payment:</strong> ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'UPI'}<br>
-                  <strong>Address:</strong> ${order.outletAddress ?? 'Outlet Address'}
+                  <strong>Address:</strong> ${
+                    order.orderType === 'delivery'
+                      ? order.customerLocation?.latitude && order.customerLocation?.longitude
+                        ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${order.customerLocation.latitude},${order.customerLocation.longitude}" target="_blank" style="color: #e53935; font-weight: bold; text-decoration: underline;">Open Google Maps (${order.customerLocation.latitude.toFixed(4)}, ${order.customerLocation.longitude.toFixed(4)})</a>`
+                        : order.customerLocationUrl
+                        ? `<a href="${order.customerLocationUrl}" target="_blank" style="color: #e53935; font-weight: bold; text-decoration: underline;">Open Google Maps</a>`
+                        : 'Saved GPS Location'
+                      : order.outletAddress ?? 'Outlet Address'
+                  }
                 </p>
               </div>
             </td>
@@ -608,6 +617,15 @@ const App: React.FC = () => {
     const isTutorialCompleted = localStorage.getItem('harinos_tutorial_completed');
     if (!isTutorialCompleted) {
       setShowTutorial(true);
+    }
+    const cachedLoc = localStorage.getItem('harinos_cached_location');
+    if (cachedLoc) {
+      try {
+        const parsedLoc = JSON.parse(cachedLoc);
+        if (parsedLoc && typeof parsedLoc.latitude === 'number' && typeof parsedLoc.longitude === 'number') {
+          setCustomerLocation(parsedLoc);
+        }
+      } catch (e) {}
     }
   }, []);
 
@@ -1852,7 +1870,10 @@ const App: React.FC = () => {
     setIsPaymentOpen(false);
 
     const { customerLocation: resolvedLocation, outlet, distanceKm } = checkoutContext;
-    const locationString = orderType === 'delivery' && resolvedLocation ? resolvedLocation.mapUrl : 'Not shared';
+    const finalMapUrl = resolvedLocation?.latitude && resolvedLocation?.longitude
+      ? buildCustomerMapUrl(resolvedLocation.latitude, resolvedLocation.longitude)
+      : resolvedLocation?.mapUrl || (orderType === 'delivery' ? 'Not shared' : 'Not required');
+    const locationString = orderType === 'delivery' ? finalMapUrl : 'Not shared';
 
     const orderItems: OrderItem[] = pricedCart.map((item) => ({ ...item }));
     const orderPayload = {
@@ -1875,7 +1896,12 @@ const App: React.FC = () => {
       outletPhone: outlet.phone,
       outletAddress: outlet.address,
       customerLocationUrl: locationString,
-      customerLocation: resolvedLocation || undefined,
+      customerLocation: resolvedLocation ? {
+        latitude: resolvedLocation.latitude,
+        longitude: resolvedLocation.longitude,
+        mapUrl: finalMapUrl,
+        address: resolvedLocation.address || 'GPS Coordinates',
+      } : undefined,
       distanceKm,
       customerName: customerProfile?.name,
       customerPhone: customerProfile?.phone,
@@ -1968,7 +1994,11 @@ const App: React.FC = () => {
   };
 
   const categoryButtons: CategoryFilter[] = ['All', Category.PIZZA, Category.BURGERS, Category.FRIES, Category.MOMOS, Category.SIDES, Category.BEVERAGES];
-  const saveCustomerProfile = useCallback(async (profile: CustomerProfile) => {
+  const saveCustomerProfile = useCallback(async (profile: CustomerProfile, location?: CustomerLocation | null) => {
+    if (location) {
+      setCustomerLocation(location);
+      void refreshNearestOutletMatch(location).catch(() => undefined);
+    }
     try {
       const remoteCustomers = await getServerCustomers();
       const cleanPhone = (p?: string) => (p || '').replace(/\D/g, '');

@@ -43,7 +43,8 @@ export const getDeliveryPricingSummary = (
     };
   }
 
-  if (distanceKm > 5 || distanceKm > outlet.deliveryRadiusKm) {
+  const maxRadiusKm = outlet.deliveryRadiusKm ?? 7;
+  if (distanceKm > maxRadiusKm) {
     return {
       fee: -1,
       isServiceable: false,

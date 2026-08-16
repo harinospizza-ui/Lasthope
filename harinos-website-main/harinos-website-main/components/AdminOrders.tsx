@@ -195,16 +195,24 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
 
                       {order.orderType === 'delivery' && (
                         <div className="mt-2 text-xs font-semibold text-slate-350">
-                          📍 Delivery Address: {order.customerLocation?.address || 'Saved Location'}
-                          {((order.customerLocation?.latitude && order.customerLocation?.longitude) || order.customerLocationUrl) && (
+                          📍 Delivery Address: {order.customerLocation?.address || 'Customer GPS Location'}
+                          {((order.customerLocation?.latitude && order.customerLocation?.longitude) || (order.customerLocationUrl && order.customerLocationUrl.startsWith('http'))) ? (
                             <a
-                              href={order.customerLocationUrl || `https://maps.google.com/?q=${order.customerLocation?.latitude},${order.customerLocation?.longitude}`}
+                              href={
+                                order.customerLocation?.latitude && order.customerLocation?.longitude
+                                  ? `https://www.google.com/maps/dir/?api=1&destination=${order.customerLocation.latitude},${order.customerLocation.longitude}`
+                                  : order.customerLocationUrl
+                              }
                               target="_blank"
                               rel="noreferrer"
-                              className="ml-2 text-red-400 hover:text-red-300 font-bold underline"
+                              className="ml-2 inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-bold underline"
                             >
-                              (View Map Location 🗺️)
+                              (Open Maps Navigation 🗺️)
                             </a>
+                          ) : (
+                            <span className="ml-2 text-amber-400 font-normal">
+                              (Coordinates not recorded)
+                            </span>
                           )}
                         </div>
                       )}
@@ -327,6 +335,20 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                           );
                         })()}
                         <button onClick={() => onPrint(order)} className="rounded-xl border border-slate-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/10 transition-premium">Print</button>
+                        {order.orderType === 'delivery' && ((order.customerLocation?.latitude && order.customerLocation?.longitude) || (order.customerLocationUrl && order.customerLocationUrl.startsWith('http'))) && (
+                          <a
+                            href={
+                              order.customerLocation?.latitude && order.customerLocation?.longitude
+                                ? `https://www.google.com/maps/dir/?api=1&destination=${order.customerLocation.latitude},${order.customerLocation.longitude}`
+                                : order.customerLocationUrl
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium flex items-center justify-center font-bold gap-1 shadow-sm"
+                          >
+                            🗺️ Navigate
+                          </a>
+                        )}
                         {session.role !== 'staff' && order.customerPhone && (
                           <a
                             href={`https://wa.me/${normalizePhoneForWhatsApp(order.customerPhone)}`}

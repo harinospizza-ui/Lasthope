@@ -359,8 +359,8 @@ export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: st
   }
 
   if (order.orderType === 'delivery') {
-    if (order.distanceKm && order.distanceKm > 5) {
-      throw new Error("Delivery is only available within 5 KM.");
+    if (order.distanceKm && order.distanceKm > 7.05) {
+      throw new Error("Delivery is only available within 7 KM.");
     }
   }
 

@@ -1,11 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { CustomerProfile } from '../types';
+import React, { useState } from 'react';
+import { CustomerLocation, CustomerProfile } from '../types';
 import { initCustomerLogin } from '../services/orderApi';
-
-
+import { buildCustomerMapUrl } from '../outletUtils';
 
 interface CustomerLoginModalProps {
-  onSave: (profile: CustomerProfile) => void;
+  onSave: (profile: CustomerProfile, location?: CustomerLocation | null) => void;
 }
 
 const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave }) => {
@@ -14,6 +13,34 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave }) => {
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'detecting' | 'granted' | 'denied'>('idle');
+  const [detectedLocation, setDetectedLocation] = useState<CustomerLocation | null>(null);
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('denied');
+      return;
+    }
+
+    setLocationStatus('detecting');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const loc: CustomerLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          mapUrl: buildCustomerMapUrl(position.coords.latitude, position.coords.longitude),
+        };
+        setDetectedLocation(loc);
+        setLocationStatus('granted');
+        localStorage.setItem('harinos_cached_location', JSON.stringify(loc));
+      },
+      (err) => {
+        console.warn('Location access denied during login:', err);
+        setLocationStatus('denied');
+      },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -36,7 +63,7 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave }) => {
       const result = await initCustomerLogin(cleanPhone, trimmedName, true, referralCode.trim());
       
       if (result.success && result.customer) {
-        onSave(result.customer);
+        onSave(result.customer, detectedLocation);
       } else {
         setError(result.message || 'Login failed. Please try again.');
       }
@@ -49,7 +76,7 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave }) => {
 
   return (
     <div className="fixed inset-0 z-[150] flex items-end justify-center bg-slate-950/80 p-0 backdrop-blur-md sm:items-center sm:p-4 animate-slide-up">
-      <div className="w-full max-w-md rounded-t-[2.5rem] bg-white p-8 shadow-2xl sm:rounded-[2.5rem] transition-all relative overflow-hidden border border-slate-100">
+      <div className="w-full max-w-md rounded-t-[2.5rem] bg-white p-8 shadow-2xl sm:rounded-[2.5rem] transition-all relative overflow-hidden border border-slate-100 max-h-[92vh] overflow-y-auto">
         
         {/* Brand Logo Header */}
         <div className="flex flex-col items-center">
@@ -87,7 +114,7 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave }) => {
               onChange={(event) => setName(event.target.value)}
               placeholder="Enter your name"
               disabled={loading}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
               required
             />
           </div>
@@ -103,7 +130,7 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave }) => {
               onChange={(event) => setPhone(event.target.value.replace(/[^\d]/g, ''))}
               placeholder="Enter 10-digit mobile number"
               disabled={loading}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
               required
             />
           </div>
@@ -118,8 +145,47 @@ const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({ onSave }) => {
               onChange={(event) => setReferralCode(event.target.value)}
               placeholder="Enter referral code"
               disabled={loading}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 font-bold text-slate-800 outline-none focus:border-red-500 focus:bg-white transition-all text-sm shadow-sm"
             />
+          </div>
+
+          {/* Location Permission Option at Login */}
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3.5 transition-all">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">📍</span>
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+                    Device Location
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium leading-tight">
+                    {locationStatus === 'granted'
+                      ? 'Location captured for fast routing'
+                      : locationStatus === 'detecting'
+                      ? 'Detecting current coordinates...'
+                      : 'Optional at login, mandatory for delivery'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={requestLocation}
+                disabled={locationStatus === 'detecting' || locationStatus === 'granted'}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  locationStatus === 'granted'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : locationStatus === 'detecting'
+                    ? 'bg-amber-100 text-amber-800 animate-pulse'
+                    : 'bg-red-650 text-white hover:bg-red-750 shadow-sm'
+                }`}
+              >
+                {locationStatus === 'granted'
+                  ? '✓ Allowed'
+                  : locationStatus === 'detecting'
+                  ? 'Detecting...'
+                  : 'Allow Location'}
+              </button>
+            </div>
           </div>
           
           <button

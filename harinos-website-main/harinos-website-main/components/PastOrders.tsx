@@ -53,6 +53,22 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
                   {order.distanceKm && (
                     <p className="text-slate-400 text-sm font-medium">📍 {order.distanceKm.toFixed(1)} km away</p>
                   )}
+                  {order.orderType === 'delivery' && ((order.customerLocation?.latitude && order.customerLocation?.longitude) || order.customerLocationUrl) && (
+                    <div className="mt-1">
+                      <a
+                        href={
+                          order.customerLocation?.latitude && order.customerLocation?.longitude
+                            ? `https://www.google.com/maps/dir/?api=1&destination=${order.customerLocation.latitude},${order.customerLocation.longitude}`
+                            : order.customerLocationUrl
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-bold text-red-600 hover:text-red-500 underline flex items-center gap-1"
+                      >
+                        🗺️ View Delivery Location on Map
+                      </a>
+                    </div>
+                  )}
                   {order.outletName && (
                     <p className="mt-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                       Routed to {order.outletName}

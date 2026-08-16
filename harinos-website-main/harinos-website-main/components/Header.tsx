@@ -18,6 +18,7 @@ interface HeaderProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   campaign?: FestivalCampaign | null;
+  isCartOpen?: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -33,6 +34,7 @@ const Header: React.FC<HeaderProps> = ({
   searchQuery,
   setSearchQuery,
   campaign,
+  isCartOpen = false,
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
@@ -165,6 +167,22 @@ const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
+            {/* Orders History Button */}
+            <button
+              onClick={onViewOrders}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale cursor-pointer ${
+                activeView === 'orders'
+                  ? 'bg-red-600 border-red-600 text-white shadow-md'
+                  : isScrolledOrLight
+                  ? 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100 shadow-sm'
+                  : 'bg-white/10 border-white/10 text-white hover:bg-white/20 backdrop-blur-md'
+              }`}
+              title="Order History (Last 3 Orders)"
+            >
+              <span>📜</span>
+              <span className="hidden xs:inline">Orders</span>
+            </button>
+
             {customerProfile && onWalletClick && (
               <button
                 onClick={onWalletClick}
@@ -212,7 +230,7 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {activeView === 'menu' && (
+        {activeView === 'menu' && !isCartOpen && (
           <div className="mt-4 pb-1 animate-fade-in">
             <div className="relative w-full max-w-lg mx-auto">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>

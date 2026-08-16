@@ -69,6 +69,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   rawFoodSubtotal,
 }) => {
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const [animatePrice, setAnimatePrice] = useState(false);
   const prevTotal = useRef(total);
 
@@ -470,123 +471,150 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
           </div>
 
           {items.length > 0 && (
-            <div className="shrink-0 bg-slate-900 p-4 text-white shadow-2xl sm:rounded-t-[2.5rem] sm:p-6">
-              {/* Wallet and Points Discounts Section */}
-              {customerProfile && (
-                <div className="mb-4 bg-white/5 border border-white/10 rounded-2xl p-3 space-y-2">
-                  <div className="text-[9px] font-black uppercase tracking-widest text-orange-400">
-                    Wallet & Rewards Discount
-                  </div>
-                  
-                  {/* Wallet Checkbox */}
-                  {(customerProfile.walletBalance ?? 0) > 0 && (
-                    <label className="flex items-center justify-between text-xs font-bold cursor-pointer group select-none">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={useWallet}
-                          onChange={(e) => setUseWallet(e.target.checked)}
-                          className="w-4 h-4 rounded border-white/20 bg-transparent text-red-600 focus:ring-0 focus:ring-offset-0"
-                        />
-                        <span className="text-white/95">Use Wallet (Rs {(customerProfile.walletBalance ?? 0).toFixed(0)})</span>
+            <div className="shrink-0 bg-slate-900 p-4 text-white shadow-2xl sm:rounded-t-[2.5rem] sm:p-5 transition-all">
+              {/* Minimized / Expandable Toggle Bar */}
+              <div className="mb-3 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowDetails(!showDetails)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-[10px] font-black uppercase tracking-wider text-orange-400 border border-white/10 transition-all cursor-pointer"
+                >
+                  <span>{showDetails ? '▴ Hide Details' : '▾ Bill Details & Discounts'}</span>
+                </button>
+
+                {(totalSavings > 0 || festivalDiscountAmount > 0 || walletDiscount > 0 || pointsDiscount > 0) && (
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
+                    🎉 Saving Rs {Math.round(totalSavings + festivalDiscountAmount + walletDiscount + pointsDiscount)}
+                  </span>
+                )}
+              </div>
+
+              {/* Detailed Breakdown (Only shown when expanded) */}
+              {showDetails && (
+                <div className="animate-slide-up space-y-3 mb-3 border-b border-white/10 pb-3">
+                  {/* Wallet and Points Discounts Section */}
+                  {customerProfile && (
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-3 space-y-2">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-orange-400">
+                        Wallet & Rewards Discount
                       </div>
-                      {useWallet && (
-                        <span className="font-mono text-[10px] text-green-400 font-black">-Rs {walletDiscount.toFixed(0)}</span>
+                      
+                      {/* Wallet Checkbox */}
+                      {(customerProfile.walletBalance ?? 0) > 0 && (
+                        <label className="flex items-center justify-between text-xs font-bold cursor-pointer group select-none">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={useWallet}
+                              onChange={(e) => setUseWallet(e.target.checked)}
+                              className="w-4 h-4 rounded border-white/20 bg-transparent text-red-600 focus:ring-0 focus:ring-offset-0"
+                            />
+                            <span className="text-white/95">Use Wallet (Rs {(customerProfile.walletBalance ?? 0).toFixed(0)})</span>
+                          </div>
+                          {useWallet && (
+                            <span className="font-mono text-[10px] text-green-400 font-black">-Rs {walletDiscount.toFixed(0)}</span>
+                          )}
+                        </label>
                       )}
-                    </label>
+
+                      {/* Points Checkbox */}
+                      {(customerProfile.rewardPoints ?? 0) > 0 && (
+                        <label className="flex items-center justify-between text-xs font-bold cursor-pointer group select-none">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={usePoints}
+                              onChange={(e) => setUsePoints(e.target.checked)}
+                              className="w-4 h-4 rounded border-white/20 bg-transparent text-red-600 focus:ring-0 focus:ring-offset-0"
+                            />
+                            <span className="text-white/95">Use Points ({customerProfile.rewardPoints} pts = Rs {(customerProfile.rewardPoints * 0.1).toFixed(0)})</span>
+                          </div>
+                          {usePoints && (
+                            <span className="font-mono text-[10px] text-green-400 font-black">-Rs {pointsDiscount.toFixed(0)}</span>
+                          )}
+                        </label>
+                      )}
+                      
+                      {((customerProfile.walletBalance ?? 0) === 0 && (customerProfile.rewardPoints ?? 0) === 0) && (
+                        <div className="text-[10px] text-white/40">No wallet balance or reward points available.</div>
+                      )}
+                    </div>
                   )}
 
-                  {/* Points Checkbox */}
-                  {(customerProfile.rewardPoints ?? 0) > 0 && (
-                    <label className="flex items-center justify-between text-xs font-bold cursor-pointer group select-none">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={usePoints}
-                          onChange={(e) => setUsePoints(e.target.checked)}
-                          className="w-4 h-4 rounded border-white/20 bg-transparent text-red-600 focus:ring-0 focus:ring-offset-0"
-                        />
-                        <span className="text-white/95">Use Points ({customerProfile.rewardPoints} pts = Rs {(customerProfile.rewardPoints * 0.1).toFixed(0)})</span>
+                  <div className="space-y-1.5 font-mono text-[10px] uppercase tracking-widest opacity-90">
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span>Rs {(rawFoodSubtotal !== undefined ? rawFoodSubtotal : total).toFixed(2)}</span>
+                    </div>
+                    {festivalDiscountAmount > 0 && campaign && (
+                      <div className="flex justify-between text-emerald-400 font-black">
+                        <span>
+                          {campaign.offer.title}{' '}
+                          {campaign.offer.pizzaDiscountValue && campaign.offer.otherDiscountValue
+                            ? `(${campaign.offer.pizzaDiscountValue}% Pizza, ${campaign.offer.otherDiscountValue}% Others)`
+                            : `(${campaign.offer.discountValue}%)`}
+                        </span>
+                        <span>-Rs {festivalDiscountAmount.toFixed(2)}</span>
                       </div>
-                      {usePoints && (
-                        <span className="font-mono text-[10px] text-green-400 font-black">-Rs {pointsDiscount.toFixed(0)}</span>
-                      )}
-                    </label>
-                  )}
-                  
-                  {((customerProfile.walletBalance ?? 0) === 0 && (customerProfile.rewardPoints ?? 0) === 0) && (
-                    <div className="text-[10px] text-white/40">No wallet balance or reward points available.</div>
-                  )}
+                    )}
+                    {orderType === 'delivery' && (
+                      <div className="flex justify-between gap-3">
+                        <span>
+                          Delivery{' '}
+                          {deliveryPricing.requiredMinimumOrder !== null && !deliveryPricing.isFreeDelivery
+                            ? `(Min Rs ${requiredMinimumOrder})`
+                            : ''}
+                        </span>
+                        <span className={deliveryFee === -1 ? 'font-bold text-red-500' : ''}>
+                          {deliveryFee === -1
+                            ? 'NOT SERVICEABLE'
+                            : isDeliveryRoutePending
+                              ? 'ROUTE NEEDED'
+                              : deliveryPricing.isFreeDelivery
+                                ? 'FREE'
+                                : `Rs ${effectiveDeliveryFee.toFixed(2)}`}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between"><span>GST Included</span><span>Rs {includedGst.toFixed(2)}</span></div>
+                    {walletDiscount > 0 && (
+                      <div className="flex justify-between text-green-400 font-black">
+                        <span>Wallet Applied</span>
+                        <span>-Rs {walletDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {pointsDiscount > 0 && (
+                      <div className="flex justify-between text-green-400 font-black">
+                        <span>Points Applied</span>
+                        <span>-Rs {pointsDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {totalSavings > 0 && (
+                      <div className="flex justify-between text-emerald-400 font-black">
+                        <span>Total Savings</span>
+                        <span>Rs {totalSavings.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              <div className="mb-5 space-y-2 font-mono text-[10px] uppercase tracking-widest opacity-80">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>Rs {(rawFoodSubtotal !== undefined ? rawFoodSubtotal : total).toFixed(2)}</span>
-                </div>
-                {festivalDiscountAmount > 0 && campaign && (
-                  <div className="flex justify-between text-emerald-400 font-black">
-                    <span>
-                      {campaign.offer.title}{' '}
-                      {campaign.offer.pizzaDiscountValue && campaign.offer.otherDiscountValue
-                        ? `(${campaign.offer.pizzaDiscountValue}% Pizza, ${campaign.offer.otherDiscountValue}% Others)`
-                        : `(${campaign.offer.discountValue}%)`}
-                    </span>
-                    <span>-Rs {festivalDiscountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                {orderType === 'delivery' && (
-                  <div className="flex justify-between gap-3">
-                    <span>
-                      Delivery{' '}
-                      {deliveryPricing.requiredMinimumOrder !== null && !deliveryPricing.isFreeDelivery
-                        ? `(Min Rs ${requiredMinimumOrder})`
-                        : ''}
-                    </span>
-                    <span className={deliveryFee === -1 ? 'font-bold text-red-500' : ''}>
-                      {deliveryFee === -1
-                        ? 'NOT SERVICEABLE'
-                        : isDeliveryRoutePending
-                          ? 'ROUTE NEEDED'
-                          : deliveryPricing.isFreeDelivery
-                            ? 'FREE'
-                            : `Rs ${effectiveDeliveryFee.toFixed(2)}`}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between"><span>GST Included</span><span>Rs {includedGst.toFixed(2)}</span></div>
-                {walletDiscount > 0 && (
-                  <div className="flex justify-between text-green-400 font-black">
-                    <span>Wallet Applied</span>
-                    <span>-Rs {walletDiscount.toFixed(2)}</span>
-                  </div>
-                )}
-                {pointsDiscount > 0 && (
-                  <div className="flex justify-between text-green-400 font-black">
-                    <span>Points Applied</span>
-                    <span>-Rs {pointsDiscount.toFixed(2)}</span>
-                  </div>
-                )}
-                {totalSavings > 0 && (
-                  <div className="flex justify-between text-emerald-400 font-black">
-                    <span>Total Savings</span>
-                    <span>Rs {totalSavings.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="my-2 h-px border-t border-dashed border-white/20" />
-                <div className="flex justify-between text-xl font-display font-bold text-white">
-                  <span>Grand Total</span>
-                  <span className={`text-red-500 transition-all ${animatePrice ? 'animate-text-pulse' : ''}`}>Rs {finalTotal.toFixed(2)}</span>
-                </div>
+              {/* Grand Total Row */}
+              <div className="mb-3 flex items-center justify-between font-display">
+                <span className="text-xs font-black uppercase tracking-widest text-slate-300">Grand Total</span>
+                <span className={`text-2xl font-black text-red-500 transition-all ${animatePrice ? 'animate-text-pulse' : ''}`}>
+                  Rs {finalTotal.toFixed(2)}
+                </span>
               </div>
+
+              {/* Pay via UPI CTA Button */}
               <button
                 onClick={onCheckout}
                 disabled={isDeliveryImpossible}
-                className={`flex w-full items-center justify-center space-x-3 rounded-2xl py-4 text-[10px] font-bold uppercase tracking-[0.28em] transition-all ${
+                className={`flex w-full items-center justify-center space-x-3 rounded-2xl py-3.5 text-[11px] font-black uppercase tracking-[0.25em] transition-all cursor-pointer ${
                   isDeliveryImpossible
                     ? 'cursor-not-allowed border border-white/5 bg-slate-800 text-white/40'
-                    : 'bg-red-600 text-white active:scale-95'
+                    : 'bg-red-600 hover:bg-red-500 text-white active:scale-95 shadow-lg shadow-red-600/30'
                 }`}
               >
                 <span>

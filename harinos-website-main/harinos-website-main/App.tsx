@@ -2071,6 +2071,7 @@ const App: React.FC = () => {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         campaign={activeCampaign}
+        isCartOpen={isCartOpen}
       />
       {showTutorial && (
         <FirstTimeUserModal

@@ -9,24 +9,36 @@ interface PastOrdersProps {
 }
 
 const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
+  const recentOrders = orders.slice(0, 3);
+
+  const handleAskForBill = (order: Order) => {
+    const rawPhone = order.outletPhone || '+917818958571';
+    const digitsOnly = rawPhone.replace(/\D/g, '');
+    const cleanPhone = digitsOnly.length === 10 ? `91${digitsOnly}` : digitsOnly;
+    const orderDate = new Date(order.receivedAt ?? order.date).toLocaleDateString();
+    const message = `Hi Harino's Pizza, I need the invoice/bill for my Order #${getDisplayOrderId(order.id)} placed on ${orderDate} for Rs ${Math.round(order.total)}. Please share it with me.`;
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-16">
       <div className="flex flex-col items-center mb-12">
         <h2 className="text-5xl font-display font-bold text-slate-900 mb-2">Order History</h2>
         <div className="h-1.5 w-24 bg-red-600 rounded-full"></div>
         <p className="mt-4 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-          Swipe right to go back
+          Showing your last 3 orders • Swipe right to go back
         </p>
       </div>
 
-      {orders.length === 0 ? (
+      {recentOrders.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-[3rem] shadow-sm border border-orange-100">
           <div className="text-6xl mb-6">📜</div>
           <p className="text-xl font-display font-bold text-slate-400">No past orders yet. Let's start cooking!</p>
         </div>
       ) : (
         <div className="space-y-8">
-          {orders.map((order) => (
+          {recentOrders.map((order) => (
             <div key={order.id} className="bg-white rounded-[2.5rem] p-8 md:p-10 shadow-sm border border-orange-50 hover:shadow-xl transition-all duration-500">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-6 border-b border-slate-50">
                 <div>
@@ -110,15 +122,25 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
                     {typeof order.total === 'number' ? `₹${order.total.toFixed(2)}` : 'Rs N/A'}
                   </span>
                 </div>
-                <button 
-                  onClick={() => onReorder(order)}
-                  className="w-full md:w-auto px-10 py-4 bg-slate-900 text-white rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-red-600 transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-slate-200 flex items-center justify-center space-x-3"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span>Re-order Items</span>
-                </button>
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                  <button
+                    onClick={() => handleAskForBill(order)}
+                    className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold uppercase tracking-wider text-xs transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-emerald-600/20 flex items-center justify-center space-x-2 cursor-pointer"
+                    title="Ask for Bill on WhatsApp"
+                  >
+                    <span>💬</span>
+                    <span>Ask for Bill</span>
+                  </button>
+                  <button 
+                    onClick={() => onReorder(order)}
+                    className="px-8 py-3.5 bg-slate-900 text-white rounded-2xl font-bold uppercase tracking-wider text-xs hover:bg-red-600 transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-slate-200 flex items-center justify-center space-x-2 cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Re-order</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))}

@@ -4,6 +4,7 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { getNotificationPermission } from '../services/browserSupport';
 
 import { FestivalCampaign } from '../config/festivalCampaigns';
+import { isCampaignOfferActive } from '../services/festivalEngine';
 
 interface HeaderProps {
   cartCount: number;
@@ -144,7 +145,7 @@ const Header: React.FC<HeaderProps> = ({
               >
                 Because Hari Knows
               </span>
-              {campaign && (
+              {campaign && isCampaignOfferActive(campaign) && (
                 <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-orange-500 text-white shadow-sm animate-pulse">
                   {campaign.offer.discountValue}% OFF ACTIVE
                 </span>

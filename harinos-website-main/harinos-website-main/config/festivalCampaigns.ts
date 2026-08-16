@@ -29,6 +29,8 @@ export interface FestivalOffer {
   badge: string;
   description: string;
   terms: string;
+  offerStartDate?: string;
+  offerEndDate?: string;
 }
 
 export interface FestivalCampaign {
@@ -36,8 +38,10 @@ export interface FestivalCampaign {
   name: string;
   eventType: 'national' | 'festival' | 'commercial';
   financialYear: string; // e.g. "2026-27"
-  startDate: string; // ISO 8601 with +05:30 offset
-  endDate: string; // ISO 8601 with +05:30 offset
+  startDate: string; // ISO 8601 with +05:30 offset (Theme Week start)
+  endDate: string; // ISO 8601 with +05:30 offset (Theme Week end)
+  offerStartDate?: string; // Specific start for promotional offer discount
+  offerEndDate?: string; // Specific end when festival offer ends (theme remains for week)
   priority: number; // Higher number takes precedence if overlapping
   enabled: boolean;
   theme: FestivalTheme;
@@ -62,6 +66,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-08-15T00:00:00+05:30',
     endDate: '2026-08-21T23:59:59+05:30',
+    offerStartDate: '2026-08-15T00:00:00+05:30',
+    offerEndDate: '2026-08-16T23:59:59+05:30',
     priority: 100,
     enabled: true,
     theme: {
@@ -105,6 +111,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-08-27T00:00:00+05:30',
     endDate: '2026-08-31T23:59:59+05:30',
+    offerStartDate: '2026-08-27T00:00:00+05:30',
+    offerEndDate: '2026-08-28T23:59:59+05:30',
     priority: 85,
     enabled: true,
     theme: {
@@ -141,6 +149,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-09-04T00:00:00+05:30',
     endDate: '2026-09-08T23:59:59+05:30',
+    offerStartDate: '2026-09-04T00:00:00+05:30',
+    offerEndDate: '2026-09-05T23:59:59+05:30',
     priority: 85,
     enabled: true,
     theme: {
@@ -177,6 +187,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-09-14T00:00:00+05:30',
     endDate: '2026-09-19T23:59:59+05:30',
+    offerStartDate: '2026-09-14T00:00:00+05:30',
+    offerEndDate: '2026-09-15T23:59:59+05:30',
     priority: 90,
     enabled: true,
     theme: {
@@ -213,6 +225,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-10-11T00:00:00+05:30',
     endDate: '2026-10-19T23:59:59+05:30',
+    offerStartDate: '2026-10-11T00:00:00+05:30',
+    offerEndDate: '2026-10-13T23:59:59+05:30',
     priority: 90,
     enabled: true,
     theme: {
@@ -249,6 +263,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-10-20T00:00:00+05:30',
     endDate: '2026-10-23T23:59:59+05:30',
+    offerStartDate: '2026-10-20T00:00:00+05:30',
+    offerEndDate: '2026-10-21T23:59:59+05:30',
     priority: 90,
     enabled: true,
     theme: {
@@ -285,6 +301,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-10-29T00:00:00+05:30',
     endDate: '2026-10-31T23:59:59+05:30',
+    offerStartDate: '2026-10-29T00:00:00+05:30',
+    offerEndDate: '2026-10-29T23:59:59+05:30',
     priority: 80,
     enabled: true,
     theme: {
@@ -321,6 +339,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-11-06T00:00:00+05:30',
     endDate: '2026-11-13T23:59:59+05:30',
+    offerStartDate: '2026-11-06T00:00:00+05:30',
+    offerEndDate: '2026-11-08T23:59:59+05:30',
     priority: 100,
     enabled: true,
     theme: {
@@ -360,6 +380,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2026-12-24T00:00:00+05:30',
     endDate: '2027-01-01T23:59:59+05:30',
+    offerStartDate: '2026-12-24T00:00:00+05:30',
+    offerEndDate: '2026-12-25T23:59:59+05:30',
     priority: 95,
     enabled: true,
     theme: {
@@ -396,6 +418,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2027-01-13T00:00:00+05:30',
     endDate: '2027-01-16T23:59:59+05:30',
+    offerStartDate: '2027-01-14T00:00:00+05:30',
+    offerEndDate: '2027-01-15T23:59:59+05:30',
     priority: 85,
     enabled: true,
     theme: {
@@ -432,6 +456,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2027-01-25T00:00:00+05:30',
     endDate: '2027-01-31T23:59:59+05:30',
+    offerStartDate: '2027-01-26T00:00:00+05:30',
+    offerEndDate: '2027-01-27T23:59:59+05:30',
     priority: 100,
     enabled: true,
     theme: {
@@ -471,6 +497,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2027-03-05T00:00:00+05:30',
     endDate: '2027-03-08T23:59:59+05:30',
+    offerStartDate: '2027-03-05T00:00:00+05:30',
+    offerEndDate: '2027-03-06T23:59:59+05:30',
     priority: 85,
     enabled: true,
     theme: {
@@ -507,6 +535,8 @@ export const FESTIVAL_CAMPAIGNS: FestivalCampaign[] = [
     financialYear: '2026-27',
     startDate: '2027-03-21T00:00:00+05:30',
     endDate: '2027-03-26T23:59:59+05:30',
+    offerStartDate: '2027-03-21T00:00:00+05:30',
+    offerEndDate: '2027-03-22T23:59:59+05:30',
     priority: 100,
     enabled: true,
     theme: {

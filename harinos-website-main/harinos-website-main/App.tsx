@@ -51,7 +51,7 @@ import { useSwipeDismiss } from './hooks/useSwipeDismiss';
 import DownloadPage from './components/DownloadPage';
 import UpdateModal from './components/UpdateModal';
 import { FestivalOfferCard } from './components/FestivalOfferCard';
-import { getActiveFestivalCampaign, calculateFestivalDiscount } from './services/festivalEngine';
+import { getActiveFestivalCampaign, calculateFestivalDiscount, isCampaignOfferActive } from './services/festivalEngine';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
@@ -1880,7 +1880,7 @@ const App: React.FC = () => {
       items: orderItems,
       subtotal: baseSubtotal,
       discount: Math.round(baseSubtotal - foodSubtotalAfterFestival),
-      promotion: activeCampaign && activeCampaign.offer.enabled ? {
+      promotion: activeCampaign && activeCampaign.offer.enabled && festivalDiscountAmount > 0 && isCampaignOfferActive(activeCampaign) ? {
         id: activeCampaign.id,
         name: activeCampaign.offer.title,
         discountType: 'percentage' as const,
@@ -2108,7 +2108,7 @@ const App: React.FC = () => {
         {view === 'menu' ? (
           <>
             <Hero onShare={handleShare} onExploreMenu={openCategoryView} campaign={activeCampaign} />
-            {activeCampaign && (
+            {activeCampaign && isCampaignOfferActive(activeCampaign) && (
               <FestivalOfferCard campaign={activeCampaign} onExploreMenu={openCategoryView} />
             )}
             <OfferCarousel offers={activeOfferCards} onAction={handleOfferAction} />

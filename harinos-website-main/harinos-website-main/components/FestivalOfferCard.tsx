@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FestivalCampaign } from '../config/festivalCampaigns';
+import { isCampaignOfferActive } from '../services/festivalEngine';
 
 interface FestivalOfferCardProps {
   campaign: FestivalCampaign;
@@ -11,6 +12,10 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
   onExploreMenu,
 }) => {
   const [videoError, setVideoError] = useState(false);
+
+  if (!isCampaignOfferActive(campaign)) {
+    return null;
+  }
 
   const hasVideo = !!campaign.media.video && !videoError;
 

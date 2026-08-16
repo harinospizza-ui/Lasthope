@@ -110,20 +110,49 @@ export interface FestivalDiscountResult {
 }
 
 /**
+ * Checks if the promotional offer discount is active for a campaign.
+ * The festival visual theme can stay for the entire festival week,
+ * while the offer discount cleanly ends when the festival itself ends (offerEndDate).
+ */
+export const isCampaignOfferActive = (
+  campaign: FestivalCampaign | null,
+  overrideDate?: Date | string,
+): boolean => {
+  if (!campaign || !campaign.enabled || !campaign.offer || !campaign.offer.enabled) {
+    return false;
+  }
+  const currentTs = getNowTimestampIST(overrideDate);
+  const offerStartTs = new Date(
+    campaign.offerStartDate || campaign.offer.offerStartDate || campaign.startDate,
+  ).getTime();
+  const offerEndTs = new Date(
+    campaign.offerEndDate || campaign.offer.offerEndDate || campaign.endDate,
+  ).getTime();
+
+  return currentTs >= offerStartTs && currentTs <= offerEndTs;
+};
+
+/**
  * Calculates the exact festival promotional discount on the eligible food subtotal or items list.
  * Supports differential discounts: e.g. 20% on Pizzas & 10% on all other items.
+ * If the festival offer period has ended (even though theme week continues), returns 0 discount.
  * Never applies discount to delivery fees, tips, or separate surcharges.
  */
 export const calculateFestivalDiscount = (
   campaign: FestivalCampaign | null,
   itemsOrSubtotal: PricedCartItem[] | CartItem[] | any[] | number,
   fallbackSubtotal?: number,
+  overrideDate?: Date | string,
 ): FestivalDiscountResult => {
-  if (!campaign || !campaign.offer || !campaign.offer.enabled) {
-    const rawSubtotal = typeof itemsOrSubtotal === 'number'
-      ? itemsOrSubtotal
-      : Array.isArray(itemsOrSubtotal)
-        ? itemsOrSubtotal.reduce((sum, i) => sum + (i.totalPrice ?? (i.price || 0) * (i.quantity || 1)), 0)
+  if (!isCampaignOfferActive(campaign, overrideDate)) {
+    const rawSubtotal =
+      typeof itemsOrSubtotal === 'number'
+        ? itemsOrSubtotal
+        : Array.isArray(itemsOrSubtotal)
+        ? itemsOrSubtotal.reduce(
+            (sum, i) => sum + (i.totalPrice ?? (i.price || 0) * (i.quantity || 1)),
+            0,
+          )
         : fallbackSubtotal ?? 0;
 
     return {

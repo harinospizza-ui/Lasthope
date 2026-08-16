@@ -1,5 +1,6 @@
 import React from 'react';
 import { FestivalCampaign } from '../config/festivalCampaigns';
+import { isCampaignOfferActive } from '../services/festivalEngine';
 
 interface HeroProps {
   onShare: () => void;
@@ -9,6 +10,7 @@ interface HeroProps {
 
 const Hero: React.FC<HeroProps> = ({ onShare, onExploreMenu, campaign }) => {
   const isFestival = !!campaign;
+  const isOfferActive = isCampaignOfferActive(campaign);
 
   const heroBg = isFestival && campaign.media.heroImage
     ? campaign.media.heroImage
@@ -27,7 +29,9 @@ const Hero: React.FC<HeroProps> = ({ onShare, onExploreMenu, campaign }) => {
     : 'Perfect Dough.';
 
   const subheadline = isFestival && campaign.theme.heroSubheadline
-    ? campaign.theme.heroSubheadline
+    ? (isOfferActive
+        ? campaign.theme.heroSubheadline
+        : campaign.theme.heroSubheadline.replace(/Enjoy flat \d+%.*?\./i, 'Celebrating with pure vegetarian culinary excellence.'))
     : "Indulge in Harino's handcrafted recipes. BECAUSE HARI KNOWS exactly how to bake the perfect pizza.";
 
   return (
@@ -60,7 +64,7 @@ const Hero: React.FC<HeroProps> = ({ onShare, onExploreMenu, campaign }) => {
                   : 'bg-red-600 hover:bg-red-700 shadow-red-900/20'
               }`}
             >
-              {isFestival ? `Explore Menu • ${campaign.offer.discountValue}% OFF` : 'Explore Menu'}
+              {isFestival && isOfferActive ? `Explore Menu • ${campaign.offer.discountValue}% OFF` : 'Explore Menu'}
             </button>
             <button 
               onClick={onShare}

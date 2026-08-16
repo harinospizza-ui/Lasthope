@@ -96,14 +96,15 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   const effectiveDeliveryFee = orderType === 'delivery' && deliveryFee > 0 ? deliveryFee : 0;
   const finalTotal = Math.max(0, total + effectiveDeliveryFee - walletDiscount - pointsDiscount);
   const includedGst = total - total / 1.05;
-  const totalSavings = items.reduce((sum, item) => {
+  const itemDiscounts = items.reduce((sum, item) => {
     if (item.isOfferBonus) {
       return sum + (item.originalPrice ?? 0) * item.quantity;
     } else {
-      const normalSavings = (item.basePrice - item.discountedPrice) * item.quantity;
+      const normalSavings = Math.max(0, (item.basePrice - item.discountedPrice)) * item.quantity;
       return sum + normalSavings;
     }
-  }, 0) + festivalDiscountAmount;
+  }, 0);
+  const totalSavings = itemDiscounts + festivalDiscountAmount + walletDiscount + pointsDiscount;
   const lastOrder = pastOrders.length > 0 ? pastOrders[0] : null;
   const outletForDisplay = orderType === 'delivery' ? nearestOutlet : selectedOutlet;
   const requiredMinimumOrder =
@@ -482,9 +483,9 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                   <span>{showDetails ? '▴ Hide Details' : '▾ Bill Details & Discounts'}</span>
                 </button>
 
-                {(totalSavings > 0 || festivalDiscountAmount > 0 || walletDiscount > 0 || pointsDiscount > 0) && (
+                {totalSavings > 0 && (
                   <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
-                    🎉 Saving Rs {Math.round(totalSavings + festivalDiscountAmount + walletDiscount + pointsDiscount)}
+                    🎉 Saving Rs {Math.round(totalSavings)}
                   </span>
                 )}
               </div>

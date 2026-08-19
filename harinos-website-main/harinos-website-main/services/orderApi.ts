@@ -1624,25 +1624,55 @@ export const initCustomerLogin = async (
 
   // Validate the referral code input
   let referredByVal: string | undefined = undefined;
+  let referrerDocFound: CustomerProfile | null = null;
+  let referrerCollection = '';
+
   if (referralCodeUsedInput) {
-    const q1 = query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), where('referralCode', '==', referralCodeUsedInput));
+    const cleanRefInput = referralCodeUsedInput.trim();
+    const q1 = query(collection(db(), FIRESTORE_CUSTOMERS_COLLECTION), where('referralCode', '==', cleanRefInput));
     const qSnap = await getDocs(q1);
     if (!qSnap.empty) {
-      const referrerDoc = qSnap.docs[0].data() as CustomerProfile;
-      if (referrerDoc.id !== cleanPhone && referrerDoc.verified) {
-        referredByVal = referrerDoc.referralCode;
+      const rDoc = qSnap.docs[0].data() as CustomerProfile;
+      if (rDoc.id !== cleanPhone) {
+        referredByVal = rDoc.referralCode;
+        referrerDocFound = rDoc;
+        referrerCollection = FIRESTORE_CUSTOMERS_COLLECTION;
       }
     } else {
-      const q2 = query(collection(db(), 'customerProfiles'), where('referralCode', '==', referralCodeUsedInput));
+      const q2 = query(collection(db(), 'customerProfiles'), where('referralCode', '==', cleanRefInput));
       const qSnap2 = await getDocs(q2);
       if (!qSnap2.empty) {
-        const referrerDoc = qSnap2.docs[0].data() as CustomerProfile;
-        if (referrerDoc.id !== cleanPhone && referrerDoc.verified) {
-          referredByVal = referrerDoc.referralCode;
+        const rDoc = qSnap2.docs[0].data() as CustomerProfile;
+        if (rDoc.id !== cleanPhone) {
+          referredByVal = rDoc.referralCode;
+          referrerDocFound = rDoc;
+          referrerCollection = 'customerProfiles';
         }
       }
     }
   }
+
+  // Credit 200 Coins (Reward Points) to the customer whose referral code was used
+  if (referrerDocFound) {
+    const referrerId = referrerDocFound.id || referrerDocFound.phone;
+    const currentReferrerPoints = referrerDocFound.rewardPoints || referrerDocFound.coins || 0;
+    const updatedReferrerPoints = currentReferrerPoints + 200;
+    try {
+      await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, referrerId), {
+        rewardPoints: updatedReferrerPoints,
+        coins: updatedReferrerPoints,
+      });
+      await updateDoc(doc(db(), 'customerProfiles', referrerId), {
+        rewardPoints: updatedReferrerPoints,
+        coins: updatedReferrerPoints,
+      });
+    } catch (e) {
+      console.warn('Failed to credit 200 referral bonus points to referrer:', e);
+    }
+  }
+
+  // Every new customer receives 100 welcome coins for opening the account
+  const welcomeCoins = 100;
 
   const customerProfile: CustomerProfile = {
     id: cleanPhone,
@@ -1655,8 +1685,8 @@ export const initCustomerLogin = async (
     verified: false,
     walletBalance: 0,
     loyaltyPoints: 0,
-    rewardPoints: referredByVal ? 50 : 0,
-    coins: referredByVal ? 50 : 0,
+    rewardPoints: welcomeCoins,
+    coins: welcomeCoins,
     active: true,
     status: 'active',
     createdAt: nowStr,

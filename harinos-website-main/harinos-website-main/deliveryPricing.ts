@@ -27,9 +27,9 @@ export const getRequiredMinimumOrderForDistance = (
   outlet: OutletConfig | null,
   distanceKm: number,
 ): number => {
-  const freeRadius = outlet?.freeDeliveryRadiusKm ?? 3;
-  const freeMinOrder = outlet?.freeDeliveryMinimumOrder ?? 150;
-  const incrementPerKm = outlet?.minimumOrderIncrementPerKm ?? 100;
+  const freeRadius = outlet?.freeDeliveryRadiusKm || 3;
+  const freeMinOrder = outlet?.freeDeliveryMinimumOrder || 150;
+  const incrementPerKm = outlet?.minimumOrderIncrementPerKm || 100;
 
   if (distanceKm <= freeRadius) {
     return freeMinOrder;
@@ -59,7 +59,7 @@ export const getDeliveryPricingSummary = (
     };
   }
 
-  const maxRadiusKm = outlet.deliveryRadiusKm ?? 7.0;
+  const maxRadiusKm = outlet.deliveryRadiusKm || 7.0;
   // Strict 7 KM road travel limit
   if (distanceKm > maxRadiusKm + 0.05) {
     return {
@@ -88,7 +88,7 @@ export const getDeliveryPricingSummary = (
   }
 
   // When minimum free delivery criteria is NOT met: Rs. 15 per kilometer
-  const chargePerKm = outlet.deliveryChargePerKm ?? DELIVERY_CHARGE_PER_KM;
+  const chargePerKm = outlet.deliveryChargePerKm || DELIVERY_CHARGE_PER_KM;
   const fee = distanceBandKm * chargePerKm;
   const shortfall = Math.max(0, requiredMinimumOrder - subtotal);
 

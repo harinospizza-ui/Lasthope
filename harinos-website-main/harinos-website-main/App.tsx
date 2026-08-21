@@ -1843,9 +1843,10 @@ const App: React.FC = () => {
         return;
       }
 
-      if (checkoutContext.distanceKm > 5 || checkoutContext.distanceKm > checkoutContext.outlet.deliveryRadiusKm) {
+      const maxDeliveryRadius = checkoutContext.outlet.deliveryRadiusKm ?? 7;
+      if (checkoutContext.distanceKm > maxDeliveryRadius + 0.05) {
         alert(
-          `Sorry, we only deliver up to 5 km by road. Your distance is ${checkoutContext.distanceKm.toFixed(1)} km.`,
+          `Sorry, we only deliver up to ${maxDeliveryRadius} km by road. Your distance is ${checkoutContext.distanceKm.toFixed(1)} km.`,
         );
         return;
       }

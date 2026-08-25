@@ -115,18 +115,18 @@ const Header: React.FC<HeaderProps> = ({
       {/* Festive Top Announcement Bar */}
       {campaign && (
         <div
-          className="w-full py-1 px-3 mb-2 text-center text-[10px] sm:text-xs font-black uppercase tracking-wider text-white shadow-xs animate-fade-in"
+          className="w-full py-1.5 px-3 mb-2 text-center text-[10px] sm:text-xs font-black uppercase tracking-wider text-white shadow-xs animate-fade-in"
           style={{
             background: `linear-gradient(90deg, ${campaign.theme.primaryAccent}, ${campaign.theme.secondaryAccent})`,
           }}
         >
           <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
             <span>{campaign.theme.heroTag}</span>
-            <span className="hidden sm:inline opacity-75">•</span>
-            <span className="hidden sm:inline">
+            <span className="opacity-75">•</span>
+            <span>
               {isCampaignOfferActive(campaign)
                 ? `⚡ Flat ${campaign.offer.discountValue}% OFF Auto-Applied in Cart Today!`
-                : `⏳ Flat ${campaign.offer.discountValue}% OFF Unlocks on ${campaign.name} Day!`}
+                : `⏳ Flat ${campaign.offer.discountValue}% OFF on ${new Date(campaign.offerStartDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' })}`}
             </span>
           </div>
         </div>

@@ -1,103 +1,21 @@
-import { FESTIVAL_CAMPAIGNS, FestivalCampaign } from '../config/festivalCampaigns';
+import { FestivalCampaign, getAllGeneratedFestivalCampaigns } from '../config/festivalCampaigns';
 import { Category, PricedCartItem, CartItem } from '../types';
 
-/**
- * Helper to get the current timestamp in India Standard Time (IST / UTC+05:30)
- * Allows optional date override for testing transitions.
- */
-export const getNowTimestampIST = (overrideDate?: Date | string): number => {
-  if (overrideDate) {
-    return new Date(overrideDate).getTime();
-  }
-  return Date.now();
-};
+export type FestivalLifecycleState = 'PRE_FESTIVAL' | 'ACTIVE_OFFER' | 'ENDED';
 
-/**
- * Formats a Date/ISO string to human readable IST string
- */
-export const formatISTDate = (isoString: string): string => {
-  try {
-    const d = new Date(isoString);
-    return d.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      timeZone: 'Asia/Kolkata',
-    });
-  } catch {
-    return isoString;
-  }
-};
-
-/**
- * Evaluates the centralized festival calendar and deterministically returns the active campaign.
- * Precedence Rule:
- * 1. Enabled status
- * 2. Active date window: startDate <= currentIST <= endDate (inclusive)
- * 3. Highest priority (e.g. 100 > 90)
- * 4. Latest startDate (tie-breaker)
- * 5. Alphabetical ID (guaranteed deterministic tie-breaker)
- */
-export const getActiveFestivalCampaign = (overrideDate?: Date | string): FestivalCampaign | null => {
-  const currentTs = getNowTimestampIST(overrideDate);
-
-  const activeCampaigns = FESTIVAL_CAMPAIGNS.filter((campaign) => {
-    if (!campaign.enabled) return false;
-
-    const startTs = new Date(campaign.startDate).getTime();
-    const endTs = new Date(campaign.endDate).getTime();
-
-    return currentTs >= startTs && currentTs <= endTs;
-  });
-
-  if (activeCampaigns.length === 0) {
-    return null;
-  }
-
-  // Deterministic sorting
-  activeCampaigns.sort((a, b) => {
-    // 1. Priority descending
-    if (b.priority !== a.priority) {
-      return b.priority - a.priority;
-    }
-    // 2. Start date descending
-    const bStart = new Date(b.startDate).getTime();
-    const aStart = new Date(a.startDate).getTime();
-    if (bStart !== aStart) {
-      return bStart - aStart;
-    }
-    // 3. Alphabetical ID
-    return a.id.localeCompare(b.id);
-  });
-
-  return activeCampaigns[0];
-};
-
-/**
- * Returns the next scheduled festival campaign after the current date.
- * Useful for debugging, Admin inspection, and asset preloading.
- */
-export const getNextUpcomingFestivalCampaign = (overrideDate?: Date | string): FestivalCampaign | null => {
-  const currentTs = getNowTimestampIST(overrideDate);
-
-  const upcomingCampaigns = FESTIVAL_CAMPAIGNS.filter((campaign) => {
-    if (!campaign.enabled) return false;
-    const startTs = new Date(campaign.startDate).getTime();
-    return startTs > currentTs;
-  });
-
-  if (upcomingCampaigns.length === 0) {
-    return null;
-  }
-
-  upcomingCampaigns.sort((a, b) => {
-    const aStart = new Date(a.startDate).getTime();
-    const bStart = new Date(b.startDate).getTime();
-    return aStart - bStart;
-  });
-
-  return upcomingCampaigns[0];
-};
+export interface FestivalCountdown {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  totalMs: number;
+  state: FestivalLifecycleState;
+  isLive: boolean;
+  isUpcoming: boolean;
+  isEnded: boolean;
+  targetLabel: string;
+  targetDateStr: string;
+}
 
 export interface FestivalDiscountResult {
   discountAmount: number;
@@ -109,62 +27,148 @@ export interface FestivalDiscountResult {
   otherSubtotal: number;
 }
 
-export interface FestivalCountdown {
-  days: number;
-  hours: number;
-  minutes: number;
-  seconds: number;
-  totalMs: number;
-  isLive: boolean;
-  isUpcoming: boolean;
-  isEnded: boolean;
-  targetDateStr: string;
-}
+/**
+ * Helper to get the current timestamp in India Standard Time (IST / UTC+05:30)
+ */
+export const getNowTimestampIST = (overrideDate?: Date | string): number => {
+  if (overrideDate) {
+    return new Date(overrideDate).getTime();
+  }
+  return Date.now();
+};
 
 /**
- * Checks if the promotional offer discount is active for a campaign.
- * The festival visual theme can stay for the entire festival week,
- * while the offer discount cleanly ends when the festival itself ends (offerEndDate).
+ * Gets the current 4-digit calendar year in Asia/Kolkata timezone.
+ */
+export const getCurrentYearIST = (overrideDate?: Date | string): number => {
+  const d = overrideDate ? new Date(overrideDate) : new Date();
+  const yearStr = d.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric' });
+  return parseInt(yearStr, 10) || d.getFullYear();
+};
+
+/**
+ * Formats an ISO string to human readable IST string (e.g. "27 Aug")
+ */
+export const formatISTDate = (isoString: string): string => {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'Asia/Kolkata',
+    });
+  } catch {
+    return isoString;
+  }
+};
+
+/**
+ * Returns the exact lifecycle state of a festival campaign at a given time:
+ * - 'PRE_FESTIVAL': During the 7-day theme week before the discount offer unlocks.
+ * - 'ACTIVE_OFFER': During the festival day when the discount is live.
+ * - 'ENDED': When the festival has concluded.
+ */
+export const getFestivalLifecycleState = (
+  campaign: FestivalCampaign | null,
+  overrideDate?: Date | string,
+): FestivalLifecycleState => {
+  if (!campaign || !campaign.enabled) {
+    return 'ENDED';
+  }
+
+  const currentTs = getNowTimestampIST(overrideDate);
+  const startTs = new Date(campaign.startDate).getTime();
+  const offerStartTs = new Date(campaign.offerStartDate).getTime();
+  const offerEndTs = new Date(campaign.offerEndDate).getTime();
+
+  if (currentTs >= offerStartTs && currentTs <= offerEndTs) {
+    return 'ACTIVE_OFFER';
+  }
+
+  if (currentTs >= startTs && currentTs < offerStartTs) {
+    return 'PRE_FESTIVAL';
+  }
+
+  return 'ENDED';
+};
+
+/**
+ * Checks if the promotional offer discount is live today.
  */
 export const isCampaignOfferActive = (
   campaign: FestivalCampaign | null,
   overrideDate?: Date | string,
 ): boolean => {
-  if (!campaign || !campaign.enabled || !campaign.offer || !campaign.offer.enabled) {
-    return false;
-  }
-  const currentTs = getNowTimestampIST(overrideDate);
-  const offerStartTs = new Date(
-    campaign.offerStartDate || campaign.offer.offerStartDate || campaign.startDate,
-  ).getTime();
-  const offerEndTs = new Date(
-    campaign.offerEndDate || campaign.offer.offerEndDate || campaign.endDate,
-  ).getTime();
-
-  return currentTs >= offerStartTs && currentTs <= offerEndTs;
+  return getFestivalLifecycleState(campaign, overrideDate) === 'ACTIVE_OFFER';
 };
 
 /**
- * Checks if we are in the pre-festival theme week leading up to the discount offer.
+ * Checks if the campaign is in the pre-festival countdown week.
  */
 export const isCampaignUpcomingOffer = (
   campaign: FestivalCampaign | null,
   overrideDate?: Date | string,
 ): boolean => {
-  if (!campaign || !campaign.enabled || !campaign.offer || !campaign.offer.enabled) {
-    return false;
-  }
-  const currentTs = getNowTimestampIST(overrideDate);
-  const startTs = new Date(campaign.startDate).getTime();
-  const offerStartTs = new Date(
-    campaign.offerStartDate || campaign.offer.offerStartDate || campaign.startDate,
-  ).getTime();
-
-  return currentTs >= startTs && currentTs < offerStartTs;
+  return getFestivalLifecycleState(campaign, overrideDate) === 'PRE_FESTIVAL';
 };
 
 /**
- * Computes live countdown timer until the festival offer unlocks or ends.
+ * Evaluates the centralized festival calendar and deterministically returns ONE authoritative active campaign.
+ * Precedence Rule:
+ * 1. Active offer discount campaign takes highest precedence
+ * 2. Pre-festival theme campaign with highest priority score
+ * 3. Latest start date (tie-breaker)
+ * 4. Deterministic alphabetical ID
+ */
+export const getActiveFestivalCampaign = (overrideDate?: Date | string): FestivalCampaign | null => {
+  const currentTs = getNowTimestampIST(overrideDate);
+  const currentYear = getCurrentYearIST(overrideDate);
+  const allCampaigns = getAllGeneratedFestivalCampaigns(currentYear);
+
+  const activeCampaigns = allCampaigns.filter((campaign) => {
+    if (!campaign.enabled) return false;
+    const startTs = new Date(campaign.startDate).getTime();
+    const endTs = new Date(campaign.endDate).getTime();
+    return currentTs >= startTs && currentTs <= endTs;
+  });
+
+  if (activeCampaigns.length === 0) {
+    return null;
+  }
+
+  // Deterministic sorting
+  activeCampaigns.sort((a, b) => {
+    const stateA = getFestivalLifecycleState(a, overrideDate);
+    const stateB = getFestivalLifecycleState(b, overrideDate);
+
+    // 1. Live discount offer ('ACTIVE_OFFER') wins over pre-festival theme ('PRE_FESTIVAL')
+    if (stateA === 'ACTIVE_OFFER' && stateB !== 'ACTIVE_OFFER') return -1;
+    if (stateB === 'ACTIVE_OFFER' && stateA !== 'ACTIVE_OFFER') return 1;
+
+    // 2. Highest priority score
+    if (b.priority !== a.priority) {
+      return b.priority - a.priority;
+    }
+
+    // 3. Latest start date
+    const bStart = new Date(b.startDate).getTime();
+    const aStart = new Date(a.startDate).getTime();
+    if (bStart !== aStart) {
+      return bStart - aStart;
+    }
+
+    // 4. Deterministic alphabetical ID
+    return a.id.localeCompare(b.id);
+  });
+
+  return activeCampaigns[0];
+};
+
+/**
+ * Computes state-aware countdown:
+ * - Before festival: Counts down until festival offer starts.
+ * - On festival day: Counts down until festival offer ends.
+ * - After festival: Returns isEnded: true.
  */
 export const getFestivalCountdown = (
   campaign: FestivalCampaign | null,
@@ -173,14 +177,11 @@ export const getFestivalCountdown = (
   if (!campaign || !campaign.offer) return null;
 
   const currentTs = getNowTimestampIST(overrideDate);
-  const offerStartTs = new Date(
-    campaign.offerStartDate || campaign.offer.offerStartDate || campaign.startDate,
-  ).getTime();
-  const offerEndTs = new Date(
-    campaign.offerEndDate || campaign.offer.offerEndDate || campaign.endDate,
-  ).getTime();
+  const state = getFestivalLifecycleState(campaign, overrideDate);
+  const offerStartTs = new Date(campaign.offerStartDate).getTime();
+  const offerEndTs = new Date(campaign.offerEndDate).getTime();
 
-  if (currentTs < offerStartTs) {
+  if (state === 'PRE_FESTIVAL') {
     const diffMs = Math.max(0, offerStartTs - currentTs);
     const totalSeconds = Math.floor(diffMs / 1000);
     const days = Math.floor(totalSeconds / 86400);
@@ -194,14 +195,16 @@ export const getFestivalCountdown = (
       minutes,
       seconds,
       totalMs: diffMs,
+      state: 'PRE_FESTIVAL',
       isLive: false,
       isUpcoming: true,
       isEnded: false,
-      targetDateStr: formatISTDate(campaign.offerStartDate || campaign.startDate),
+      targetLabel: 'Offer Starts In:',
+      targetDateStr: formatISTDate(campaign.offerStartDate),
     };
   }
 
-  if (currentTs >= offerStartTs && currentTs <= offerEndTs) {
+  if (state === 'ACTIVE_OFFER') {
     const diffMs = Math.max(0, offerEndTs - currentTs);
     const totalSeconds = Math.floor(diffMs / 1000);
     const days = Math.floor(totalSeconds / 86400);
@@ -215,9 +218,11 @@ export const getFestivalCountdown = (
       minutes,
       seconds,
       totalMs: diffMs,
+      state: 'ACTIVE_OFFER',
       isLive: true,
       isUpcoming: false,
       isEnded: false,
+      targetLabel: 'Offer Ends In:',
       targetDateStr: 'Today',
     };
   }
@@ -228,18 +233,18 @@ export const getFestivalCountdown = (
     minutes: 0,
     seconds: 0,
     totalMs: 0,
+    state: 'ENDED',
     isLive: false,
     isUpcoming: false,
     isEnded: true,
+    targetLabel: 'Offer Ended',
     targetDateStr: 'Ended',
   };
 };
 
 /**
- * Calculates the exact festival promotional discount on the eligible food subtotal or items list.
- * Supports differential discounts: e.g. 20% on Pizzas & 10% on all other items.
- * If the festival offer period has ended (even though theme week continues), returns 0 discount.
- * Never applies discount to delivery fees, tips, or separate surcharges.
+ * Calculates festival discount.
+ * Strictly returns 0 if lifecycle is PRE_FESTIVAL or ENDED.
  */
 export const calculateFestivalDiscount = (
   campaign: FestivalCampaign | null,
@@ -323,4 +328,3 @@ export const calculateFestivalDiscount = (
     otherSubtotal: rawSubtotal,
   };
 };
-

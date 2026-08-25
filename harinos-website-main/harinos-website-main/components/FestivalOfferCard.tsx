@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { FestivalCampaign } from '../config/festivalCampaigns';
-import { isCampaignOfferActive, getFestivalCountdown, FestivalCountdown } from '../services/festivalEngine';
+import { getFestivalAssetPackage } from '../config/festivalAssets';
+import {
+  getFestivalLifecycleState,
+  getFestivalCountdown,
+  FestivalCountdown,
+} from '../services/festivalEngine';
 
 interface FestivalOfferCardProps {
   campaign: FestivalCampaign;
@@ -11,11 +16,12 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
   campaign,
   onExploreMenu,
 }) => {
-  const [videoError, setVideoError] = useState(false);
-  const [countdown, setCountdown] = useState<FestivalCountdown | null>(() => getFestivalCountdown(campaign));
+  const [countdown, setCountdown] = useState<FestivalCountdown | null>(() =>
+    getFestivalCountdown(campaign),
+  );
 
   useEffect(() => {
-    // Live ticking countdown timer
+    // Live countdown timer update every second
     const interval = setInterval(() => {
       setCountdown(getFestivalCountdown(campaign));
     }, 1000);
@@ -26,53 +32,48 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
     return null;
   }
 
-  const isLive = isCampaignOfferActive(campaign);
-  const isUpcoming = countdown?.isUpcoming ?? false;
+  const lifecycleState = getFestivalLifecycleState(campaign);
 
-  // Don't render if expired/ended
-  if (!isLive && !isUpcoming) {
+  // If festival has concluded, cleanly unmount and do not render
+  if (lifecycleState === 'ENDED') {
     return null;
   }
 
-  const hasVideo = !!campaign.media.video && !videoError;
+  const isLive = lifecycleState === 'ACTIVE_OFFER';
+  const isUpcoming = lifecycleState === 'PRE_FESTIVAL';
+
+  // Resolve isolated asset package for THIS festival
+  const assetPackage = getFestivalAssetPackage(campaign.baseId || campaign.id);
 
   return (
     <section className="mx-auto mt-6 max-w-7xl px-4 sm:mt-8 animate-fade-in">
       <div className="relative overflow-hidden rounded-[2rem] border border-orange-200/80 bg-gradient-to-br from-white via-orange-50/40 to-emerald-50/30 shadow-[0_20px_50px_rgba(234,88,12,0.12)]">
-        {/* Subtle decorative glow accents */}
-        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-orange-400/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-emerald-500/15 blur-3xl" />
+        {/* Subtle decorative glow accents using festival theme colors */}
+        <div
+          className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full blur-3xl opacity-20"
+          style={{ backgroundColor: campaign.theme.primaryAccent }}
+        />
+        <div
+          className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full blur-3xl opacity-20"
+          style={{ backgroundColor: campaign.theme.secondaryAccent }}
+        />
 
         <div className="grid grid-cols-1 items-center lg:grid-cols-12">
-          {/* Media column (Video or Image) */}
+          {/* Media column - Dedicated Festival Artwork (Zero cross-festival bleed) */}
           <div className="relative h-64 overflow-hidden sm:h-80 lg:col-span-6 lg:h-full min-h-[280px]">
-            {hasVideo ? (
-              <video
-                src={campaign.media.video}
-                poster={campaign.media.videoPoster || campaign.media.promotionalImage}
-                autoPlay
-                muted
-                loop
-                playsInline
-                onError={() => setVideoError(true)}
-                className="h-full w-full object-cover"
-              />
+            {assetPackage ? (
+              assetPackage.renderArtwork('w-full h-full')
             ) : (
-              <img
-                src={campaign.media.promotionalImage}
-                alt={campaign.name}
-                className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
-                onError={(e) => {
-                  e.currentTarget.src = '/images/vegover.jpeg';
-                }}
-              />
+              <div className="w-full h-full min-h-[280px] bg-slate-900 flex items-center justify-center text-white">
+                <span className="font-bold">{campaign.name}</span>
+              </div>
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/20 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:to-white/90" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent lg:bg-gradient-to-r lg:from-transparent lg:to-white/90 pointer-events-none" />
 
-            {/* Over-image badge */}
-            <div className="absolute left-4 top-4 rounded-full bg-slate-950/80 px-3 py-1.5 backdrop-blur-md">
+            {/* Over-artwork badge */}
+            <div className="absolute left-4 top-4 rounded-full bg-slate-950/85 px-3 py-1.5 backdrop-blur-md shadow-md">
               <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white">
-                {campaign.theme.heroTag || 'Festival Special'}
+                {campaign.theme.heroTag || `${campaign.name} Special`}
               </span>
             </div>
           </div>
@@ -86,7 +87,7 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
                 </span>
                 {isLive ? (
                   <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-800 animate-pulse">
-                    ⚡ Auto Applied in Cart
+                    ⚡ Auto Applied in Cart Today
                   </span>
                 ) : (
                   <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-amber-800">
@@ -103,38 +104,44 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
                 {campaign.offer.description}
               </p>
 
-              {/* Countdown Timer Block when Offer is Upcoming */}
-              {isUpcoming && countdown && (
-                <div className="mt-4 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 p-3.5 backdrop-blur-sm">
+              {/* State-Aware Countdown Timer */}
+              {countdown && (isUpcoming || isLive) && (
+                <div className={`mt-4 rounded-2xl border p-3.5 backdrop-blur-sm ${
+                  isLive
+                    ? 'border-emerald-200 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10'
+                    : 'border-amber-200 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10'
+                }`}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-900">
-                      Offer Starts In:
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${
+                      isLive ? 'text-emerald-900' : 'text-amber-900'
+                    }`}>
+                      {countdown.targetLabel}
                     </span>
-                    <span className="text-[9px] font-bold text-amber-700 bg-white/80 px-2 py-0.5 rounded-md">
-                      Festival Day Special
+                    <span className="text-[9px] font-bold text-slate-700 bg-white/85 px-2 py-0.5 rounded-md shadow-xs">
+                      {isLive ? '🔥 Live Special' : '⏳ Festival Countdown'}
                     </span>
                   </div>
                   <div className="grid grid-cols-4 gap-2 text-center font-mono">
                     <div className="rounded-xl bg-slate-900 p-2 text-white shadow-sm">
-                      <div className="text-lg sm:text-2xl font-black text-amber-400">
+                      <div className={`text-lg sm:text-2xl font-black ${isLive ? 'text-emerald-400' : 'text-amber-400'}`}>
                         {String(countdown.days).padStart(2, '0')}
                       </div>
                       <div className="text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">Days</div>
                     </div>
                     <div className="rounded-xl bg-slate-900 p-2 text-white shadow-sm">
-                      <div className="text-lg sm:text-2xl font-black text-amber-400">
+                      <div className={`text-lg sm:text-2xl font-black ${isLive ? 'text-emerald-400' : 'text-amber-400'}`}>
                         {String(countdown.hours).padStart(2, '0')}
                       </div>
                       <div className="text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">Hours</div>
                     </div>
                     <div className="rounded-xl bg-slate-900 p-2 text-white shadow-sm">
-                      <div className="text-lg sm:text-2xl font-black text-amber-400">
+                      <div className={`text-lg sm:text-2xl font-black ${isLive ? 'text-emerald-400' : 'text-amber-400'}`}>
                         {String(countdown.minutes).padStart(2, '0')}
                       </div>
                       <div className="text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">Mins</div>
                     </div>
                     <div className="rounded-xl bg-slate-900 p-2 text-white shadow-sm">
-                      <div className="text-lg sm:text-2xl font-black text-amber-400 animate-pulse">
+                      <div className={`text-lg sm:text-2xl font-black animate-pulse ${isLive ? 'text-emerald-400' : 'text-amber-400'}`}>
                         {String(countdown.seconds).padStart(2, '0')}
                       </div>
                       <div className="text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">Secs</div>
@@ -143,7 +150,7 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
                 </div>
               )}
 
-              {/* Discount Information */}
+              {/* Discount Details Block */}
               <div className="mt-4 rounded-2xl border border-orange-100/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-red-600 text-white font-black text-xs shadow-md shadow-orange-500/20 leading-tight">

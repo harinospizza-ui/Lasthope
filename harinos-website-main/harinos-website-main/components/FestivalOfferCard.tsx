@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FestivalCampaign } from '../config/festivalCampaigns';
-import { isCampaignOfferActive } from '../services/festivalEngine';
+import { isCampaignOfferActive, getFestivalCountdown, FestivalCountdown } from '../services/festivalEngine';
 
 interface FestivalOfferCardProps {
   campaign: FestivalCampaign;
@@ -12,8 +12,25 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
   onExploreMenu,
 }) => {
   const [videoError, setVideoError] = useState(false);
+  const [countdown, setCountdown] = useState<FestivalCountdown | null>(() => getFestivalCountdown(campaign));
 
-  if (!isCampaignOfferActive(campaign)) {
+  useEffect(() => {
+    // Live ticking countdown timer
+    const interval = setInterval(() => {
+      setCountdown(getFestivalCountdown(campaign));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [campaign]);
+
+  if (!campaign || !campaign.enabled) {
+    return null;
+  }
+
+  const isLive = isCampaignOfferActive(campaign);
+  const isUpcoming = countdown?.isUpcoming ?? false;
+
+  // Don't render if expired/ended
+  if (!isLive && !isUpcoming) {
     return null;
   }
 
@@ -46,14 +63,13 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
                 alt={campaign.name}
                 className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
                 onError={(e) => {
-                  // Graceful fallback to default image if specific webp fails
                   e.currentTarget.src = '/images/vegover.jpeg';
                 }}
               />
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/20 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:to-white/90" />
 
-            {/* Over-image badge on mobile */}
+            {/* Over-image badge */}
             <div className="absolute left-4 top-4 rounded-full bg-slate-950/80 px-3 py-1.5 backdrop-blur-md">
               <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white">
                 {campaign.theme.heroTag || 'Festival Special'}
@@ -68,20 +84,67 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
                 <span className={`inline-flex items-center rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] shadow-sm ${campaign.theme.badgeBg} ${campaign.theme.badgeText}`}>
                   {campaign.offer.badge}
                 </span>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-800">
-                  ⚡ Auto Applied in Cart
-                </span>
+                {isLive ? (
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-800 animate-pulse">
+                    ⚡ Auto Applied in Cart
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-amber-800">
+                    ⏳ Unlocks on {countdown?.targetDateStr}
+                  </span>
+                )}
               </div>
 
               <h2 className="mt-4 font-display text-2xl font-black tracking-tight text-slate-900 sm:text-4xl leading-tight">
                 {campaign.offer.title}
               </h2>
 
-              <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:text-base font-normal">
+              <p className="mt-2 text-sm leading-relaxed text-slate-600 sm:text-base font-normal">
                 {campaign.offer.description}
               </p>
 
-              <div className="mt-5 rounded-2xl border border-orange-100/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
+              {/* Countdown Timer Block when Offer is Upcoming */}
+              {isUpcoming && countdown && (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 p-3.5 backdrop-blur-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-900">
+                      Offer Starts In:
+                    </span>
+                    <span className="text-[9px] font-bold text-amber-700 bg-white/80 px-2 py-0.5 rounded-md">
+                      Festival Day Special
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-center font-mono">
+                    <div className="rounded-xl bg-slate-900 p-2 text-white shadow-sm">
+                      <div className="text-lg sm:text-2xl font-black text-amber-400">
+                        {String(countdown.days).padStart(2, '0')}
+                      </div>
+                      <div className="text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">Days</div>
+                    </div>
+                    <div className="rounded-xl bg-slate-900 p-2 text-white shadow-sm">
+                      <div className="text-lg sm:text-2xl font-black text-amber-400">
+                        {String(countdown.hours).padStart(2, '0')}
+                      </div>
+                      <div className="text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">Hours</div>
+                    </div>
+                    <div className="rounded-xl bg-slate-900 p-2 text-white shadow-sm">
+                      <div className="text-lg sm:text-2xl font-black text-amber-400">
+                        {String(countdown.minutes).padStart(2, '0')}
+                      </div>
+                      <div className="text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">Mins</div>
+                    </div>
+                    <div className="rounded-xl bg-slate-900 p-2 text-white shadow-sm">
+                      <div className="text-lg sm:text-2xl font-black text-amber-400 animate-pulse">
+                        {String(countdown.seconds).padStart(2, '0')}
+                      </div>
+                      <div className="text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">Secs</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Discount Information */}
+              <div className="mt-4 rounded-2xl border border-orange-100/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-red-600 text-white font-black text-xs shadow-md shadow-orange-500/20 leading-tight">
                     {campaign.offer.pizzaDiscountValue && campaign.offer.otherDiscountValue ? (
@@ -95,7 +158,7 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Instant Cart Discount
+                      {isLive ? 'Instant Cart Discount' : 'Upcoming Festival Discount'}
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       {campaign.offer.terms}
@@ -110,7 +173,9 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
                 onClick={onExploreMenu}
                 className="w-full sm:w-auto flex-1 rounded-2xl bg-gradient-to-r from-red-650 via-red-600 to-orange-600 px-6 py-4 text-center text-xs font-black uppercase tracking-[0.22em] text-white shadow-xl shadow-red-600/25 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
               >
-                Order Now with {campaign.offer.discountValue}% Off
+                {isLive
+                  ? `Order Now with ${campaign.offer.discountValue}% Off`
+                  : 'Explore Menu Ahead of Festival'}
               </button>
             </div>
           </div>

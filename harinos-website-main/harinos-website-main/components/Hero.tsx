@@ -31,7 +31,7 @@ const Hero: React.FC<HeroProps> = ({ onShare, onExploreMenu, campaign }) => {
   const subheadline = isFestival && campaign.theme.heroSubheadline
     ? (isOfferActive
         ? campaign.theme.heroSubheadline
-        : campaign.theme.heroSubheadline.replace(/Enjoy flat \d+%.*?\./i, 'Celebrating with pure vegetarian culinary excellence.'))
+        : campaign.theme.heroSubheadline.replace(/Enjoy flat \d+%.*?\./i, `Get ready for flat ${campaign.offer.discountValue}% OFF on ${campaign.name}!`))
     : "Indulge in Harino's handcrafted recipes. BECAUSE HARI KNOWS exactly how to bake the perfect pizza.";
 
   return (
@@ -64,7 +64,11 @@ const Hero: React.FC<HeroProps> = ({ onShare, onExploreMenu, campaign }) => {
                   : 'bg-red-600 hover:bg-red-700 shadow-red-900/20'
               }`}
             >
-              {isFestival && isOfferActive ? `Explore Menu • ${campaign.offer.discountValue}% OFF` : 'Explore Menu'}
+              {isFestival
+                ? (isOfferActive
+                    ? `Explore Menu • ${campaign.offer.discountValue}% OFF`
+                    : `Explore Menu • ${campaign.name} Week`)
+                : 'Explore Menu'}
             </button>
             <button 
               onClick={onShare}

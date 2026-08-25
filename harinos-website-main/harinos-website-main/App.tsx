@@ -2109,7 +2109,7 @@ const App: React.FC = () => {
         {view === 'menu' ? (
           <>
             <Hero onShare={handleShare} onExploreMenu={openCategoryView} campaign={activeCampaign} />
-            {activeCampaign && isCampaignOfferActive(activeCampaign) && (
+            {activeCampaign && (
               <FestivalOfferCard campaign={activeCampaign} onExploreMenu={openCategoryView} />
             )}
             <OfferCarousel offers={activeOfferCards} onAction={handleOfferAction} />

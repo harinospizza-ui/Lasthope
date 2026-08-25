@@ -145,10 +145,16 @@ const Header: React.FC<HeaderProps> = ({
               >
                 Because Hari Knows
               </span>
-              {campaign && isCampaignOfferActive(campaign) && (
-                <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-orange-500 text-white shadow-sm animate-pulse">
-                  {campaign.offer.discountValue}% OFF ACTIVE
-                </span>
+              {campaign && (
+                isCampaignOfferActive(campaign) ? (
+                  <span className="hidden sm:inline-block ml-2 px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-sm animate-pulse">
+                    {campaign.offer.discountValue}% OFF ACTIVE
+                  </span>
+                ) : (
+                  <span className="hidden sm:inline-block ml-2 px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-sm">
+                    {campaign.name} Special
+                  </span>
+                )
               )}
             </div>
           </button>

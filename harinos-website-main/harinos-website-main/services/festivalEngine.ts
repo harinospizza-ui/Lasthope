@@ -109,6 +109,18 @@ export interface FestivalDiscountResult {
   otherSubtotal: number;
 }
 
+export interface FestivalCountdown {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  totalMs: number;
+  isLive: boolean;
+  isUpcoming: boolean;
+  isEnded: boolean;
+  targetDateStr: string;
+}
+
 /**
  * Checks if the promotional offer discount is active for a campaign.
  * The festival visual theme can stay for the entire festival week,
@@ -130,6 +142,97 @@ export const isCampaignOfferActive = (
   ).getTime();
 
   return currentTs >= offerStartTs && currentTs <= offerEndTs;
+};
+
+/**
+ * Checks if we are in the pre-festival theme week leading up to the discount offer.
+ */
+export const isCampaignUpcomingOffer = (
+  campaign: FestivalCampaign | null,
+  overrideDate?: Date | string,
+): boolean => {
+  if (!campaign || !campaign.enabled || !campaign.offer || !campaign.offer.enabled) {
+    return false;
+  }
+  const currentTs = getNowTimestampIST(overrideDate);
+  const startTs = new Date(campaign.startDate).getTime();
+  const offerStartTs = new Date(
+    campaign.offerStartDate || campaign.offer.offerStartDate || campaign.startDate,
+  ).getTime();
+
+  return currentTs >= startTs && currentTs < offerStartTs;
+};
+
+/**
+ * Computes live countdown timer until the festival offer unlocks or ends.
+ */
+export const getFestivalCountdown = (
+  campaign: FestivalCampaign | null,
+  overrideDate?: Date | string,
+): FestivalCountdown | null => {
+  if (!campaign || !campaign.offer) return null;
+
+  const currentTs = getNowTimestampIST(overrideDate);
+  const offerStartTs = new Date(
+    campaign.offerStartDate || campaign.offer.offerStartDate || campaign.startDate,
+  ).getTime();
+  const offerEndTs = new Date(
+    campaign.offerEndDate || campaign.offer.offerEndDate || campaign.endDate,
+  ).getTime();
+
+  if (currentTs < offerStartTs) {
+    const diffMs = Math.max(0, offerStartTs - currentTs);
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return {
+      days,
+      hours,
+      minutes,
+      seconds,
+      totalMs: diffMs,
+      isLive: false,
+      isUpcoming: true,
+      isEnded: false,
+      targetDateStr: formatISTDate(campaign.offerStartDate || campaign.startDate),
+    };
+  }
+
+  if (currentTs >= offerStartTs && currentTs <= offerEndTs) {
+    const diffMs = Math.max(0, offerEndTs - currentTs);
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return {
+      days,
+      hours,
+      minutes,
+      seconds,
+      totalMs: diffMs,
+      isLive: true,
+      isUpcoming: false,
+      isEnded: false,
+      targetDateStr: 'Today',
+    };
+  }
+
+  return {
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+    totalMs: 0,
+    isLive: false,
+    isUpcoming: false,
+    isEnded: true,
+    targetDateStr: 'Ended',
+  };
 };
 
 /**

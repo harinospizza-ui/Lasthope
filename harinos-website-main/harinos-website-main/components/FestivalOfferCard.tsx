@@ -181,7 +181,7 @@ export const FestivalOfferCard: React.FC<FestivalOfferCardProps> = ({
                 className="w-full sm:w-auto flex-1 rounded-2xl bg-gradient-to-r from-red-650 via-red-600 to-orange-600 px-6 py-4 text-center text-xs font-black uppercase tracking-[0.22em] text-white shadow-xl shadow-red-600/25 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
               >
                 {isLive
-                  ? `Order Now with ${campaign.offer.discountValue}% Off`
+                  ? 'Order Now • 20% OFF Pizzas & 10% OFF Others'
                   : 'Explore Menu Ahead of Festival'}
               </button>
             </div>

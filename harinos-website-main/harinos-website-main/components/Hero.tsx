@@ -85,7 +85,7 @@ export const Hero: React.FC<HeroProps> = ({ onShare, onExploreMenu, campaign }) 
               </span>
               {isFestival && (
                 <span className="inline-flex items-center py-1 px-3 rounded-full bg-white/10 border border-white/20 text-[9px] font-bold uppercase tracking-wider text-amber-300 backdrop-blur-md">
-                  {isOfferActive ? '⚡ 20% OFF Live Today' : '⏳ Special Celebration'}
+                  {isOfferActive ? '⚡ 20% OFF PIZZAS • 10% OFF OTHERS' : '⏳ Special Celebration'}
                 </span>
               )}
             </div>
@@ -119,7 +119,7 @@ export const Hero: React.FC<HeroProps> = ({ onShare, onExploreMenu, campaign }) 
               >
                 {isFestival
                   ? isOfferActive
-                    ? `Order Now • Flat ${campaign.offer.discountValue}% OFF`
+                    ? 'Order Now • 20% OFF Pizzas & 10% OFF Others'
                     : `Explore Menu • ${campaign.name} Special`
                   : 'Explore Menu'}
               </button>

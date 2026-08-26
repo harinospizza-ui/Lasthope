@@ -125,8 +125,8 @@ const Header: React.FC<HeaderProps> = ({
             <span className="opacity-75">•</span>
             <span>
               {isCampaignOfferActive(campaign)
-                ? `⚡ Flat ${campaign.offer.discountValue}% OFF Auto-Applied in Cart Today!`
-                : `⏳ Flat ${campaign.offer.discountValue}% OFF on ${new Date(campaign.offerStartDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' })}`}
+                ? `⚡ Flat 20% OFF on Pizzas & 10% OFF on Others Auto-Applied Today!`
+                : `⏳ Flat 20% OFF on Pizzas & 10% OFF on Others on ${new Date(campaign.offerStartDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' })}`}
             </span>
           </div>
         </div>
@@ -168,7 +168,7 @@ const Header: React.FC<HeaderProps> = ({
               {campaign && (
                 isCampaignOfferActive(campaign) ? (
                   <span className="hidden sm:inline-block ml-2 px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-sm animate-pulse">
-                    {campaign.offer.discountValue}% OFF ACTIVE
+                    20% OFF PIZZAS • 10% OFF OTHERS
                   </span>
                 ) : (
                   <span className="hidden sm:inline-block ml-2 px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-sm">

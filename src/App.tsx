@@ -773,6 +773,19 @@ const App: React.FC = () => {
     registerPush();
   }, [configLoaded, customerProfile?.phone, customerProfile?.id, nearestOutletMatch?.outlet?.id]);
 
+  // Unified Real-Time Notification Engine for Orders, Wallet, and Offers
+  useEffect(() => {
+    if (!configLoaded) return;
+    let stopEngine: (() => void) | undefined;
+    import('./services/notificationEngine').then(({ startNotificationEngine }) => {
+      stopEngine = startNotificationEngine(customerProfile);
+    });
+
+    return () => {
+      if (stopEngine) stopEngine();
+    };
+  }, [configLoaded, customerProfile?.id, customerProfile?.phone]);
+
   // Listen to live broadcast notifications in real-time
   useEffect(() => {
     if (!configLoaded) return;

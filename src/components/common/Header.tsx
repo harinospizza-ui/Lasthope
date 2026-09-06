@@ -59,11 +59,21 @@ const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const handleRequestNotifs = async () => {
+    if (notifStatus === 'granted') {
+      await NotificationService.sendTestNotification();
+      return;
+    }
+
     const granted = await NotificationService.requestPermission();
     setNotifStatus(granted ? 'granted' : 'denied');
 
     if (granted) {
-      NotificationService.show('Alerts Enabled', 'You will now receive order updates and special offers.');
+      await NotificationService.show(
+        '🍕 Alerts Enabled!',
+        'You will now receive live notifications for your order updates, wallet balance, and special offers.',
+        undefined,
+        'success'
+      );
       onNotificationsEnabled();
     }
   };
@@ -200,6 +210,26 @@ const Header: React.FC<HeaderProps> = ({
                 📥 <span className="hidden xs:inline">Install updates</span>
               </button>
             )}
+
+            {/* Notification Alerts Button */}
+            <button
+              onClick={handleRequestNotifs}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale cursor-pointer ${
+                notifStatus === 'granted'
+                  ? isScrolledOrLight
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm'
+                    : 'bg-emerald-600/30 border-emerald-500/40 text-emerald-300 backdrop-blur-md'
+                  : isScrolledOrLight
+                  ? 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100 shadow-sm'
+                  : 'bg-white/10 border-white/10 text-white hover:bg-white/20 backdrop-blur-md'
+              }`}
+              title={notifStatus === 'granted' ? 'Alerts Active (Click to test)' : 'Enable Order, Wallet & Offer Alerts'}
+            >
+              <span>{notifStatus === 'granted' ? '🔔' : '🔕'}</span>
+              <span className="hidden sm:inline">
+                {notifStatus === 'granted' ? 'Alerts On' : 'Alerts'}
+              </span>
+            </button>
 
             {/* Orders History Button */}
             <button

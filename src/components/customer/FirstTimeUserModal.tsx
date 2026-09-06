@@ -66,10 +66,17 @@ const FirstTimeUserModal: React.FC<FirstTimeUserModalProps> = ({
 
   const handleAllowNotifications = async () => {
     try {
-      const permission = await Notification.requestPermission();
-      setNotificationStatus(permission);
-      if (permission === 'granted') {
-        alert('Notification access granted successfully!');
+      const { NotificationService } = await import('../../services/notification');
+      const granted = await NotificationService.requestPermission();
+      setNotificationStatus(granted ? 'granted' : 'denied');
+      if (granted) {
+        await NotificationService.show(
+          '🍕 Alerts Enabled!',
+          'You will now receive live alerts for your orders, wallet balance, and special offers.',
+          undefined,
+          'success'
+        );
+        alert('Notification access granted successfully! Live order, wallet, and offer alerts are now enabled.');
       } else {
         alert('Notification access was denied. Please enable it in browser settings.');
       }

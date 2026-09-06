@@ -14,7 +14,28 @@ self.addEventListener('activate', (event) => {
 
 
 /**
- * Handle push notifications from Firebase Cloud Messaging
+ * Handle direct postMessage from client to show notification
+ */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data;
+    event.waitUntil(
+      self.registration.showNotification(title || "Harino's Pizza", {
+        body: options?.body || '',
+        icon: options?.icon || '/icon-192.png',
+        badge: options?.badge || '/icon-192.png',
+        tag: options?.tag || `harinos-${Date.now()}`,
+        data: options?.data || {},
+        vibrate: options?.vibrate || [400, 200, 400, 200, 400],
+        requireInteraction: options?.requireInteraction || false,
+        renotify: options?.renotify !== false,
+      })
+    );
+  }
+});
+
+/**
+ * Handle push notifications from Firebase Cloud Messaging or Web Push
  */
 self.addEventListener('push', (event) => {
   if (!event.data) {
@@ -22,28 +43,32 @@ self.addEventListener('push', (event) => {
     return;
   }
 
-  let payload;
+  let payload = {};
   try {
     payload = event.data.json();
   } catch (error) {
-    console.error('Error parsing push notification data:', error);
-    return;
+    try {
+      payload = { title: "Harino's Pizza", body: event.data.text() };
+    } catch {
+      console.error('Error parsing push notification data:', error);
+      return;
+    }
   }
 
-  const { notification, data } = payload;
-  if (!notification) {
-    console.warn('Push notification received without notification field');
-    return;
-  }
+  const notification = payload.notification || {};
+  const data = payload.data || {};
+  const notifTitle = notification.title || data.title || payload.title || "Harino's Pizza";
+  const notifBody = notification.body || data.body || payload.body || "You have an update from Harino's";
 
   const options = {
-    body: notification.body || '',
-    icon: notification.icon || '/icon-192.png',
-    badge: notification.badge || '/icon-192.png',
-    tag: data?.tag || 'harinos-notification',
-    data: data || {},
-    vibrate: [300, 200, 300],
+    body: notifBody,
+    icon: notification.icon || data.icon || '/icon-192.png',
+    badge: notification.badge || data.badge || '/icon-192.png',
+    tag: data?.tag || notification.tag || `harinos-${Date.now()}`,
+    data: data,
+    vibrate: [400, 200, 400, 200, 400],
     requireInteraction: false,
+    renotify: true,
     actions: [
       {
         action: 'open',
@@ -59,7 +84,7 @@ self.addEventListener('push', (event) => {
   };
 
   const promises = [];
-  promises.push(self.registration.showNotification(notification.title || 'Harino\'s', options));
+  promises.push(self.registration.showNotification(notifTitle, options));
 
   // Set homescreen app icon badge if pendingCount exists
   if (data && data.pendingCount) {

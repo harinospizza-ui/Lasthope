@@ -49,11 +49,14 @@ export const registerFreshRuntime = async (): Promise<void> => {
   }
 
   try {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    for (const registration of registrations) {
-      await registration.unregister();
-    }
+    const registration = await navigator.serviceWorker.register('/sw.js', {
+      scope: '/',
+      updateViaCache: 'none',
+    });
+    // Silent background check for worker bundle update
+    registration.update().catch(() => {});
+    console.log('[Runtime] Harino\'s Service Worker active:', registration.scope);
   } catch (error) {
-    console.warn('Service worker unregistration failed:', error);
+    console.warn('[Runtime] Service worker registration notice:', error);
   }
 };

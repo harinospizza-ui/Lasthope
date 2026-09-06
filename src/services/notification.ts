@@ -53,29 +53,36 @@ const playChime = (tone: 'order' | 'wallet' | 'offer' | 'status' = 'order') => {
 
 export const NotificationService = {
   requestPermission: async (): Promise<boolean> => {
-    const permission = getNotificationPermission();
-
-    if (permission === 'unsupported') {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
       console.warn('This browser does not support push notifications');
       return false;
     }
 
-    if (permission === 'granted') return true;
-
-    if (permission !== 'denied') {
+    let permission = Notification.permission;
+    if (permission === 'default') {
       try {
-        const nextPermission = await Notification.requestPermission();
-        return nextPermission === 'granted';
+        permission = await Notification.requestPermission();
       } catch (err) {
         console.warn('Notification permission request error:', err);
-        return false;
       }
+    }
+
+    if (permission === 'granted') {
+      // Ensure Service Worker is registered immediately
+      if ('serviceWorker' in navigator) {
+        try {
+          await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        } catch (e) {
+          console.warn('SW registration notice:', e);
+        }
+      }
+      return true;
     }
 
     return false;
   },
 
-  show: (
+  show: async (
     title: string,
     body: string,
     icon?: string,
@@ -108,38 +115,70 @@ export const NotificationService = {
     }
 
     // 4. Send system push notification if permitted
-    if (getNotificationPermission() === 'granted') {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       const options = {
         body,
         icon: icon || DEFAULT_ICON,
         badge: DEFAULT_ICON,
-        vibrate: [150, 75, 150],
+        vibrate: [400, 200, 400, 200, 400],
         tag: tag || `harinos-${Date.now()}`,
+        requireInteraction: false,
+        renotify: true,
+        data: { url: '/' },
       };
 
+      let shown = false;
+
+      // Method A: Direct Service Worker showNotification (works on Android Chrome and iOS PWA)
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready
-          .then((registration) => {
-            registration.showNotification(title, options).catch((err) => {
-              console.warn('SW notification fallback:', err);
-              try {
-                new Notification(title, options);
-              } catch {}
-            });
-          })
-          .catch(() => {
-            try {
-              new Notification(title, options);
-            } catch {}
-          });
-      } else {
+        try {
+          let reg = await navigator.serviceWorker.getRegistration();
+          if (!reg) {
+            reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+          }
+          if (reg) {
+            await reg.showNotification(title, options);
+            shown = true;
+          }
+        } catch (swErr) {
+          try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg?.active) {
+              reg.active.postMessage({
+                type: 'SHOW_NOTIFICATION',
+                title,
+                options,
+              });
+              shown = true;
+            }
+          } catch {}
+        }
+      }
+
+      // Method B: Native desktop browser notification fallback
+      if (!shown) {
         try {
           new Notification(title, options);
         } catch (e) {
-          console.warn('Native notification failed:', e);
+          console.warn('Native notification notice:', e);
         }
       }
     }
+  },
+
+  sendTestNotification: async (): Promise<boolean> => {
+    const granted = await NotificationService.requestPermission();
+    if (granted) {
+      await NotificationService.show(
+        '🔔 Notifications Active!',
+        'You will now receive instant alerts for your orders, wallet balance, and special offers.',
+        DEFAULT_ICON,
+        'success',
+        'test-notification'
+      );
+      return true;
+    }
+    return false;
   },
 
   notifyOrderStatus: (

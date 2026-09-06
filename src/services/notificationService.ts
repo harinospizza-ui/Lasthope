@@ -71,19 +71,18 @@ export const sendNotification = async (
       notificationData,
     );
 
-    // Send browser notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(title, {
-          body: message,
-          icon: '/icon-192.png',
-          badge: '/icon-192.png',
-          tag: `order-${orderId}`,
-          requireInteraction: userType !== 'customer',
-        });
-      } catch (error) {
-        console.error('Browser notification failed:', error);
-      }
+    // Send browser / system notification via unified service
+    try {
+      const { NotificationService } = await import('./notification');
+      await NotificationService.show(
+        title,
+        message,
+        '/icon-192.png',
+        userType === 'customer' ? 'success' : 'info',
+        `order-${orderId}`,
+      );
+    } catch (notifErr) {
+      console.warn('System notification delivery notice:', notifErr);
     }
 
     console.log(`Notification sent to ${userType}:`, message);
@@ -188,21 +187,19 @@ export const markNotificationAsRead = async (
 };
 
 export const requestNotificationPermission = async (): Promise<boolean> => {
-  if (!('Notification' in window)) {
-    console.warn('Browser does not support notifications');
+  try {
+    const { NotificationService } = await import('./notification');
+    return await NotificationService.requestPermission();
+  } catch {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') return true;
+      if (Notification.permission !== 'denied') {
+        const res = await Notification.requestPermission();
+        return res === 'granted';
+      }
+    }
     return false;
   }
-
-  if (Notification.permission === 'granted') {
-    return true;
-  }
-
-  if (Notification.permission !== 'denied') {
-    const permission = await Notification.requestPermission();
-    return permission === 'granted';
-  }
-
-  return false;
 };
 
 export const getRecentNotifications = async (

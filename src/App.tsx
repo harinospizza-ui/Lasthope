@@ -752,10 +752,26 @@ const App: React.FC = () => {
     loadData();
   }, [configLoaded]);
 
-  // Request notification permission on app load
+  // Request notification permission and register FCM push token for background alerts (orders, wallets, offers)
   useEffect(() => {
-    void requestNotificationPermission();
-  }, []);
+    if (!configLoaded) return;
+    const registerPush = async () => {
+      try {
+        const granted = await requestNotificationPermission();
+        if (granted || (typeof Notification !== 'undefined' && Notification.permission === 'granted')) {
+          const { getOrCreateFCMToken, sendTokenToServer } = await import('./services/fcmService');
+          const token = await getOrCreateFCMToken();
+          if (token) {
+            const userId = customerProfile?.phone || customerProfile?.id || (customerProfile as any)?.mobileNumber || 'guest_' + (localStorage.getItem('harinos_guest_id') || Date.now());
+            await sendTokenToServer(token, 'customer', userId, nearestOutletMatch?.outlet?.id);
+          }
+        }
+      } catch (e) {
+        console.warn('Background push registration notice:', e);
+      }
+    };
+    registerPush();
+  }, [configLoaded, customerProfile?.phone, customerProfile?.id, nearestOutletMatch?.outlet?.id]);
 
   // Listen to live broadcast notifications in real-time
   useEffect(() => {

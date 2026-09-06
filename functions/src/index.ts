@@ -15,8 +15,8 @@ interface FCMToken {
 }
 
 /**
- * Helper to dispatch FCM notifications to target tokens
- * Automatically cleans up invalid/expired tokens
+ * Dispatch high-priority FCM notifications that wake up devices even when the phone screen is off / locked.
+ * Features store-and-forward (TTL: 24h) so if the phone is turned off, notifications deliver immediately upon turning on.
  */
 async function sendNotificationToTokens(
   tokens: FCMToken[],
@@ -52,16 +52,50 @@ async function sendNotificationToTokens(
         click_action: "/",
       },
       android: {
+        priority: "high" as const,
+        ttl: 86400 * 1000, // 24 hours store-and-forward
         notification: {
+          title,
+          body,
           sound: "default",
-          clickAction: "FLUTTER_NOTIFICATION_CLICK",
+          channelId: "harinos_alerts",
+          priority: "high" as const,
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          visibility: "public" as const,
+          clickAction: "/",
         },
       },
       apns: {
+        headers: {
+          "apns-priority": "10",
+          "apns-push-type": "alert",
+        },
         payload: {
           aps: {
+            alert: {
+              title,
+              body,
+            },
             sound: "default",
+            badge: 1,
+            contentAvailable: true,
           },
+        },
+      },
+      webpush: {
+        headers: {
+          Urgency: "high",
+          TTL: "86400",
+        },
+        notification: {
+          title,
+          body,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+          vibrate: [300, 150, 300, 150, 300],
+          requireInteraction: true,
+          tag: data.orderId ? `order-${data.orderId}` : `harinos-${Date.now()}`,
         },
       },
     };
@@ -69,14 +103,13 @@ async function sendNotificationToTokens(
     try {
       await messaging.send(message);
       sent++;
-      // Log notification success in daily stats
       await logNotificationStats(true);
     } catch (error: any) {
       failed++;
       await logNotificationStats(false);
-      
+
       const errorMsg = error.message || "";
-      const isUnregistered = 
+      const isUnregistered =
         error.code === "messaging/registration-token-not-registered" ||
         error.code === "messaging/invalid-registration-token" ||
         errorMsg.includes("unregistered") ||
@@ -84,16 +117,15 @@ async function sendNotificationToTokens(
 
       if (isUnregistered) {
         try {
-          // Delete token from database
           await db.collection("notification_tokens").doc(tokenData.id).delete();
           removed++;
           await logTokenRemoval();
-          console.log(`[FCM Clean] Cleaned up invalid token: ${tokenData.id}`);
+          console.log(`[FCM Clean] Removed expired token: ${tokenData.id}`);
         } catch (dbErr) {
-          console.warn(`[FCM Clean] Failed to remove invalid token: ${tokenData.id}`, dbErr);
+          console.warn(`[FCM Clean] Failed to remove expired token: ${tokenData.id}`, dbErr);
         }
       } else {
-        console.warn(`[FCM send failed] Token: ${tokenData.id}, Error:`, error);
+        console.warn(`[FCM Failed] Token: ${tokenData.id}, Error:`, error);
       }
     }
   });
@@ -106,7 +138,7 @@ async function sendNotificationToTokens(
  * Statistics Logging Helpers
  */
 async function logNotificationStats(success: boolean) {
-  const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const todayStr = new Date().toISOString().slice(0, 10);
   const statsRef = db.collection("notification_stats").doc(todayStr);
   try {
     await db.runTransaction(async (transaction) => {
@@ -114,7 +146,7 @@ async function logNotificationStats(success: boolean) {
       const data = snap.exists ? snap.data() || {} : {};
       const sentCount = data.sent || 0;
       const failedCount = data.failed || 0;
-      
+
       transaction.set(statsRef, {
         sent: success ? sentCount + 1 : sentCount,
         failed: success ? failedCount : failedCount + 1,
@@ -138,31 +170,51 @@ async function logTokenRemoval() {
   }
 }
 
+const cleanPhone = (phone?: string) => (phone || "").replace(/\D/g, "");
+
 /**
  * 1. Order Created Trigger
- * Notifies Admins, Managers, and Staff of new orders
+ * Notifies customer of confirmation, and staff of new orders
  */
 export const onOrderCreated = onDocumentCreated("orders/{orderId}", async (event) => {
   const snap = event.data;
   if (!snap) return;
   const order = snap.data();
   const orderId = event.params.orderId;
+  const cleanId = orderId.slice(-6).toUpperCase();
 
-  const title = "🍕 New Order Received";
-  const body = `Order #${orderId.slice(-5)} (${order.orderType || 'takeaway'}) is waiting to be prepared.`;
+  // 1a. Notify Customer of Order Confirmation (Wakes device even if screen is off)
+  const customerPhone = cleanPhone(order.customerPhone);
+  const customerId = order.customerId;
+  const targetUserIds = [customerId, customerPhone, order.customerPhone].filter(Boolean);
 
-  // Fetch token subscribers
+  if (targetUserIds.length > 0) {
+    const custSnap = await db.collection("notification_tokens")
+      .where("userId", "in", targetUserIds.slice(0, 10))
+      .where("isActive", "==", true)
+      .get();
+
+    const customerTokens = custSnap.docs.map(d => d.data() as FCMToken);
+    await sendNotificationToTokens(
+      customerTokens,
+      `🍕 Order Confirmed! (#${cleanId})`,
+      `We've received your order of Rs ${Math.round(order.total || 0)}! The Harino's kitchen is preparing it fresh.`,
+      { orderId, eventType: "ORDER_CREATED" }
+    );
+  }
+
+  // 1b. Notify Staff, Managers & Admins
+  const staffTitle = "🍕 New Order Received";
+  const staffBody = `Order #${cleanId} (${order.orderType || 'takeaway'}) - Rs ${Math.round(order.total || 0)} is waiting to be prepared.`;
+
   const tokensSnap = await db.collection("notification_tokens")
     .where("isActive", "==", true)
     .get();
 
   const allTokens = tokensSnap.docs.map(d => d.data() as FCMToken);
-
-  // Filter based on roles and outletId
-  const targets = allTokens.filter(token => {
+  const staffTargets = allTokens.filter(token => {
     if (token.role === "admin") return true;
     if (token.role === "manager" || token.role === "staff") {
-      // If order specifies outletId, check matching outlet
       if (order.outletId && token.outletId) {
         return token.outletId === order.outletId;
       }
@@ -171,7 +223,7 @@ export const onOrderCreated = onDocumentCreated("orders/{orderId}", async (event
     return false;
   });
 
-  await sendNotificationToTokens(targets, title, body, {
+  await sendNotificationToTokens(staffTargets, staffTitle, staffBody, {
     orderId,
     eventType: "NEW_ORDER",
     outletId: order.outletId || "",
@@ -180,8 +232,8 @@ export const onOrderCreated = onDocumentCreated("orders/{orderId}", async (event
 });
 
 /**
- * 2. Order Updated (Status / Cancellation) Trigger
- * Notifies customers of status changes, and notifies staff of cancellations
+ * 2. Order Updated (Status Changes: Preparing, Ready, Out for Delivery, Done, Cancelled)
+ * Pushes high-priority alert waking the device screen and lockscreen
  */
 export const onOrderUpdated = onDocumentUpdated("orders/{orderId}", async (event) => {
   const beforeSnap = event.data?.before;
@@ -191,41 +243,46 @@ export const onOrderUpdated = onDocumentUpdated("orders/{orderId}", async (event
   const before = beforeSnap.data();
   const after = afterSnap.data();
   const orderId = event.params.orderId;
+  const cleanId = orderId.slice(-6).toUpperCase();
 
   const previousStatus = before.status || "new";
   const currentStatus = after.status || "new";
 
-  // Check if status changed
   if (previousStatus === currentStatus) return;
 
-  // 2a. Notify Customer
-  if (after.customerId) {
-    const customerTokensSnap = await db.collection("notification_tokens")
-      .where("userId", "==", after.customerId)
-      .where("role", "==", "customer")
+  // 2a. Notify Customer of Status Update
+  const customerPhone = cleanPhone(after.customerPhone);
+  const customerId = after.customerId;
+  const targetUserIds = [customerId, customerPhone, after.customerPhone].filter(Boolean);
+
+  if (targetUserIds.length > 0) {
+    const custSnap = await db.collection("notification_tokens")
+      .where("userId", "in", targetUserIds.slice(0, 10))
       .where("isActive", "==", true)
       .get();
 
-    const customerTokens = customerTokensSnap.docs.map(d => d.data() as FCMToken);
+    const customerTokens = custSnap.docs.map(d => d.data() as FCMToken);
 
-    let title = "Order Update";
+    let title = `Order Update (#${cleanId})`;
     let body = `Your order status changed to ${currentStatus}.`;
 
     if (currentStatus === "preparing") {
-      title = "Order Confirmed";
-      body = `Your order #${orderId.slice(-5)} is now being prepared.`;
+      title = `👨‍🍳 Preparing Your Fresh Food! (#${cleanId})`;
+      body = "The kitchen is actively baking your pizza and preparing your order fresh right now!";
     } else if (currentStatus === "ready") {
-      title = "✨ Order Ready";
-      body = `Your order #${orderId.slice(-5)} is ready for pickup.`;
+      title = `✅ Hot & Ready! (#${cleanId})`;
+      body = after.orderType === "delivery"
+        ? "Your order is packaged, hot, and ready for dispatch!"
+        : "Your order is steaming hot and ready at the counter! Please collect your meal.";
     } else if (currentStatus === "out_for_delivery") {
-      title = "📍 Out for Delivery";
-      body = `Your order #${orderId.slice(-5)} is on the way.`;
+      title = `🚗 Out for Delivery! (#${cleanId})`;
+      body = "Our delivery rider is on the way with your delicious hot Harino's food!";
     } else if (currentStatus === "done") {
-      title = "✅ Order Completed";
-      body = `Thank you! Your order #${orderId.slice(-5)} has been completed.`;
+      title = `🎉 Order Delivered! (#${cleanId})`;
+      body = "Thank you for ordering with Harino's! Enjoy your meal.";
     } else if (currentStatus === "cancelled") {
-      title = "❌ Order Cancelled";
-      body = `Your order #${orderId.slice(-5)} was cancelled: ${after.cancellationReason || 'No reason specified'}`;
+      title = `❌ Order Cancelled (#${cleanId})`;
+      body = `Your order was cancelled: ${after.cancellationReason || 'No reason specified'}. Applied wallet balance has been refunded.`;
     }
 
     await sendNotificationToTokens(customerTokens, title, body, {
@@ -234,18 +291,17 @@ export const onOrderUpdated = onDocumentUpdated("orders/{orderId}", async (event
     });
   }
 
-  // 2b. If cancelled, notify Staff, Managers, and Admins
+  // 2b. Notify Staff if Order was Cancelled
   if (currentStatus === "cancelled") {
     const title = "⚠️ Order Cancelled";
-    const body = `Order #${orderId.slice(-5)} has been cancelled. Reason: ${after.cancellationReason || 'N/A'}`;
+    const body = `Order #${cleanId} was cancelled. Reason: ${after.cancellationReason || 'N/A'}`;
 
     const tokensSnap = await db.collection("notification_tokens")
       .where("isActive", "==", true)
       .get();
 
     const allTokens = tokensSnap.docs.map(d => d.data() as FCMToken);
-
-    const targets = allTokens.filter(token => {
+    const staffTargets = allTokens.filter(token => {
       if (token.role === "admin") return true;
       if (token.role === "manager" || token.role === "staff") {
         if (after.outletId && token.outletId) {
@@ -256,7 +312,7 @@ export const onOrderUpdated = onDocumentUpdated("orders/{orderId}", async (event
       return false;
     });
 
-    await sendNotificationToTokens(targets, title, body, {
+    await sendNotificationToTokens(staffTargets, title, body, {
       orderId,
       eventType: "ORDER_CANCELLED",
       outletId: after.outletId || "",
@@ -266,8 +322,103 @@ export const onOrderUpdated = onDocumentUpdated("orders/{orderId}", async (event
 });
 
 /**
- * 3. Order Deleted Trigger
- * Notifies Admins of order deletions (soft or hard deletes)
+ * 3. Wallet Updates Trigger
+ * Notifies customer on wallet credit, debit, or reward coin updates
+ */
+export const onWalletTransactionCreated = onDocumentCreated("wallet_transactions/{txId}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const tx = snap.data();
+
+  const customerPhone = cleanPhone(tx.customerPhone);
+  const customerId = tx.customerId;
+  const targetUserIds = [customerId, customerPhone, tx.customerPhone].filter(Boolean);
+
+  if (targetUserIds.length === 0) return;
+
+  const custSnap = await db.collection("notification_tokens")
+    .where("userId", "in", targetUserIds.slice(0, 10))
+    .where("isActive", "==", true)
+    .get();
+
+  const customerTokens = custSnap.docs.map(d => d.data() as FCMToken);
+  if (customerTokens.length === 0) return;
+
+  const amount = Math.round(Math.abs(tx.amount || 0));
+  let title = "💰 Harino's Wallet Update";
+  let body = `Your wallet balance has been updated by Rs ${amount}.`;
+
+  if (tx.type === "credit") {
+    title = "💰 Harino's Wallet Credited!";
+    body = `Rs ${amount} has been added to your Harino's wallet! Balance is ready to use.`;
+  } else if (tx.type === "debit") {
+    title = "💳 Wallet Payment Applied";
+    body = `Rs ${amount} was deducted from your wallet for your order.`;
+  } else if (tx.type === "reward") {
+    title = "🌟 Reward Coins Credited!";
+    body = `+${amount} coins added to your Harino's reward balance!`;
+  }
+
+  await sendNotificationToTokens(customerTokens, title, body, {
+    txId: event.params.txId,
+    eventType: "WALLET_UPDATE",
+    amount: String(amount)
+  });
+});
+
+/**
+ * 4. Offers Trigger
+ * Dispatches high-priority push to all active customers when offers are updated
+ */
+export const onOfferUpdated = onDocumentUpdated("offers/{offerId}", async (event) => {
+  const afterSnap = event.data?.after;
+  if (!afterSnap) return;
+  const offer = afterSnap.data();
+
+  if (!offer.enabled || !offer.notifyCustomers) return;
+
+  const title = `🔥 Special Offer: ${offer.offerTitle || "Discount Alert!"}`;
+  const body = offer.displayText || offer.description || "Check out our latest mouth-watering pizza deals at Harino's!";
+
+  const custSnap = await db.collection("notification_tokens")
+    .where("role", "==", "customer")
+    .where("isActive", "==", true)
+    .get();
+
+  const customerTokens = custSnap.docs.map(d => d.data() as FCMToken);
+
+  await sendNotificationToTokens(customerTokens, title, body, {
+    offerId: event.params.offerId,
+    eventType: "NEW_OFFER"
+  });
+});
+
+/**
+ * 5. Broadcast Notifications Trigger
+ * Sends alert to all customers and staff from broadcast_notifications collection
+ */
+export const onBroadcastCreated = onDocumentCreated("broadcast_notifications/{broadcastId}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const broadcast = snap.data();
+
+  const title = broadcast.title || "Harino's Pizza Update";
+  const body = broadcast.body || broadcast.message || "You have a new update from Harino's!";
+
+  const tokensSnap = await db.collection("notification_tokens")
+    .where("isActive", "==", true)
+    .get();
+
+  const allTokens = tokensSnap.docs.map(d => d.data() as FCMToken);
+
+  await sendNotificationToTokens(allTokens, title, body, {
+    broadcastId: event.params.broadcastId,
+    eventType: "BROADCAST"
+  });
+});
+
+/**
+ * 6. Order Deleted Trigger (Admin notification)
  */
 export const onOrderDeleted = onDocumentDeleted("orders/{orderId}", async (event) => {
   const snap = event.data;
@@ -276,89 +427,17 @@ export const onOrderDeleted = onDocumentDeleted("orders/{orderId}", async (event
   const orderId = event.params.orderId;
 
   const title = "🗑️ Order Record Deleted";
-  const body = `Order #${orderId.slice(-5)} was permanently deleted from the database.`;
+  const body = `Order #${orderId.slice(-6)} was deleted from database.`;
 
-  // Fetch admin tokens only
   const tokensSnap = await db.collection("notification_tokens")
     .where("role", "==", "admin")
     .where("isActive", "==", true)
     .get();
 
   const adminTokens = tokensSnap.docs.map(d => d.data() as FCMToken);
-
   await sendNotificationToTokens(adminTokens, title, body, {
     orderId,
     eventType: "ORDER_DELETED",
     total: String(order.total || 0)
-  });
-});
-
-/**
- * 4. Store Status Changes Trigger
- * Notifies Managers and Admins when store configuration or status updates
- */
-export const onStoreConfigChanged = onDocumentUpdated("settings/{settingId}", async (event) => {
-  if (event.params.settingId !== "app") return;
-
-  const beforeSnap = event.data?.before;
-  const afterSnap = event.data?.after;
-  if (!beforeSnap || !afterSnap) return;
-
-  const before = beforeSnap.data();
-  const after = afterSnap.data();
-
-  // Check if store open/closed configuration changed
-  if (before.storeOpen === after.storeOpen) return;
-
-  const title = "🏪 Store Status Changed";
-  const body = `Harino's Pizza is now ${after.storeOpen ? 'OPEN' : 'CLOSED'} for orders.`;
-
-  const tokensSnap = await db.collection("notification_tokens")
-    .where("isActive", "==", true)
-    .get();
-
-  const allTokens = tokensSnap.docs.map(d => d.data() as FCMToken);
-
-  // Notify Admins and Managers
-  const targets = allTokens.filter(token => token.role === "admin" || token.role === "manager");
-
-  await sendNotificationToTokens(targets, title, body, {
-    eventType: "STORE_STATUS_CHANGED",
-    storeOpen: String(after.storeOpen)
-  });
-});
-
-/**
- * 5. System Alerts / Security Events Trigger
- * Notifies Admins of critical events (Quota warnings, forced session invalidations, security blocks)
- */
-export const onSecurityLogCreated = onDocumentCreated("security_logs/{logId}", async (event) => {
-  const snap = event.data;
-  if (!snap) return;
-  const log = snap.data();
-
-  // Filter for critical levels/actions only
-  const isCritical = 
-    log.action?.includes("QUOTA") || 
-    log.action?.includes("LIMIT") || 
-    log.action?.includes("FORCE") ||
-    log.action?.includes("SECURITY") ||
-    log.action?.includes("FAIL");
-
-  if (!isCritical) return;
-
-  const title = "🚨 System Security Alert";
-  const body = `[${log.action || 'ALERT'}] ${log.details || 'A critical system event occurred.'}`;
-
-  const tokensSnap = await db.collection("notification_tokens")
-    .where("role", "==", "admin")
-    .where("isActive", "==", true)
-    .get();
-
-  const adminTokens = tokensSnap.docs.map(d => d.data() as FCMToken);
-
-  await sendNotificationToTokens(adminTokens, title, body, {
-    eventType: "SYSTEM_ALERT",
-    logId: event.params.logId
   });
 });

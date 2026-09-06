@@ -1,5 +1,6 @@
 import { getMessaging, getToken, onMessage, Unsubscribe } from 'firebase/messaging';
-import { getFirebaseApp, isFirebaseClientConfigured } from './firebaseClient';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, getFirebaseApp, isFirebaseClientConfigured } from './firebaseClient';
 import { StorageService } from './storage';
 
 const API_BASE_URL = (import.meta.env.VITE_ORDER_API_BASE_URL ?? '/api').trim() || '/api';
@@ -103,54 +104,67 @@ export const sendTokenToServer = async (
   userId: string,
   outletId?: string,
 ): Promise<boolean> => {
-  if (!API_BASE_URL) {
-    console.warn('API base URL not configured. Cannot send token to server.');
-    return false;
+  let directFirestoreSaved = false;
+
+  // 1. Direct Firestore write so cloud functions can push directly
+  try {
+    const firestore = db();
+    const cleanUserId = (userId || 'anonymous').replace(/[^a-zA-Z0-9]/g, '_');
+    const tokenDocId = `tok_${cleanUserId}_${token.slice(-10)}`;
+
+    await setDoc(doc(firestore, 'notification_tokens', tokenDocId), {
+      id: tokenDocId,
+      fcmToken: token,
+      role,
+      userId,
+      outletId: outletId || null,
+      isActive: true,
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      platform: getPlatform(),
+      userAgent: navigator.userAgent,
+    }, { merge: true });
+
+    directFirestoreSaved = true;
+    console.log('[FCM] Token stored directly in Firestore notification_tokens for:', userId);
+  } catch (fsErr) {
+    console.warn('[FCM] Direct Firestore token storage warning:', fsErr);
   }
 
-  try {
-    const session = StorageService.getAdminSession();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (session) {
-      if (session.token) {
+  // 2. Also forward to API server if configured
+  if (API_BASE_URL) {
+    try {
+      const session = StorageService.getAdminSession();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (session?.token) {
         headers['Authorization'] = `Bearer ${session.token}`;
       }
-      if (session.sessionId) {
+      if (session?.sessionId) {
         headers['X-Session-Id'] = session.sessionId;
       }
+
+      await fetch(`${API_BASE_URL}/notifications/token`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          fcmToken: token,
+          role,
+          userId,
+          outletId: outletId || undefined,
+          deviceInfo: {
+            userAgent: navigator.userAgent,
+            platform: getPlatform(),
+          },
+        }),
+      });
+    } catch {
+      // Non-fatal
     }
-
-    const response = await fetch(`${API_BASE_URL}/notifications/token`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        fcmToken: token,
-        role,
-        userId,
-        outletId: outletId || undefined,
-        deviceInfo: {
-          userAgent: navigator.userAgent,
-          platform: getPlatform(),
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `Failed to register token: ${(errorData as any).message || response.statusText}`,
-      );
-    }
-
-    console.log('FCM token registered with server');
-    return true;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error sending token to server:', errorMsg);
-    return false;
   }
+
+  return directFirestoreSaved;
 };
 
 /**

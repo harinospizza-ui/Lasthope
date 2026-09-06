@@ -32,18 +32,20 @@ const getMessaging = async () => {
         console.log('[SW] Background message received:', payload);
         const { title, body } = payload.notification || {};
         const data = payload.data || {};
+        const notifTitle = title || data.title || "Harino's Pizza";
+        const notifBody = body || data.body || 'You have an update from Harino\'s';
         
-        if (title || body) {
-          const notificationOptions = {
-            body: body || '',
-            icon: data.icon || '/icon-192.png',
-            badge: data.badge || '/icon-192.png',
-            tag: data.tag || 'harinos-notification',
-            data: data,
-            vibrate: [300, 200, 300]
-          };
-          self.registration.showNotification(title || "Harino's Pizza", notificationOptions);
-        }
+        const notificationOptions = {
+          body: notifBody,
+          icon: data.icon || '/icon-192.png',
+          badge: data.badge || '/icon-192.png',
+          tag: data.tag || `harinos-${Date.now()}`,
+          data: data,
+          vibrate: [400, 200, 400, 200, 400],
+          requireInteraction: true,
+          renotify: true,
+        };
+        self.registration.showNotification(notifTitle, notificationOptions);
       });
       return messaging;
     } catch (e) {
@@ -66,16 +68,19 @@ self.addEventListener('push', (event) => {
         const payload = event.data.json();
         const { title, body } = payload.notification || {};
         const data = payload.data || {};
-        if (title || body) {
-          await self.registration.showNotification(title || "Harino's Pizza", {
-            body: body || '',
-            icon: data.icon || '/icon-192.png',
-            badge: data.badge || '/icon-192.png',
-            tag: data.tag || 'harinos-notification',
-            data: data,
-            vibrate: [300, 200, 300]
-          });
-        }
+        const notifTitle = title || data.title || "Harino's Pizza";
+        const notifBody = body || data.body || 'You have an update from Harino\'s';
+
+        await self.registration.showNotification(notifTitle, {
+          body: notifBody,
+          icon: data.icon || '/icon-192.png',
+          badge: data.badge || '/icon-192.png',
+          tag: data.tag || `harinos-${Date.now()}`,
+          data: data,
+          vibrate: [400, 200, 400, 200, 400],
+          requireInteraction: true,
+          renotify: true,
+        });
       } catch (err) {
         console.error('[SW] Fallback push parser error:', err);
       }

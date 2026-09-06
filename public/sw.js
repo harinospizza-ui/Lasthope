@@ -12,40 +12,6 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  const { request } = event;
-
-  if (request.method !== 'GET') {
-    return;
-  }
-
-  const requestUrl = new URL(request.url);
-  if (requestUrl.origin !== self.location.origin) {
-    return;
-  }
-
-  const shouldBypassCache =
-    request.mode === 'navigate' ||
-    request.destination === 'script' ||
-    request.destination === 'style' ||
-    request.destination === 'worker' ||
-    request.destination === 'manifest' ||
-    request.destination === 'font' ||
-    request.destination === 'document' ||
-    requestUrl.pathname.startsWith('/assets/') ||
-    requestUrl.pathname === '/version.json';
-
-  if (!shouldBypassCache) {
-    return;
-  }
-
-  event.respondWith(
-    fetch(request, { cache: 'no-store' }).catch((err) => {
-      console.warn('SW fetch failed (likely offline):', err);
-      return new Response('Network error (offline)', { status: 503, statusText: 'Offline' });
-    })
-  );
-});
 
 /**
  * Handle push notifications from Firebase Cloud Messaging
@@ -157,5 +123,21 @@ self.addEventListener('notificationclick', (event) => {
  */
 self.addEventListener('notificationclose', (event) => {
   console.log('Notification closed:', event.notification.tag);
+});
+
+// PWA fetch handler for caching and offline routing fallback
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    fetch(event.request).catch(async () => {
+      if (event.request.mode === 'navigate') {
+        const cache = await caches.open('harinos-offline-cache');
+        const cachedResponse = await cache.match('/index.html');
+        if (cachedResponse) return cachedResponse;
+      }
+      return caches.match(event.request).then((response) => response || Response.error());
+    })
+  );
 });
 

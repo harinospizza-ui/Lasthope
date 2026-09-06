@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const ApkInstaller = registerPlugin<any>('ApkInstaller');
 
@@ -10,6 +10,7 @@ interface UpdateModalProps {
   isForceUpdate: boolean;
   apkUrl: string;
   onLater: () => void;
+  isConversionPrompt?: boolean;
 }
 
 const UpdateModal: React.FC<UpdateModalProps> = ({
@@ -18,10 +19,39 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   isForceUpdate,
   apkUrl,
   onLater,
+  isConversionPrompt = false,
 }) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
+  const [installReady, setInstallReady] = useState(false);
+
+  const isNative = Capacitor.isNativePlatform();
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  const cleanupPwaAndMigrate = async () => {
+    try {
+      // Mark as migrated
+      localStorage.setItem('harinos_migrated_to_native', 'true');
+
+      // Unregister PWA service workers so the webapp retires cleanly
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+
+      // Flush old PWA cache storage
+      if ('caches' in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map(key => caches.delete(key)));
+      }
+    } catch (e) {
+      console.warn('PWA retirement cleanup notice:', e);
+    }
+  };
 
   const handleUpdate = async () => {
     try {
@@ -29,70 +59,125 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
       setDownloadProgress(0);
       setError('');
 
-      // Fetch the file natively using web streams inside the native container
-      const response = await fetch(apkUrl);
-      if (!response.ok) throw new Error('Failed to fetch update APK');
+      if (isNative && isAndroid) {
+        // Running inside native Android Capacitor app
+        const response = await fetch(apkUrl);
+        if (!response.ok) throw new Error('Failed to fetch update package');
 
-      const contentLength = response.headers.get('content-length');
-      const total = contentLength ? parseInt(contentLength, 10) : 0;
-      
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No body stream reader available');
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No stream reader available');
 
-      let receivedLength = 0;
-      const chunks: Uint8Array[] = [];
+        let receivedLength = 0;
+        const chunks: Uint8Array[] = [];
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        receivedLength += value.length;
-        if (total > 0) {
-          setDownloadProgress(Math.round((receivedLength / total) * 100));
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          receivedLength += value.length;
+          if (total > 0) {
+            setDownloadProgress(Math.round((receivedLength / total) * 100));
+          }
         }
+
+        const fileData = new Uint8Array(receivedLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+          fileData.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        let binary = '';
+        const len = fileData.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(fileData[i]);
+        }
+        const base64Data = window.btoa(binary);
+        const filename = 'Harinos_update.apk';
+
+        const writeResult = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        });
+
+        setDownloadProgress(100);
+        await ApkInstaller.installApk({ filePath: writeResult.uri });
+      } else if (isAndroid) {
+        // Customer running WebApp / PWA added to home screen
+        // 1. Trigger direct APK download
+        const targetApk = apkUrl || 'https://harinos.store/downloads/Harinos.apk';
+        const response = await fetch(targetApk);
+        if (!response.ok) throw new Error('Failed to download Harino\'s App APK');
+
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        const reader = response.body?.getReader();
+
+        let receivedLength = 0;
+        const chunks: Uint8Array[] = [];
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            receivedLength += value.length;
+            if (total > 0) {
+              setDownloadProgress(Math.round((receivedLength / total) * 100));
+            }
+          }
+        }
+
+        const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
+        const blobUrl = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = blobUrl;
+        anchor.download = 'Harinos.apk';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        window.URL.revokeObjectURL(blobUrl);
+
+        setDownloadProgress(100);
+
+        // 2. Retire PWA service worker and clear web cache
+        await cleanupPwaAndMigrate();
+        setInstallReady(true);
+      } else if (isIOS) {
+        // iOS: Clean up PWA and refresh to latest native bundle
+        await cleanupPwaAndMigrate();
+        window.location.reload();
+      } else {
+        // Desktop / Other: Clean caches and reload
+        await cleanupPwaAndMigrate();
+        window.location.reload();
       }
-
-      // Concatenate chunks
-      const fileData = new Uint8Array(receivedLength);
-      let offset = 0;
-      for (const chunk of chunks) {
-        fileData.set(chunk, offset);
-        offset += chunk.length;
-      }
-
-      // Convert binary Uint8Array to Base64 (Capacitor Filesystem requires base64/strings)
-      let binary = '';
-      const len = fileData.byteLength;
-      for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(fileData[i]);
-      }
-      const base64Data = window.btoa(binary);
-
-      const filename = 'Harinos_update.apk';
-
-      // Write file to native cache
-      const writeResult = await Filesystem.writeFile({
-        path: filename,
-        data: base64Data,
-        directory: Directory.Cache
-      });
-
-      setDownloadProgress(100);
-
-      // Trigger the native installer
-      await ApkInstaller.installApk({ filePath: writeResult.uri });
     } catch (err: any) {
-      console.error(err);
+      console.error('Update error:', err);
       setError(err.message || 'Error occurred downloading package.');
+      // Fallback: Direct download link
+      if (isAndroid && !isNative) {
+        window.location.href = apkUrl || 'https://harinos.store/downloads/Harinos.apk';
+      }
     } finally {
       setIsDownloading(false);
     }
   };
 
+  const handleOpenInstalledApp = () => {
+    window.location.href = 'harinos://open';
+    setTimeout(() => {
+      window.location.href = 'https://harinos.store/open';
+    }, 800);
+  };
+
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/80 p-0 backdrop-blur-md sm:items-center sm:p-4 animate-fade-in">
-      <div className="w-full max-w-md rounded-t-[2.5rem] bg-slate-900 border border-white/5 p-8 shadow-2xl sm:rounded-[2.5rem] relative z-10 text-center text-white overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.22),_transparent_55%)] pointer-events-none" />
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/85 p-0 backdrop-blur-md sm:items-center sm:p-4 animate-fade-in">
+      <div className="w-full max-w-md rounded-t-[2.5rem] bg-slate-900 border border-white/10 p-8 shadow-2xl sm:rounded-[2.5rem] relative z-10 text-center text-white overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.25),_transparent_55%)] pointer-events-none" />
 
         {/* Brand Icon */}
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[1.75rem] bg-white ring-4 ring-white/10 shadow-xl relative overflow-hidden">
@@ -100,23 +185,48 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
         </div>
 
         <h2 className="mt-5 font-display text-2xl font-bold tracking-tight text-white">
-          New Version Available
+          {installReady
+            ? "App Downloaded Successfully!"
+            : isConversionPrompt
+            ? "Switch to Harino's Official App"
+            : "New Version Available"}
         </h2>
-        <div className="mt-1 inline-block rounded-full bg-red-500/10 border border-red-500/20 px-3 py-0.5 text-[9px] font-black uppercase tracking-wider text-red-500">
-          Version {latestVersion}
+
+        <div className="mt-1.5 inline-block rounded-full bg-red-500/10 border border-red-500/25 px-3 py-0.5 text-[9px] font-black uppercase tracking-wider text-red-500">
+          Version {latestVersion || 'Latest'}
         </div>
 
-        {/* Release Notes */}
-        <div className="mt-5 text-left bg-white/5 border border-white/5 rounded-2xl p-4 max-h-36 overflow-y-auto hide-scrollbar">
-          <div className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-300 mb-1.5">
-            What&apos;s New
+        {installReady ? (
+          <div className="mt-5 text-left bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-4.5 space-y-3">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
+              <span>✅</span>
+              <span>Installation Ready</span>
+            </div>
+            <p className="text-xs text-white/80 leading-relaxed font-medium">
+              1. Tap the <b>Harinos.apk</b> download notification on your phone to complete the install.
+            </p>
+            <p className="text-xs text-white/80 leading-relaxed font-medium">
+              2. You can safely remove the old web shortcut from your home screen. All your profile and cart details are already preserved.
+            </p>
+            <p className="text-[10px] text-white/50 leading-relaxed">
+              🛡️ Harino&apos;s is 100% verified & safe. If prompted by your phone, select <b>&quot;Allow from this source&quot;</b> or <b>&quot;Install anyway&quot;</b>.
+            </p>
           </div>
-          <p className="text-xs leading-relaxed text-white/70 whitespace-pre-line font-medium">
-            {releaseNotes || 'Performance enhancements and bug fixes.'}
-          </p>
-        </div>
+        ) : (
+          /* Release notes & info */
+          <div className="mt-5 text-left bg-white/5 border border-white/5 rounded-2xl p-4 max-h-36 overflow-y-auto hide-scrollbar">
+            <div className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-300 mb-1.5">
+              {isConversionPrompt ? "Upgrade Benefits" : "What's New"}
+            </div>
+            <p className="text-xs leading-relaxed text-white/70 whitespace-pre-line font-medium">
+              {isConversionPrompt
+                ? "Upgrade from the web shortcut to the official native app for instant launch, native notifications, live GPS delivery tracking, and smoother ordering."
+                : (releaseNotes || 'Performance enhancements, security updates, and bug fixes.')}
+            </p>
+          </div>
+        )}
 
-        {/* Error message */}
+        {/* Error notification */}
         {error && (
           <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs font-bold text-red-400">
             ⚠️ {error}
@@ -131,33 +241,42 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
               <span>{downloadProgress}%</span>
             </div>
             <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-red-600 rounded-full transition-all duration-300" 
+              <div
+                className="h-full bg-red-600 rounded-full transition-all duration-300"
                 style={{ width: `${downloadProgress}%` }}
               />
             </div>
             <p className="mt-2 text-[9px] text-white/40 leading-normal">
-              Once downloaded, the Android Package Installer will open to complete the process.
+              Harino&apos;s verified installer will open automatically once downloaded.
             </p>
           </div>
         )}
 
-        {/* Buttons */}
+        {/* Action Buttons */}
         <div className="mt-6 flex flex-col gap-3">
-          <button
-            onClick={handleUpdate}
-            disabled={isDownloading}
-            className="w-full cta-glow rounded-2xl bg-red-650 hover:bg-red-500 text-white py-4 text-[11px] font-black uppercase tracking-[0.2em] transition-premium active:scale-[0.98] disabled:opacity-50 cursor-pointer"
-          >
-            {isDownloading ? `Downloading Update...` : 'Update Now'}
-          </button>
+          {installReady ? (
+            <button
+              onClick={handleOpenInstalledApp}
+              className="w-full cta-glow rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white py-4 text-[11px] font-black uppercase tracking-[0.2em] transition-premium active:scale-[0.98] cursor-pointer"
+            >
+              Open Harino&apos;s App
+            </button>
+          ) : (
+            <button
+              onClick={handleUpdate}
+              disabled={isDownloading}
+              className="w-full cta-glow rounded-2xl bg-red-650 hover:bg-red-500 text-white py-4 text-[11px] font-black uppercase tracking-[0.2em] transition-premium active:scale-[0.98] disabled:opacity-50 cursor-pointer shadow-xl shadow-red-950/30"
+            >
+              {isDownloading ? `Downloading Update (${downloadProgress ?? 0}%)...` : 'Install updates'}
+            </button>
+          )}
 
           {!isForceUpdate && !isDownloading && (
             <button
               onClick={onLater}
               className="w-full rounded-2xl border border-white/5 bg-white/5 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white/60 hover:text-white transition-colors cursor-pointer"
             >
-              Later
+              {installReady ? 'Dismiss' : 'Later'}
             </button>
           )}
         </div>

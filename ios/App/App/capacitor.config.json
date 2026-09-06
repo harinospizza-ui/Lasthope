@@ -1,6 +1,6 @@
 {
-	"appId": "com.harinospizza.app",
-	"appName": "Harinos Pizza",
+	"appId": "com.harinos.app",
+	"appName": "Harino's Pizza",
 	"webDir": "dist",
 	"packageClassList": []
 }

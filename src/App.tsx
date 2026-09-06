@@ -566,6 +566,7 @@ const App: React.FC = () => {
     releaseNotes: string;
     isForceUpdate: boolean;
     apkUrl: string;
+    isConversionPrompt?: boolean;
   } | null>(null);
 
   // Wallet and Discounts State
@@ -804,50 +805,93 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [configLoaded]);
 
-  // Native Android Update Checking logic
+  // Automated Native App Update & Homescreen PWA Conversion logic
   useEffect(() => {
-    if (!Capacitor.isNative || Capacitor.getPlatform() !== 'android') return;
-
     const checkAppUpdate = async () => {
       try {
-        const info = await CapApp.getInfo();
-        const localVer = info.version;
+        const isNative = Capacitor.isNativePlatform();
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
-        const response = await fetch('https://harinos.store/app/version.json');
-        if (!response.ok) return;
-        const data = await response.json();
+        if (isNative && Capacitor.getPlatform() === 'android') {
+          // Running inside native Android app
+          const info = await CapApp.getInfo();
+          const localVer = info.version;
 
-        const normalizeVersion = (v: string) => v.split('.').map(Number);
-        const localParts = normalizeVersion(localVer);
-        const serverParts = normalizeVersion(data.version);
-
-        let isNewer = false;
-        for (let i = 0; i < Math.max(localParts.length, serverParts.length); i++) {
-          const localPart = localParts[i] || 0;
-          const serverPart = serverParts[i] || 0;
-          if (serverPart > localPart) {
-            isNewer = true;
-            break;
-          } else if (localPart > serverPart) {
-            break;
-          }
-        }
-
-        if (isNewer) {
-          setAndroidUpdateConfig({
-            latestVersion: data.version,
-            releaseNotes: data.message || 'Performance improvements and bug fixes.',
-            isForceUpdate: data.force || false,
-            apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk'
+          const response = await fetch('https://harinos.store/app/version.json?t=' + Date.now(), {
+            headers: { 'Cache-Control': 'no-cache' }
           });
-          setShowAndroidUpdateModal(true);
+          if (!response.ok) return;
+          const data = await response.json();
+
+          const normalizeVersion = (v: string) => v.split('.').map(Number);
+          const localParts = normalizeVersion(localVer);
+          const serverParts = normalizeVersion(data.version);
+
+          let isNewer = false;
+          for (let i = 0; i < Math.max(localParts.length, serverParts.length); i++) {
+            const localPart = localParts[i] || 0;
+            const serverPart = serverParts[i] || 0;
+            if (serverPart > localPart) {
+              isNewer = true;
+              break;
+            } else if (localPart > serverPart) {
+              break;
+            }
+          }
+
+          if (isNewer) {
+            setAndroidUpdateConfig({
+              latestVersion: data.version,
+              releaseNotes: data.message || 'Performance improvements and bug fixes.',
+              isForceUpdate: data.force || false,
+              apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
+              isConversionPrompt: false,
+            });
+            setShowAndroidUpdateModal(true);
+          }
+        } else if (!isNative && isAndroid) {
+          // Running as WebApp or PWA shortcut on Android device
+          const alreadyMigrated = localStorage.getItem('harinos_migrated_to_native') === 'true';
+
+          if (alreadyMigrated) {
+            // Already installed app - attempt direct open
+            if (isStandalone) {
+              window.location.href = 'harinos://open';
+            }
+            return;
+          }
+
+          // Fetch latest server app metadata
+          try {
+            const response = await fetch('https://harinos.store/app/version.json?t=' + Date.now(), {
+              headers: { 'Cache-Control': 'no-cache' }
+            });
+            const data = response.ok ? await response.json() : { version: '1.0.0' };
+
+            // Prompt homescreen users or Android mobile users to convert to native app
+            setAndroidUpdateConfig({
+              latestVersion: data.version || '1.0.0',
+              releaseNotes: data.message || 'Switch from the web shortcut to Harino\'s official native app for instant loading, native push notifications, and live GPS order tracking.',
+              isForceUpdate: false,
+              apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
+              isConversionPrompt: true,
+            });
+
+            // If user has added to homescreen, prompt after short delay
+            if (isStandalone) {
+              setShowAndroidUpdateModal(true);
+            }
+          } catch (e) {
+            console.warn('Webapp conversion check notice:', e);
+          }
         }
       } catch (err) {
         console.warn('Update check failed:', err);
       }
     };
 
-    const timer = setTimeout(checkAppUpdate, 2000);
+    const timer = setTimeout(checkAppUpdate, 2500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -2099,6 +2143,7 @@ const App: React.FC = () => {
           releaseNotes={androidUpdateConfig.releaseNotes}
           isForceUpdate={androidUpdateConfig.isForceUpdate}
           apkUrl={androidUpdateConfig.apkUrl}
+          isConversionPrompt={androidUpdateConfig.isConversionPrompt}
           onLater={() => setShowAndroidUpdateModal(false)}
         />
       )}
@@ -2696,7 +2741,7 @@ const App: React.FC = () => {
                   }}
                   className="flex-1 rounded-2xl bg-red-650 hover:bg-red-750 py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg active:scale-95 transition-all cursor-pointer"
                 >
-                  Update Now
+                  Install updates
                 </button>
                 <button
                   type="button"

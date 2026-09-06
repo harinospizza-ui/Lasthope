@@ -142,7 +142,7 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
               onClick={handlePrimaryAction}
               className="cta-glow flex-1 rounded-2xl bg-red-650 hover:bg-red-750 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-white shadow-lg transition-transform active:scale-[0.98] cursor-pointer"
             >
-              {canPromptInstall ? 'Install Now' : 'Show Install Steps'}
+              {canPromptInstall ? 'Install updates' : 'Show Install Steps'}
             </button>
             <button
               type="button"

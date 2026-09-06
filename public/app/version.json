@@ -1,6 +1,7 @@
 {
   "version": "1.0.0",
   "apk": "https://harinos.store/downloads/Harinos.apk",
+  "isMajorVersion": false,
   "force": false,
-  "message": "First release of Harino's Pizza Native Android App!"
+  "message": "Routine updates load automatically in the background without prompting for permission. Set isMajorVersion to true when releasing big new features."
 }

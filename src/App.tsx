@@ -849,29 +849,23 @@ const App: React.FC = () => {
 
           const normalizeVersion = (v: string) => v.split('.').map(Number);
           const localParts = normalizeVersion(localVer);
-          const serverParts = normalizeVersion(data.version);
+          const serverParts = normalizeVersion(data.version || '1.0.0');
 
-          let isNewer = false;
-          for (let i = 0; i < Math.max(localParts.length, serverParts.length); i++) {
-            const localPart = localParts[i] || 0;
-            const serverPart = serverParts[i] || 0;
-            if (serverPart > localPart) {
-              isNewer = true;
-              break;
-            } else if (localPart > serverPart) {
-              break;
-            }
-          }
+          // Major version updates are explicitly signaled by isMajorVersion: true, force: true, or a major version bump (e.g. 1.x -> 2.x)
+          const isMajorVersionUpdate = Boolean(data.isMajorVersion || data.force || (serverParts[0] > (localParts[0] || 0)));
 
-          if (isNewer) {
+          if (isMajorVersionUpdate) {
             setAndroidUpdateConfig({
               latestVersion: data.version,
-              releaseNotes: data.message || 'Performance improvements and bug fixes.',
-              isForceUpdate: data.force || false,
+              releaseNotes: data.message || 'A major new version of Harino\'s is here with exciting new features!',
+              isForceUpdate: Boolean(data.force),
               apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
               isConversionPrompt: false,
             });
             setShowAndroidUpdateModal(true);
+          } else {
+            // Routine update: everything updates seamlessly in the background without needing any permission
+            console.log('Routine update active: loaded silently in background without prompting permission.');
           }
         } else if (!isNative && !isStandalone) {
           // Running in browser as WebApp on Android, iOS, or Desktop
@@ -935,6 +929,23 @@ const App: React.FC = () => {
 
     const timer = setTimeout(checkAppUpdate, 2000);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Periodic background service worker update check for silent auto-updates
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.update().catch(() => {});
+      }).catch(() => {});
+
+      const interval = setInterval(() => {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.update().catch(() => {});
+        }).catch(() => {});
+      }, 1000 * 60 * 30);
+
+      return () => clearInterval(interval);
+    }
   }, []);
 
   // Real-time synchronization of Menu, Outlets, and Offers

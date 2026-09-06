@@ -43,7 +43,7 @@ const Header: React.FC<HeaderProps> = ({
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
   const [showInstallHelp, setShowInstallHelp] = useState(false);
 
-  const { isInstalled, canPromptInstall, promptInstall } = useInstallPrompt();
+  const { isInstalled, canPromptInstall, promptInstall, needsIosInstructions } = useInstallPrompt();
   const logoUrl = '/icon-192.png';
 
   useEffect(() => {

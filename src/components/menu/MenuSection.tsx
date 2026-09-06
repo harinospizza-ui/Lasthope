@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MenuItem, OfferCard, Category } from '../../types';
 import {
   getDiscountedUnitPrice,
-  getOfferConditionLabel,
-  getOfferMinimumScope,
   getMatchingDiscountOffer,
   isOfferUnlocked,
 } from '../../utils/offerUtils';
@@ -25,6 +23,7 @@ interface MenuCardProps {
 const MenuCard: React.FC<MenuCardProps> = ({ item, offers, cartSubtotal, onAdd }) => {
   const [selectedSize, setSelectedSize] = useState<string>(item.sizes?.[0]?.label ?? '');
   const [isAdding, setIsAdding] = useState(false);
+  const [addedCount, setAddedCount] = useState(0);
 
   const currentBasePrice =
     item.sizes?.find((size) => size.label === selectedSize)?.price ?? item.price;
@@ -38,68 +37,85 @@ const MenuCard: React.FC<MenuCardProps> = ({ item, offers, cartSubtotal, onAdd }
   const handleAddClick = (event: React.MouseEvent) => {
     event.stopPropagation();
     setIsAdding(true);
+    setAddedCount((prev) => prev + 1);
     onAdd(selectedSize || undefined);
-    window.setTimeout(() => setIsAdding(false), 500);
+    window.setTimeout(() => setIsAdding(false), 450);
   };
 
   return (
     <div
-      className={`group flex h-full flex-col overflow-hidden rounded-[2rem] border border-orange-100 bg-white shadow-sm transition-all duration-500 ${
-        item.available ? 'hover:-translate-y-1.5 hover:shadow-2xl' : 'pointer-events-none opacity-60 grayscale'
+      className={`group relative flex flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm hover:shadow-xl transition-all duration-300 ${
+        item.available ? 'hover:-translate-y-1' : 'opacity-60 grayscale pointer-events-none'
       }`}
     >
-      <div className="relative h-28 overflow-hidden">
+      {/* Food Photo Container */}
+      <div className="relative h-44 sm:h-48 w-full overflow-hidden bg-slate-100">
         <img
           src={item.image}
           alt={item.name}
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+          loading="lazy"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
 
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-          <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.2em] text-green-700 shadow-sm">
-            Veg
+        {/* Top Badges */}
+        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5 z-10">
+          {/* 100% Pure Veg Emblem */}
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/95 backdrop-blur-md px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-700 shadow-sm border border-emerald-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+            Pure Veg
           </span>
+
           {item.popular && (
-            <span className="rounded-full bg-amber-300 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.2em] text-amber-950 shadow-sm">
-              Popular
+            <span className="rounded-full bg-amber-400 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-950 shadow-sm">
+              ⭐ Bestseller
             </span>
           )}
+
           {item.spicy && (
-            <span className="rounded-full bg-red-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.2em] text-white shadow-sm">
-              Spicy
+            <span className="rounded-full bg-red-600 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
+              🌶️ Spicy
             </span>
           )}
-          {previewOffer?.offerPercentage && (
-            <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.2em] text-white shadow-sm">
+        </div>
+
+        {/* Offer Tag */}
+        {previewOffer?.offerPercentage && (
+          <div className="absolute right-3 bottom-3 z-10">
+            <span className="rounded-full bg-red-650/90 backdrop-blur-md text-white px-2.5 py-1 text-[9px] font-black tracking-wider uppercase shadow-md">
               Save {previewOffer.offerPercentage}%
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-1 flex-col p-3">
+      {/* Item Details */}
+      <div className="flex flex-1 flex-col p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-display font-bold leading-snug text-slate-900 truncate" title={item.name}>{item.name}</h3>
-            <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500 line-clamp-1">{item.description}</p>
-          </div>
-
-          <div className="text-right shrink-0">
-            <div className="text-base font-display font-bold text-red-600 font-black">Rs {discountedPrice}</div>
-            {hasDiscount && <div className="text-[10px] text-slate-400 line-through">Rs {currentBasePrice}</div>}
+            <h3 className="font-display text-base font-bold text-slate-900 line-clamp-1 group-hover:text-red-650 transition-colors">
+              {item.name}
+            </h3>
+            <p className="mt-1 text-xs text-slate-500 line-clamp-2 leading-relaxed">
+              {item.description}
+            </p>
           </div>
         </div>
 
-        {item.sizes && (
-          <div className="mt-2 flex rounded-xl border border-orange-100 bg-orange-50/70 p-0.5">
+        {/* Inline Size Selector */}
+        {item.sizes && item.sizes.length > 0 && (
+          <div className="mt-3 flex rounded-xl bg-slate-100 p-1 border border-slate-200/60">
             {item.sizes.map((size) => (
               <button
                 key={size.label}
-                onClick={() => setSelectedSize(size.label)}
-                className={`flex-1 rounded-lg px-2 py-1 text-[8px] font-black uppercase tracking-[0.15em] transition-all ${
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedSize(size.label);
+                }}
+                className={`flex-1 rounded-lg py-1 text-[9px] font-black uppercase tracking-wider transition-all ${
                   selectedSize === size.label
-                    ? 'bg-white text-red-600 shadow-sm'
+                    ? 'bg-white text-red-650 shadow-sm'
                     : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
@@ -109,31 +125,45 @@ const MenuCard: React.FC<MenuCardProps> = ({ item, offers, cartSubtotal, onAdd }
           </div>
         )}
 
-        {previewOffer && (
-          <div className="mt-2 rounded-xl border border-orange-100 bg-orange-50/60 px-2.5 py-1">
-            <div className="text-[8px] font-black uppercase tracking-[0.22em] text-orange-700">
-              {previewOffer.offerTitle}
-            </div>
-            <div className="mt-0.5 text-[9px] leading-relaxed text-slate-600">
-              {getOfferConditionLabel(previewOffer)}
-              {!offerUnlocked
-                ? getOfferMinimumScope(previewOffer) === 'cart'
-                  ? ' Add more to unlock.'
-                  : ' Upgrade size.'
-                : ''}
+        {/* Footer: Price + Add Button */}
+        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Price</div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-lg font-black text-slate-900 font-display">
+                ₹{discountedPrice}
+              </span>
+              {hasDiscount && (
+                <span className="text-xs text-slate-400 line-through">
+                  ₹{currentBasePrice}
+                </span>
+              )}
             </div>
           </div>
-        )}
 
-        <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2 mt-auto">
-          <span className="text-[8px] font-black uppercase tracking-[0.22em] text-slate-400">{item.category}</span>
           <button
+            type="button"
             onClick={handleAddClick}
-            className={`inline-flex h-8 min-w-[80px] items-center justify-center rounded-xl px-3 text-[8px] font-black uppercase tracking-[0.22em] btn-hover-scale ${
-              isAdding ? 'bg-green-600 text-white' : 'bg-red-600 text-white hover:bg-red-700 hover:shadow-lg hover:shadow-red-600/20'
+            disabled={!item.available}
+            className={`flex items-center justify-center gap-1.5 rounded-2xl px-5 py-2.5 text-xs font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md ${
+              isAdding
+                ? 'bg-emerald-600 text-white shadow-emerald-500/20'
+                : 'bg-red-650 hover:bg-red-600 text-white shadow-red-650/20'
             }`}
           >
-            {isAdding ? 'Added' : item.available ? 'Add' : 'Unavailable'}
+            {isAdding ? (
+              <span>Added ✓</span>
+            ) : (
+              <>
+                <span>Add</span>
+                <span className="text-sm font-bold leading-none">+</span>
+                {addedCount > 0 && (
+                  <span className="ml-1 rounded-full bg-white/25 px-1.5 py-0.2 text-[9px]">
+                    {addedCount}
+                  </span>
+                )}
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -141,255 +171,142 @@ const MenuCard: React.FC<MenuCardProps> = ({ item, offers, cartSubtotal, onAdd }
   );
 };
 
-const MenuRow: React.FC<{
-  title: string;
-  items: MenuItem[];
-  offers: OfferCard[];
-  cartSubtotal: number;
-  onAddToCart: (item: MenuItem, selectedSize?: string) => void;
-}> = ({ title, items, offers, cartSubtotal, onAddToCart }) => {
-  if (items.length === 0) return null;
+const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, cartSubtotal }) => {
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [searchFilter, setSearchFilter] = useState<string>('');
+  const [quickFilter, setQuickFilter] = useState<'all' | 'popular' | 'spicy' | 'under199'>('all');
+
+  const categories = useMemo(() => [
+    { id: 'all', name: 'All Dishes', icon: '🍽️' },
+    { id: Category.PIZZA, name: 'Pizzas', icon: '🍕' },
+    { id: Category.MOMOS, name: 'Momos', icon: '🥟' },
+    { id: Category.BURGERS, name: 'Burgers', icon: '🍔' },
+    { id: Category.FRIES, name: 'Fries', icon: '🍟' },
+    { id: Category.SIDES, name: 'Sides & Calzones', icon: '🥟' },
+    { id: Category.BEVERAGES, name: 'Beverages', icon: '🥤' },
+  ], []);
+
+  // Filter items
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      // Category filter
+      if (activeCategory !== 'all' && item.category !== activeCategory) {
+        return false;
+      }
+
+      // Quick filter
+      if (quickFilter === 'popular' && !item.popular) return false;
+      if (quickFilter === 'spicy' && !item.spicy) return false;
+      if (quickFilter === 'under199' && item.price > 199) return false;
+
+      // Text search
+      if (searchFilter.trim()) {
+        const query = searchFilter.toLowerCase();
+        const matchesName = item.name.toLowerCase().includes(query);
+        const matchesDesc = item.description?.toLowerCase().includes(query);
+        const matchesCategory = item.category?.toLowerCase().includes(query);
+        if (!matchesName && !matchesDesc && !matchesCategory) return false;
+      }
+
+      return true;
+    });
+  }, [items, activeCategory, quickFilter, searchFilter]);
+
   return (
-    <div className="menu-row mb-12 animate-slide-up scroll-mt-24">
-      <div className="flex items-center justify-between mb-4 border-b border-orange-100 pb-2">
-        <h3 className="font-display text-2xl font-bold text-slate-800">{title}</h3>
-        <span className="text-xs font-semibold text-slate-400 bg-orange-50 px-3 py-1 rounded-full border border-orange-100/50">{items.length} Options</span>
+    <section className="space-y-6">
+      {/* Category Navigation Pills */}
+      <div className="sticky top-16 z-30 bg-slate-900/90 backdrop-blur-md -mx-4 px-4 py-3 border-b border-white/10 shadow-lg">
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-0.5">
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setActiveCategory(cat.id)}
+              className={`flex items-center gap-1.5 shrink-0 px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                activeCategory === cat.id
+                  ? 'bg-red-650 text-white shadow-lg shadow-red-650/30 scale-105'
+                  : 'bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white'
+              }`}
+            >
+              <span>{cat.icon}</span>
+              <span>{cat.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Quick Filter Chips */}
+        <div className="flex items-center gap-2 mt-2.5 overflow-x-auto hide-scrollbar text-[10px]">
+          <button
+            type="button"
+            onClick={() => setQuickFilter('all')}
+            className={`px-3 py-1 rounded-xl font-bold uppercase tracking-wider transition-all ${
+              quickFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            All Filters
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickFilter('popular')}
+            className={`px-3 py-1 rounded-xl font-bold uppercase tracking-wider transition-all ${
+              quickFilter === 'popular' ? 'bg-amber-400 text-amber-950 shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            ⭐ Bestsellers
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickFilter('spicy')}
+            className={`px-3 py-1 rounded-xl font-bold uppercase tracking-wider transition-all ${
+              quickFilter === 'spicy' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            🌶️ Spicy
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickFilter('under199')}
+            className={`px-3 py-1 rounded-xl font-bold uppercase tracking-wider transition-all ${
+              quickFilter === 'under199' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            💰 Under ₹199
+          </button>
+        </div>
       </div>
-      <div className="menu-row-container flex overflow-x-auto pb-4 gap-6 snap-x snap-mandatory scroll-smooth hide-scrollbar px-1">
-        {items.map((item) => (
-          <div key={item.id} className="w-[290px] md:w-[340px] shrink-0 snap-start">
+
+      {/* Grid of Dishes */}
+      {filteredItems.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
+          <span className="text-5xl block mb-3">🔍</span>
+          <h4 className="text-lg font-bold text-slate-800 font-display">No items match your search</h4>
+          <p className="text-xs text-slate-500 mt-1">Try selecting another category or clearing filters.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCategory('all');
+              setQuickFilter('all');
+              setSearchFilter('');
+            }}
+            className="mt-4 px-4 py-2 rounded-xl bg-red-650 text-white text-xs font-bold uppercase tracking-wider"
+          >
+            Reset Filters
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+          {filteredItems.map((item) => (
             <MenuCard
+              key={item.id}
               item={item}
               offers={offers}
               cartSubtotal={cartSubtotal}
               onAdd={(selectedSize) => onAddToCart(item, selectedSize)}
             />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, cartSubtotal }) => {
-  const [isAutoScrolling, setIsAutoScrolling] = useState(true);
-  const verticalIndexRef = useRef(0);
-
-  // Grouping and sorting (ascending by price) logic
-  const sortByPrice = (a: MenuItem, b: MenuItem) => a.price - b.price;
-
-  const pizzas = items.filter((item) => item.category === Category.PIZZA);
-
-  // 1. Cheese Series (contains "Cheese" but not Makhni, Tandoori, or Masala)
-  const cheesePizzas = pizzas.filter((item) => 
-    (item.id.startsWith('cheese_') || item.name.toLowerCase().includes('cheese')) && 
-    !item.name.toLowerCase().includes('makhni') && 
-    !item.name.toLowerCase().includes('tandoori') && 
-    !item.name.toLowerCase().includes('masala') && 
-    !item.name.toLowerCase().includes('teekha') && 
-    !item.name.toLowerCase().includes('ultimate') && 
-    !item.name.toLowerCase().includes('twist')
-  ).sort(sortByPrice);
-
-  // 2. Masala Series (contains Masala keywords but not Makhni or Tandoori)
-  const masalaPizzas = pizzas.filter((item) => 
-    (item.id.startsWith('masala_') || 
-     item.name.toLowerCase().includes('masala') || 
-     item.name.toLowerCase().includes('teekha') || 
-     item.name.toLowerCase().includes('ultimate') || 
-     item.name.toLowerCase().includes('twist')) && 
-    !item.name.toLowerCase().includes('makhni') && 
-    !item.name.toLowerCase().includes('tandoori')
-  ).sort(sortByPrice);
-
-  // 3. Veg Special Series (Veg Lover, Veg Overloaded, Mighty Crunch, Chilli Shot)
-  const vegSpecialPizzas = pizzas.filter((item) => 
-    item.id !== 'p_hs' &&
-    !item.id.startsWith('makhni_') && !item.name.toLowerCase().includes('makhni') &&
-    !item.id.startsWith('tandoori_') && !item.name.toLowerCase().includes('tandoori') &&
-    !item.id.startsWith('masala_') && !item.name.toLowerCase().includes('masala') && !item.name.toLowerCase().includes('teekha') && !item.name.toLowerCase().includes('ultimate') && !item.name.toLowerCase().includes('twist') &&
-    !item.id.startsWith('cheese_') && !item.name.toLowerCase().includes('cheese')
-  ).sort(sortByPrice);
-
-  // 4. Makhni Series
-  const makhniPizzas = pizzas.filter((item) => 
-    item.id.startsWith('makhni_') || item.name.toLowerCase().includes('makhni')
-  ).sort(sortByPrice);
-
-  // 5. Tandoori Series
-  const tandooriPizzas = pizzas.filter((item) => 
-    (item.id.startsWith('tandoori_') || item.name.toLowerCase().includes('tandoori')) && 
-    !item.name.toLowerCase().includes('makhni')
-  ).sort(sortByPrice);
-
-  // 6. Harino's Signature Series
-  const signaturePizzas = pizzas.filter((item) => item.id === 'p_hs').sort(sortByPrice);
-
-  const burgers = items.filter((item) => item.category === Category.BURGERS).sort(sortByPrice);
-  const fries = items.filter((item) => item.category === Category.FRIES).sort(sortByPrice);
-
-  // Momos: Veg vs Soya (All varieties, Full Plate only)
-  const momos = items
-    .filter((item) => item.category === Category.MOMOS)
-    .map((item) => {
-      const newItem = { ...item };
-      if (newItem.sizes && newItem.sizes.length > 0) {
-        const fullPlate = newItem.sizes.find((s) => s.label.toLowerCase().includes('full'));
-        if (fullPlate) {
-          newItem.price = fullPlate.price;
-        } else {
-          // If no size explicitly says "full", try to find a size that is not "half"
-          const nonHalf = newItem.sizes.find((s) => !s.label.toLowerCase().includes('half'));
-          if (nonHalf) {
-            newItem.price = nonHalf.price;
-          }
-        }
-        newItem.sizes = undefined;
-      }
-      return newItem;
-    });
-
-  const vegMomos = momos
-    .filter((item) => {
-      const nameLower = item.name.toLowerCase();
-      return !nameLower.includes('soya');
-    })
-    .sort(sortByPrice);
-
-  const soyaMomos = momos
-    .filter((item) => {
-      const nameLower = item.name.toLowerCase();
-      return nameLower.includes('soya');
-    })
-    .sort(sortByPrice);
-
-  // Sides constraints: Zingli Parcel (4 pieces only), Calzone (2 pieces only)
-  const sides = items
-    .filter((item) => item.category === Category.SIDES)
-    .filter((item) => {
-      const nameLower = item.name.toLowerCase();
-      if (nameLower.includes('zingli') && nameLower.includes('parcel')) {
-        // Exclude if it explicitly mentions 2 pieces or anything not 4 pieces in the item name
-        if (nameLower.includes('2') || nameLower.includes('two') || nameLower.includes('single')) {
-          return false;
-        }
-      }
-      if (nameLower.includes('calzone')) {
-        // Exclude if it explicitly mentions 1 piece or anything not 2 pieces in the item name
-        if (nameLower.includes('1') || nameLower.includes('one') || nameLower.includes('single')) {
-          return false;
-        }
-      }
-      return true;
-    })
-    .map((item) => {
-      const newItem = { ...item };
-      const nameLower = newItem.name.toLowerCase();
-      if (nameLower.includes('zingli') && nameLower.includes('parcel')) {
-        if (newItem.sizes && newItem.sizes.length > 0) {
-          const size4 = newItem.sizes.find((s) => s.label.includes('4') || s.label.toLowerCase().includes('four'));
-          if (size4) {
-            newItem.price = size4.price;
-          }
-          newItem.sizes = undefined;
-        }
-      } else if (nameLower.includes('calzone')) {
-        if (newItem.sizes && newItem.sizes.length > 0) {
-          const size2 = newItem.sizes.find((s) => s.label.includes('2') || s.label.toLowerCase().includes('two'));
-          if (size2) {
-            newItem.price = size2.price;
-          }
-          newItem.sizes = undefined;
-        }
-      }
-      return newItem;
-    })
-    .sort(sortByPrice);
-
-  const beverages = items.filter((item) => item.category === Category.BEVERAGES).sort(sortByPrice);
-
-  // Auto-scrolling Vertical + Horizontal Effect
-  useEffect(() => {
-    if (!isAutoScrolling) return;
-
-    const interval = setInterval(() => {
-      const rows = document.querySelectorAll('.menu-row');
-      const containers = document.querySelectorAll('.menu-row-container');
-      if (rows.length === 0) return;
-
-      // 1. Move vertically to the next row
-      const nextIdx = (verticalIndexRef.current + 1) % rows.length;
-      verticalIndexRef.current = nextIdx;
-      rows[nextIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      // 2. Scroll the horizontal container of the active row
-      const activeContainer = containers[nextIdx] as HTMLDivElement;
-      if (activeContainer) {
-        const maxScroll = activeContainer.scrollWidth - activeContainer.clientWidth;
-        if (activeContainer.scrollLeft >= maxScroll - 15) {
-          activeContainer.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-          activeContainer.scrollBy({ left: 220, behavior: 'smooth' });
-        }
-      }
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, [isAutoScrolling]);
-
-  const stopAutoScroll = () => {
-    if (isAutoScrolling) {
-      setIsAutoScrolling(false);
-    }
-  };
-
-  return (
-    <div 
-      className="space-y-4"
-      onClick={stopAutoScroll}
-      onTouchStart={stopAutoScroll}
-      onWheel={stopAutoScroll}
-    >
-      {/* Pizzas: Cheese -> Masala -> Veg Special -> Makhni -> Tandoori -> Signature */}
-      {pizzas.length > 0 && (
-        <>
-          <MenuRow title="Cheese Series" items={cheesePizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Masala Series" items={masalaPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Veg Special Series" items={vegSpecialPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Makhni Series" items={makhniPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Tandoori Series" items={tandooriPizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-          <MenuRow title="Harino's Signature Series" items={signaturePizzas} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-        </>
+          ))}
+        </div>
       )}
-
-      {/* Burgers */}
-      {burgers.length > 0 && (
-        <MenuRow title="Delicious Burgers" items={burgers} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-      )}
-
-      {/* Fries */}
-      {fries.length > 0 && (
-        <MenuRow title="Crispy French Fries" items={fries} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-      )}
-
-      {/* Momos: Veg vs Soya */}
-      {vegMomos.length > 0 && (
-        <MenuRow title="Veg Momos (Full Plate)" items={vegMomos} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-      )}
-      {soyaMomos.length > 0 && (
-        <MenuRow title="Soya Momos (Full Plate)" items={soyaMomos} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-      )}
-
-      {/* Side Orders */}
-      {sides.length > 0 && (
-        <MenuRow title="Side Orders & Calzones" items={sides} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-      )}
-
-      {/* Beverages */}
-      {beverages.length > 0 && (
-        <MenuRow title="Refreshing Beverages" items={beverages} offers={offers} cartSubtotal={cartSubtotal} onAddToCart={onAddToCart} />
-      )}
-    </div>
+    </section>
   );
 };
 

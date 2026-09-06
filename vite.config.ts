@@ -1,4 +1,4 @@
-﻿import path from 'path';
+import path from 'path';
 import { Plugin, defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -43,7 +43,7 @@ export default defineConfig(() => {
   const buildVersion = new Date().toISOString();
 
   return {
-    root: '.',
+    root: __dirname,
     base: '/',
     publicDir: 'public',
     server: {

@@ -601,35 +601,40 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
               )}
 
               {/* Grand Total Row */}
-              <div className="mb-3 flex items-center justify-between font-display">
-                <span className="text-xs font-black uppercase tracking-widest text-slate-300">Grand Total</span>
-                <span className={`text-2xl font-black text-red-500 transition-all ${animatePrice ? 'animate-text-pulse' : ''}`}>
-                  Rs {finalTotal.toFixed(2)}
+              <div className="mb-3 flex items-center justify-between font-display bg-white/5 rounded-2xl p-3 border border-white/10">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Grand Total</span>
+                  <span className="text-[9px] text-emerald-400 font-bold">Includes all taxes & discounts</span>
+                </div>
+                <span className={`text-2xl font-black text-red-400 font-display transition-all ${animatePrice ? 'animate-text-pulse' : ''}`}>
+                  ₹{finalTotal.toFixed(2)}
                 </span>
               </div>
 
-              {/* Pay via UPI CTA Button */}
+              {/* Proceed to Pay CTA Button */}
               <button
-                onClick={onCheckout}
-                disabled={isDeliveryImpossible}
-                className={`flex w-full items-center justify-center space-x-3 rounded-2xl py-3.5 text-[11px] font-black uppercase tracking-[0.25em] transition-all cursor-pointer ${
-                  isDeliveryImpossible
+                type="button"
+                onClick={() => {
+                  if (orderType === 'delivery' && customerLocation === null) {
+                    onDetectLocation();
+                    return;
+                  }
+                  onCheckout();
+                }}
+                disabled={isDeliveryImpossible && customerLocation !== null}
+                className={`flex w-full items-center justify-center space-x-2 rounded-2xl py-4 text-xs font-black uppercase tracking-[0.2em] transition-all cursor-pointer ${
+                  isDeliveryImpossible && customerLocation !== null
                     ? 'cursor-not-allowed border border-white/5 bg-slate-800 text-white/40'
-                    : 'bg-red-600 hover:bg-red-500 text-white active:scale-95 shadow-lg shadow-red-600/30'
+                    : 'bg-gradient-to-r from-red-650 to-red-600 hover:from-red-600 hover:to-red-655 text-white active:scale-95 shadow-xl shadow-red-650/30'
                 }`}
               >
                 <span>
                   {orderType === 'delivery' && customerLocation === null
-                    ? 'Location Required'
+                    ? '📍 Enable Location to Order'
                     : deliveryFee === -1 && orderType === 'delivery'
                     ? 'Beyond Service Area'
-                    : 'Pay via UPI'}
+                    : `Proceed to Pay ₹${finalTotal.toFixed(0)} ➔`}
                 </span>
-                {!isDeliveryImpossible && (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                )}
               </button>
             </div>
           )}

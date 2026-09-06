@@ -805,16 +805,39 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [configLoaded]);
 
-  // Automated Native App Update & Homescreen PWA Conversion logic
+  // Listen to in-app custom notifications and auto-dismiss
+  useEffect(() => {
+    const handleNotificationEvent = (e: any) => {
+      const detail = e.detail;
+      if (detail && detail.title) {
+        setInAppNotifications((prev) => [detail, ...prev.slice(0, 9)]);
+      }
+    };
+
+    window.addEventListener('harinos-notification', handleNotificationEvent);
+    return () => window.removeEventListener('harinos-notification', handleNotificationEvent);
+  }, []);
+
+  useEffect(() => {
+    if (inAppNotifications.length === 0) return;
+    const timer = setTimeout(() => {
+      setInAppNotifications((prev) => prev.slice(0, prev.length - 1));
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [inAppNotifications]);
+
+  // Automated Native App Update & Installation logic for First-time & Returning users
   useEffect(() => {
     const checkAppUpdate = async () => {
       try {
         const isNative = Capacitor.isNativePlatform();
         const isAndroid = /Android/i.test(navigator.userAgent);
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || 
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
         if (isNative && Capacitor.getPlatform() === 'android') {
-          // Running inside native Android app
+          // Running inside native Android app - check for OTA APK updates
           const info = await CapApp.getInfo();
           const localVer = info.version;
 
@@ -850,38 +873,57 @@ const App: React.FC = () => {
             });
             setShowAndroidUpdateModal(true);
           }
-        } else if (!isNative && isAndroid) {
-          // Running as WebApp or PWA shortcut on Android device
+        } else if (!isNative && !isStandalone) {
+          // Running in browser as WebApp on Android, iOS, or Desktop
           const alreadyMigrated = localStorage.getItem('harinos_migrated_to_native') === 'true';
+          const dismissedAt = Number(localStorage.getItem('harinos_install_modal_dismissed_at') || '0');
+          const hasDismissedRecently = Date.now() - dismissedAt < 1000 * 60 * 60 * 8; // 8 hours snooze
 
-          if (alreadyMigrated) {
-            // Already installed app - attempt direct open
-            if (isStandalone) {
-              window.location.href = 'harinos://open';
+          if (!alreadyMigrated && !hasDismissedRecently) {
+            try {
+              const response = await fetch('https://harinos.store/app/version.json?t=' + Date.now(), {
+                headers: { 'Cache-Control': 'no-cache' }
+              });
+              const data = response.ok ? await response.json() : { version: '1.0.0' };
+
+              setAndroidUpdateConfig({
+                latestVersion: data.version || '1.0.0',
+                releaseNotes: isIOS
+                  ? "Install Harino's on your iPhone for 1-tap food ordering, live kitchen order notifications (preparing, ready, out for delivery), and instant wallet cashback updates."
+                  : "Install the official Harino's App for instant loading, live kitchen status notifications (preparing, ready, out for delivery), and wallet alerts.",
+                isForceUpdate: false,
+                apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
+                isConversionPrompt: true,
+              });
+
+              setShowAndroidUpdateModal(true);
+            } catch (e) {
+              console.warn('Webapp conversion check notice:', e);
             }
+          }
+        } else if (!isNative && isStandalone && isAndroid) {
+          // Running as PWA shortcut on Android -> prompt to convert to native APK
+          const alreadyMigrated = localStorage.getItem('harinos_migrated_to_native') === 'true';
+          if (alreadyMigrated) {
+            window.location.href = 'harinos://open';
             return;
           }
 
-          // Fetch latest server app metadata
           try {
             const response = await fetch('https://harinos.store/app/version.json?t=' + Date.now(), {
               headers: { 'Cache-Control': 'no-cache' }
             });
             const data = response.ok ? await response.json() : { version: '1.0.0' };
 
-            // Prompt homescreen users or Android mobile users to convert to native app
             setAndroidUpdateConfig({
               latestVersion: data.version || '1.0.0',
-              releaseNotes: data.message || 'Switch from the web shortcut to Harino\'s official native app for instant loading, native push notifications, and live GPS order tracking.',
+              releaseNotes: 'Switch from the web shortcut to Harino\'s official native app for instant loading, live kitchen notifications (preparing, ready, out for delivery), and GPS tracking.',
               isForceUpdate: false,
               apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
               isConversionPrompt: true,
             });
 
-            // If user has added to homescreen, prompt after short delay
-            if (isStandalone) {
-              setShowAndroidUpdateModal(true);
-            }
+            setShowAndroidUpdateModal(true);
           } catch (e) {
             console.warn('Webapp conversion check notice:', e);
           }
@@ -891,7 +933,7 @@ const App: React.FC = () => {
       }
     };
 
-    const timer = setTimeout(checkAppUpdate, 2500);
+    const timer = setTimeout(checkAppUpdate, 2000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -928,6 +970,7 @@ const App: React.FC = () => {
         if (offers && offers.length > 0) {
           setOffers(offers);
           localStorage.setItem('cached_offers', JSON.stringify(offers));
+          NotificationService.notifyOfferReleases(offers);
         }
       },
       (err) => console.warn('Offers subscription failed:', err)
@@ -1239,38 +1282,12 @@ const App: React.FC = () => {
         const orderTime = order.receivedAt ? new Date(order.receivedAt).getTime() : (order.date ? new Date(order.date).getTime() : 0);
         const ageMinutes = (Date.now() - orderTime) / (1000 * 60);
 
-        if (ageMinutes < 60 || (lastStatus && lastStatus !== order.status)) {
-          const titleMap: Record<string, string> = {
-            new: '🍕 Order Placed',
-            preparing: '👨‍🍳 Preparing Your Order',
-            ready: '✅ Order Ready!',
-            out_for_delivery: '🚗 Out for Delivery',
-            done: '🎉 Order Complete',
-            cancelled: '❌ Order Cancelled'
-          };
-          const msgMap: Record<string, string> = {
-            new: 'Your order has been received by Harino\'s.',
-            preparing: 'The kitchen has started preparing your fresh pizza!',
-            ready: 'Your order is hot and ready for pickup!',
-            out_for_delivery: 'Our delivery partner is on the way to your location.',
-            done: 'Thank you for ordering from Harino\'s! Enjoy your meal.',
-            cancelled: 'Your order has been cancelled by the store.'
-          };
-          const title = titleMap[order.status] || 'Order Status Update';
-          const body = msgMap[order.status] || `Your order status is now ${order.status}`;
-          
-          if ('Notification' in window && Notification.permission === 'granted') {
-            try {
-              new Notification(title, {
-                body,
-                icon: '/icon-192.png',
-                badge: '/icon-192.png',
-                tag: `order-status-${order.id}`
-              });
-            } catch (e) {
-              console.error('Browser notification failed:', e);
-            }
-          }
+        if (ageMinutes < 120 || (lastStatus && lastStatus !== order.status)) {
+          NotificationService.notifyOrderStatus(order.id, order.status, {
+            orderType: order.orderType,
+            customerName: order.customerName,
+            total: order.total,
+          });
         }
         localStorage.setItem(cacheKey, order.status);
       }
@@ -1343,7 +1360,17 @@ const App: React.FC = () => {
             setTimeout(() => {
               setShowCelebration(false);
             }, 2000);
+            NotificationService.notifyWalletUpdate('credit', newBalance - oldBalance, newBalance);
+          } else if (newBalance < oldBalance && Date.now() - lastProfileUpdateRef.current > 6000) {
+            NotificationService.notifyWalletUpdate('debit', oldBalance - newBalance, newBalance);
           }
+
+          const oldPoints = customerProfileRef.current?.rewardPoints ?? 0;
+          const newPoints = fresh.rewardPoints ?? 0;
+          if (newPoints > oldPoints) {
+            NotificationService.notifyWalletUpdate('reward', newPoints - oldPoints, newPoints);
+          }
+
           setCustomerProfile(fresh);
           StorageService.saveCustomerProfile(fresh);
         }
@@ -1974,6 +2001,7 @@ const App: React.FC = () => {
           createdAt: new Date().toISOString()
         };
         void saveWalletTransactionToServer(tx).catch(console.error);
+        NotificationService.notifyWalletUpdate('debit', walletDiscount, updatedProfile.walletBalance);
       }
 
       if (usePoints && pointsDiscount > 0) {
@@ -1998,7 +2026,7 @@ const App: React.FC = () => {
       if (pointsEarned > 0) {
         updatedProfile.rewardPoints = (updatedProfile.rewardPoints ?? 0) + pointsEarned;
         updatedProfile.coins = updatedProfile.rewardPoints; // Sync coins with rewardPoints
-        // No WalletTransaction is created for coins earned, ensuring only coins are credited without cash wallet changes.
+        NotificationService.notifyWalletUpdate('reward', pointsEarned, updatedProfile.rewardPoints);
       }
 
       // Sync state and localStorage immediately synchronously to prevent stale server overrides
@@ -2034,6 +2062,13 @@ const App: React.FC = () => {
     setShowOrderSuccess(true);
     replaceAppScreen('success');
     setCart([]);
+
+    // Trigger instant customer notification for newly placed order
+    NotificationService.notifyOrderStatus(placedOrder.id, 'new', {
+      orderType: placedOrder.orderType,
+      customerName: placedOrder.customerName,
+      total: placedOrder.total,
+    });
   };
 
   const categoryButtons: CategoryFilter[] = ['All', Category.PIZZA, Category.BURGERS, Category.FRIES, Category.MOMOS, Category.SIDES, Category.BEVERAGES];
@@ -2115,6 +2150,7 @@ const App: React.FC = () => {
         setSearchQuery={setSearchQuery}
         campaign={activeCampaign}
         isCartOpen={isCartOpen}
+        onInstallClick={() => setShowAndroidUpdateModal(true)}
       />
       {showTutorial && (
         <FirstTimeUserModal
@@ -2144,7 +2180,10 @@ const App: React.FC = () => {
           isForceUpdate={androidUpdateConfig.isForceUpdate}
           apkUrl={androidUpdateConfig.apkUrl}
           isConversionPrompt={androidUpdateConfig.isConversionPrompt}
-          onLater={() => setShowAndroidUpdateModal(false)}
+          onLater={() => {
+            localStorage.setItem('harinos_install_modal_dismissed_at', Date.now().toString());
+            setShowAndroidUpdateModal(false);
+          }}
         />
       )}
 

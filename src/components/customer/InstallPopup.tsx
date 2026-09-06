@@ -7,18 +7,19 @@ interface InstallPopupProps {
 }
 
 const POPUP_DISMISS_KEY = 'harinos-install-popup-dismissed-at';
-const POPUP_DELAY_MS = 3500;
-const POPUP_COOLDOWN_MS = 1000 * 60 * 60 * 12;
+const POPUP_DELAY_MS = 2000;
+const POPUP_COOLDOWN_MS = 1000 * 60 * 60 * 8; // 8 hours snooze if explicitly dismissed
 
 const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
   const { canPromptInstall, needsIosInstructions, isInstalled, promptInstall } = useInstallPrompt();
   const [isVisible, setIsVisible] = useState(false);
   const [showIosSteps, setShowIosSteps] = useState(false);
 
-  const isSupported = canPromptInstall || needsIosInstructions;
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+  const isIos = typeof navigator !== 'undefined' && (/iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 
   useEffect(() => {
-    if (blocked || isInstalled || !isSupported) {
+    if (blocked || isInstalled) {
       setIsVisible(false);
       return;
     }
@@ -30,21 +31,20 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
 
     const timer = window.setTimeout(() => {
       setIsVisible(true);
-      setShowIosSteps(needsIosInstructions);
+      setShowIosSteps(isIos || needsIosInstructions);
     }, POPUP_DELAY_MS);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [blocked, isInstalled, isSupported, needsIosInstructions]);
+  }, [blocked, isInstalled, isIos, needsIosInstructions]);
 
   const popupTitle = useMemo(() => {
-    if (needsIosInstructions) {
-      return 'Add Harino\'s to your Home Screen';
+    if (isIos || needsIosInstructions) {
+      return "Install Harino's on your iPhone";
     }
-
-    return 'Install the Harino\'s App';
-  }, [needsIosInstructions]);
+    return "Install Harino's Official App";
+  }, [isIos, needsIosInstructions]);
 
   const dismissPopup = () => {
     safeStorage.setItem(window.localStorage, POPUP_DISMISS_KEY, Date.now().toString());
@@ -56,37 +56,50 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
       const outcome = await promptInstall();
       if (outcome === 'accepted') {
         dismissPopup();
+        return;
       }
+    }
+
+    if (isAndroid) {
+      // Trigger instant APK download
+      window.location.href = 'https://harinos.store/downloads/Harinos.apk';
+      dismissPopup();
       return;
     }
 
-    setShowIosSteps(true);
+    if (isIos || needsIosInstructions) {
+      setShowIosSteps(true);
+    }
   };
 
-  if (!isVisible || isInstalled || !isSupported) {
+  const handleDownloadIosProfile = () => {
+    window.location.href = '/Harinos.mobileconfig';
+  };
+
+  if (!isVisible || isInstalled) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-[140] flex items-end justify-center p-0 sm:items-center sm:p-4">
-      <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-md" onClick={dismissPopup} />
+    <div className="fixed inset-0 z-[140] flex items-end justify-center p-0 sm:items-center sm:p-4 animate-fade-in">
+      <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-md" onClick={dismissPopup} />
 
-      <div className="install-popup-card relative w-full max-w-md overflow-hidden rounded-t-[2rem] border border-white/10 bg-slate-950 text-white shadow-[0_30px_120px_rgba(0,0,0,0.55)] sm:rounded-[2.5rem]">
+      <div className="install-popup-card relative w-full max-w-md overflow-hidden rounded-t-[2.5rem] border border-white/10 bg-slate-900 text-white shadow-[0_30px_120px_rgba(0,0,0,0.65)] sm:rounded-[2.5rem] max-h-[90vh] overflow-y-auto hide-scrollbar">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.32),_transparent_48%),linear-gradient(180deg,_rgba(255,255,255,0.02),_rgba(255,255,255,0))]" />
 
-        <div className="relative p-5 sm:p-7">
+        <div className="relative p-6 sm:p-7">
           <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/15 sm:hidden" />
 
           <div className="mb-5 flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[1.25rem] bg-white/10 ring-1 ring-white/10 shadow-lg">
-                <img src="/icon-192.png" alt="Harino's App" className="h-12 w-12 rounded-2xl object-cover" />
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[1.25rem] bg-white ring-2 ring-white/20 shadow-xl overflow-hidden shrink-0">
+                <img src="/icon-192.png" alt="Harino's App" className="h-12 w-12 rounded-xl object-cover" />
               </div>
               <div>
                 <div className="text-[9px] font-black uppercase tracking-[0.24em] text-amber-300">
-                  Better as an app
+                  Official Mobile App
                 </div>
-                <h3 className="mt-1 font-display text-2xl font-bold leading-tight text-white">
+                <h3 className="mt-1 font-display text-xl font-bold leading-tight text-white">
                   {popupTitle}
                 </h3>
               </div>
@@ -96,7 +109,7 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
               type="button"
               onClick={dismissPopup}
               aria-label="Close install popup"
-              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/70 transition-colors hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/70 transition-colors hover:text-white shrink-0 cursor-pointer"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 6l12 12M18 6L6 18" />
@@ -104,52 +117,64 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
             </button>
           </div>
 
-          <p className="max-w-sm text-sm leading-6 text-white/70">
-            Install Harino&apos;s for faster reorders, smoother full-screen browsing, and quick access from your phone home screen.
+          <p className="text-xs leading-relaxed text-white/75 font-medium">
+            Install Harino&apos;s for instant 1-tap food ordering, live kitchen notifications (preparing, ready, out for delivery), and wallet cashback alerts.
           </p>
 
-          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-              <div className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">FAST</div>
-              <div className="mt-1 text-[9px] font-black uppercase tracking-[0.2em] text-white/60">Faster Launch</div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-2.5 py-2.5">
+              <div className="text-[9px] font-black uppercase tracking-wider text-amber-300">PIZZA</div>
+              <div className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-white/60">Live Updates</div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-              <div className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">ORDER</div>
-              <div className="mt-1 text-[9px] font-black uppercase tracking-[0.2em] text-white/60">Quick Reorder</div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-2.5 py-2.5">
+              <div className="text-[9px] font-black uppercase tracking-wider text-emerald-300">WALLET</div>
+              <div className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-white/60">Instant Pay</div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-              <div className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">APP</div>
-              <div className="mt-1 text-[9px] font-black uppercase tracking-[0.2em] text-white/60">Home Screen</div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-2.5 py-2.5">
+              <div className="text-[9px] font-black uppercase tracking-wider text-red-400">FAST</div>
+              <div className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-white/60">Home Screen</div>
             </div>
           </div>
 
-          {showIosSteps && (
-            <div className="mt-5 rounded-[1.5rem] border border-amber-300/20 bg-amber-400/10 p-4">
-              <div className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-300">
-                iPhone / iPad Steps
+          {(isIos || showIosSteps) && (
+            <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-400/10 p-4">
+              <div className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-300 mb-2.5 flex items-center gap-1.5">
+                <span>🍎</span>
+                <span>Quick iPhone Setup</span>
               </div>
-              <div className="mt-3 space-y-2 text-sm leading-6 text-white/75">
-                <p>1. Open this site in Safari.</p>
-                <p>2. Tap the Share button.</p>
-                <p>3. Choose Add to Home Screen.</p>
+              <div className="space-y-2 text-xs leading-relaxed text-white/80 font-medium">
+                <p>1. In Safari, tap the <b>Share icon</b> (<span className="text-sm">⎋</span>) at the bottom.</p>
+                <p>2. Scroll and choose <b>&quot;Add to Home Screen&quot;</b> (<span className="text-sm font-bold">＋</span>).</p>
+                <p>3. Tap <b>&quot;Add&quot;</b> at top right to place Harino&apos;s on your screen.</p>
+              </div>
+
+              <div className="mt-3 pt-2.5 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={handleDownloadIosProfile}
+                  className="w-full py-2 px-3 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl text-[11px] font-bold text-amber-300 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                >
+                  <span>📥</span>
+                  <span>Download iOS Profile (.mobileconfig)</span>
+                </button>
               </div>
             </div>
           )}
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-5 flex flex-col gap-2.5">
             <button
               type="button"
               onClick={handlePrimaryAction}
-              className="cta-glow flex-1 rounded-2xl bg-red-650 hover:bg-red-750 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-white shadow-lg transition-transform active:scale-[0.98] cursor-pointer"
+              className="cta-glow w-full rounded-2xl bg-red-650 hover:bg-red-500 py-3.5 text-[11px] font-black uppercase tracking-[0.2em] text-white shadow-xl shadow-red-950/30 transition-transform active:scale-[0.98] cursor-pointer"
             >
-              {canPromptInstall ? 'Install updates' : 'Show Install Steps'}
+              Install updates
             </button>
             <button
               type="button"
               onClick={dismissPopup}
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-white/70 transition-colors hover:text-white"
+              className="w-full rounded-2xl border border-white/10 bg-white/5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/60 transition-colors hover:text-white cursor-pointer"
             >
-              Maybe Later
+              Later
             </button>
           </div>
         </div>

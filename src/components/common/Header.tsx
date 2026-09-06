@@ -20,6 +20,7 @@ interface HeaderProps {
   setSearchQuery: (query: string) => void;
   campaign?: FestivalCampaign | null;
   isCartOpen?: boolean;
+  onInstallClick?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -36,6 +37,7 @@ const Header: React.FC<HeaderProps> = ({
   setSearchQuery,
   campaign,
   isCartOpen = false,
+  onInstallClick,
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
@@ -67,6 +69,11 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   const handleInstall = async () => {
+    if (onInstallClick) {
+      onInstallClick();
+      return;
+    }
+
     if (canPromptInstall) {
       const outcome = await promptInstall();
       if (outcome === 'accepted') {
@@ -190,7 +197,7 @@ const Header: React.FC<HeaderProps> = ({
                 }`}
                 title="Install Harino's App"
               >
-                📥 <span className="hidden xs:inline">Install App</span>
+                📥 <span className="hidden xs:inline">Install updates</span>
               </button>
             )}
 

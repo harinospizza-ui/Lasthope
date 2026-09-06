@@ -21,7 +21,7 @@ export const useInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
 
-  const isNative = Capacitor.isNative;
+  const isNative = Capacitor.isNativePlatform();
 
   useEffect(() => {
     if (isNative) {

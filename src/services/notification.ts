@@ -1,76 +1,275 @@
 import { getOfferNotificationMessage, getOfferReleaseSignature } from '../utils/offerUtils';
 import { OfferCard } from '../types';
 import { getNotificationPermission, safeStorage } from './browserSupport';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
-const DEFAULT_ICON = 'https://drive.google.com/thumbnail?id=1Gz7Qi82EYLJZxm1EfFxpXHHQ6mhKQIc4&sz=w500';
+const DEFAULT_ICON = '/icon-192.png';
 const OFFER_RELEASE_KEY = 'harinos_offer_release_signature';
+
+// Synthesize pleasant melodic notification chimes using Web Audio API
+const playChime = (tone: 'order' | 'wallet' | 'offer' | 'status' = 'order') => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    let baseFreq = 523.25; // C5
+    if (tone === 'wallet') baseFreq = 659.25; // E5
+    if (tone === 'offer') baseFreq = 587.33; // D5
+    if (tone === 'status') baseFreq = 698.46; // F5
+
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(baseFreq, now);
+    osc1.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.15);
+
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(baseFreq * 1.25, now + 0.08);
+    osc2.frequency.exponentialRampToValueAtTime(baseFreq * 2, now + 0.28);
+
+    gainNode.gain.setValueAtTime(0.25, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+    osc1.connect(gainNode);
+    osc2.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc1.start(now);
+    osc2.start(now + 0.08);
+    osc1.stop(now + 0.28);
+    osc2.stop(now + 0.45);
+  } catch {
+    // Audio context may be restricted without prior user interaction
+  }
+};
 
 export const NotificationService = {
   requestPermission: async (): Promise<boolean> => {
     const permission = getNotificationPermission();
 
     if (permission === 'unsupported') {
-      console.warn('This browser does not support desktop notification');
+      console.warn('This browser does not support push notifications');
       return false;
     }
 
     if (permission === 'granted') return true;
 
     if (permission !== 'denied') {
-      const nextPermission = await Notification.requestPermission();
-      return nextPermission === 'granted';
+      try {
+        const nextPermission = await Notification.requestPermission();
+        return nextPermission === 'granted';
+      } catch (err) {
+        console.warn('Notification permission request error:', err);
+        return false;
+      }
     }
 
     return false;
   },
 
-  show: (title: string, body: string, icon?: string) => {
-    if (getNotificationPermission() !== 'granted') return;
+  show: (
+    title: string,
+    body: string,
+    icon?: string,
+    type: 'info' | 'success' | 'warning' | 'error' = 'info',
+    tag?: string
+  ) => {
+    // 1. Play auditory chime
+    playChime(type === 'success' ? 'wallet' : 'order');
 
-    const options = {
-      body,
-      icon: icon || DEFAULT_ICON,
-      badge: DEFAULT_ICON,
-      vibrate: [100, 50, 100],
-    };
+    // 2. Trigger native haptic vibration if running via Capacitor
+    if (Capacitor.isNativePlatform()) {
+      try {
+        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+      } catch {}
+    }
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready
-        .then((registration) => {
-          registration.showNotification(title, options).catch((err) => {
-            console.error('SW notification failed, falling back:', err);
+    // 3. Dispatch to in-app toast notification stack
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('harinos-notification', {
+          detail: {
+            id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            title,
+            message: body,
+            type,
+            timestamp: new Date().toISOString(),
+          },
+        })
+      );
+    }
+
+    // 4. Send system push notification if permitted
+    if (getNotificationPermission() === 'granted') {
+      const options = {
+        body,
+        icon: icon || DEFAULT_ICON,
+        badge: DEFAULT_ICON,
+        vibrate: [150, 75, 150],
+        tag: tag || `harinos-${Date.now()}`,
+      };
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready
+          .then((registration) => {
+            registration.showNotification(title, options).catch((err) => {
+              console.warn('SW notification fallback:', err);
+              try {
+                new Notification(title, options);
+              } catch {}
+            });
+          })
+          .catch(() => {
             try {
               new Notification(title, options);
-            } catch (e) {
-              console.error('Fallback notification failed:', e);
-            }
+            } catch {}
           });
-        })
-        .catch(() => {
-          try {
-            new Notification(title, options);
-          } catch (e) {
-            console.error('Fallback notification failed:', e);
-          }
-        });
-    } else {
-      try {
-        new Notification(title, options);
-      } catch (e) {
-        console.error('Native notification failed:', e);
+      } else {
+        try {
+          new Notification(title, options);
+        } catch (e) {
+          console.warn('Native notification failed:', e);
+        }
       }
     }
   },
 
-  notifyOfferReleases: (offers: OfferCard[], options?: { force?: boolean }) => {
-    if (getNotificationPermission() !== 'granted') {
-      return;
-    }
+  notifyOrderStatus: (
+    orderId: string,
+    status: string,
+    options?: { customerName?: string; orderType?: string; total?: number }
+  ) => {
+    const cleanId = orderId ? orderId.slice(-6).toUpperCase() : 'ORDER';
+    const type = options?.orderType || 'delivery';
 
-    const notifiableOffers = offers.filter((offer) => offer.enabled && offer.notifyCustomers);
-    if (!notifiableOffers.length) {
-      return;
+    switch (status) {
+      case 'new':
+        NotificationService.show(
+          `🍕 Order Received (#${cleanId})`,
+          "We've received your order! The Harino's kitchen is preparing to cook it fresh.",
+          DEFAULT_ICON,
+          'success',
+          `order-${orderId}`
+        );
+        break;
+
+      case 'preparing':
+        NotificationService.show(
+          `👨‍🍳 Preparing Your Fresh Order (#${cleanId})`,
+          'The kitchen is actively baking your pizza and prepping your delicious food right now!',
+          DEFAULT_ICON,
+          'info',
+          `order-${orderId}`
+        );
+        break;
+
+      case 'ready':
+        NotificationService.show(
+          `✅ Hot & Ready! (#${cleanId})`,
+          type === 'delivery'
+            ? 'Your order is freshly prepared and packaged, ready for delivery rider pickup!'
+            : 'Your order is hot and ready at the counter! Please collect your meal.',
+          DEFAULT_ICON,
+          'success',
+          `order-${orderId}`
+        );
+        break;
+
+      case 'out_for_delivery':
+        NotificationService.show(
+          `🚗 Out for Delivery! (#${cleanId})`,
+          'Our delivery partner is on the way to your location with your steaming hot food!',
+          DEFAULT_ICON,
+          'warning',
+          `order-${orderId}`
+        );
+        break;
+
+      case 'done':
+        NotificationService.show(
+          `🎉 Order Delivered (#${cleanId})`,
+          'Thank you for ordering with Harino\'s! Enjoy your meal.',
+          DEFAULT_ICON,
+          'success',
+          `order-${orderId}`
+        );
+        break;
+
+      case 'cancelled':
+        NotificationService.show(
+          `❌ Order Cancelled (#${cleanId})`,
+          `Order #${cleanId} has been cancelled. Any applied wallet or coin balance has been restored.`,
+          DEFAULT_ICON,
+          'error',
+          `order-${orderId}`
+        );
+        break;
+
+      default:
+        NotificationService.show(
+          `Order Update (#${cleanId})`,
+          `Your order status is now: ${status}`,
+          DEFAULT_ICON,
+          'info',
+          `order-${orderId}`
+        );
     }
+  },
+
+  notifyWalletUpdate: (
+    changeType: 'credit' | 'debit' | 'reward',
+    amount: number,
+    newBalance: number,
+    notes?: string
+  ) => {
+    if (changeType === 'credit') {
+      NotificationService.show(
+        '💰 Harino\'s Wallet Credited!',
+        `₹${Math.round(amount)} has been credited to your wallet! ${notes || ''} Current Balance: ₹${Math.round(newBalance)}.`,
+        DEFAULT_ICON,
+        'success',
+        `wallet-credit-${Date.now()}`
+      );
+    } else if (changeType === 'debit') {
+      NotificationService.show(
+        '💳 Harino\'s Wallet Payment',
+        `₹${Math.round(amount)} paid from your wallet for your order. Remaining Balance: ₹${Math.round(newBalance)}.`,
+        DEFAULT_ICON,
+        'info',
+        `wallet-debit-${Date.now()}`
+      );
+    } else if (changeType === 'reward') {
+      NotificationService.show(
+        '🌟 Reward Coins Earned!',
+        `+${amount} Harino\'s coins earned! Total Reward Coins: ${newBalance}.`,
+        DEFAULT_ICON,
+        'success',
+        `wallet-reward-${Date.now()}`
+      );
+    }
+  },
+
+  notifyOffer: (title: string, description: string, image?: string) => {
+    NotificationService.show(
+      `🔥 Special Offer: ${title}`,
+      description,
+      image || DEFAULT_ICON,
+      'warning',
+      `offer-${Date.now()}`
+    );
+  },
+
+  notifyOfferReleases: (offers: OfferCard[], options?: { force?: boolean }) => {
+    const notifiableOffers = offers.filter((offer) => offer.enabled && offer.notifyCustomers);
+    if (!notifiableOffers.length) return;
 
     const currentSignature = getOfferReleaseSignature(notifiableOffers);
     const previousSignature = safeStorage.getItem(window.localStorage, OFFER_RELEASE_KEY);
@@ -82,38 +281,25 @@ export const NotificationService = {
     notifiableOffers.forEach((offer, index) => {
       window.setTimeout(() => {
         NotificationService.show(
-          `New Offer: ${offer.offerTitle}`,
+          `🔥 New Offer: ${offer.offerTitle}`,
           getOfferNotificationMessage(offer),
           offer.image || DEFAULT_ICON,
+          'warning',
+          `offer-${offer.id || index}`
         );
-      }, index * 900);
+      }, index * 1200);
     });
 
     safeStorage.setItem(window.localStorage, OFFER_RELEASE_KEY, currentSignature);
   },
 
   simulateOrderStatus: (orderId: string, type: 'takeaway' | 'delivery') => {
+    NotificationService.notifyOrderStatus(orderId, 'new', { orderType: type });
     window.setTimeout(() => {
-      NotificationService.show(
-        'Order Confirmed',
-        `We've received your order ${orderId}. The kitchen has started preparing it.`,
-      );
-    }, 1000);
-
-    window.setTimeout(() => {
-      NotificationService.show(
-        'In the Oven',
-        `Order ${orderId} is being prepared fresh right now.`,
-      );
+      NotificationService.notifyOrderStatus(orderId, 'preparing', { orderType: type });
     }, 15000);
-
     window.setTimeout(() => {
-      const title = type === 'delivery' ? 'Out for Delivery' : 'Ready for Pickup';
-      const body = type === 'delivery'
-        ? 'Our delivery partner is on the way to your location.'
-        : 'Your order is hot and ready at the counter.';
-
-      NotificationService.show(title, body);
-    }, 45000);
+      NotificationService.notifyOrderStatus(orderId, type === 'delivery' ? 'out_for_delivery' : 'ready', { orderType: type });
+    }, 35000);
   },
 };

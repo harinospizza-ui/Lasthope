@@ -106,20 +106,58 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 
   const [newItemSpicy, setNewItemSpicy] = useState(false);
   const [newItemPopular, setNewItemPopular] = useState(false);
+  const [newItemSeries, setNewItemSeries] = useState<string>('Cheese series');
 
-  // Sort menuItems: by Category order first, then by Price ascending
+  // Filter & Search state for Admin
+  const [selectedFilterCategory, setSelectedFilterCategory] = useState<string>('all');
+  const [selectedPizzaSeries, setSelectedPizzaSeries] = useState<string>('all');
+  const [adminSearch, setAdminSearch] = useState<string>('');
+
+  // Filter & Sort menuItems: by Category order first, then Series, then Price ascending
   const sortedMenuItems = React.useMemo(() => {
     const categoryOrder = [Category.PIZZA, Category.BURGERS, Category.FRIES, Category.MOMOS, Category.SIDES, Category.BEVERAGES];
-    const filtered = menuItems.filter(item => showArchived ? item.isArchived : !item.isArchived);
+    const seriesOrder = ['Cheese series', 'Makhni series', 'Tanduri series', "Harino's special"];
+
+    const filtered = menuItems.filter((item) => {
+      if (showArchived ? !item.isArchived : item.isArchived) return false;
+      if (selectedFilterCategory !== 'all' && item.category !== selectedFilterCategory) return false;
+      if (selectedPizzaSeries !== 'all') {
+        if (item.category !== Category.PIZZA) return false;
+        const itemSeries =
+          item.series ||
+          (item.id === 'p_hs'
+            ? "Harino's special"
+            : item.id?.startsWith('makhni_')
+            ? 'Makhni series'
+            : item.id?.startsWith('tandoori_')
+            ? 'Tanduri series'
+            : 'Cheese series');
+        if (itemSeries !== selectedPizzaSeries) return false;
+      }
+      if (adminSearch.trim()) {
+        const q = adminSearch.toLowerCase().trim();
+        const matchName = item.name.toLowerCase().includes(q);
+        const matchId = item.id.toLowerCase().includes(q);
+        const matchSeries = item.series?.toLowerCase().includes(q);
+        if (!matchName && !matchId && !matchSeries) return false;
+      }
+      return true;
+    });
+
     return [...filtered].sort((a, b) => {
       const idxA = categoryOrder.indexOf(a.category);
       const idxB = categoryOrder.indexOf(b.category);
       if (idxA !== idxB) {
         return idxA - idxB;
       }
+      if (a.category === Category.PIZZA && b.category === Category.PIZZA) {
+        const sA = seriesOrder.indexOf(a.series || 'Cheese series');
+        const sB = seriesOrder.indexOf(b.series || 'Cheese series');
+        if (sA !== sB) return (sA === -1 ? 99 : sA) - (sB === -1 ? 99 : sB);
+      }
       return a.price - b.price;
     });
-  }, [menuItems, showArchived]);
+  }, [menuItems, showArchived, selectedFilterCategory, selectedPizzaSeries, adminSearch]);
 
   // Operations
   const toggleItemAvailability = async (item: MenuItem) => {
@@ -262,6 +300,22 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                   </div>
                 </div>
 
+                {newItemCategory === Category.PIZZA && (
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Pizza Series</label>
+                    <select
+                      value={newItemSeries}
+                      onChange={e => setNewItemSeries(e.target.value)}
+                      className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500 text-xs font-bold"
+                    >
+                      <option value="Cheese series">🧀 Cheese series</option>
+                      <option value="Makhni series">🍛 Makhni series</option>
+                      <option value="Tanduri series">🔥 Tanduri series</option>
+                      <option value="Harino's special">⭐ Harino's special</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="flex gap-6 pt-2">
                   <label className="flex items-center gap-2 font-bold cursor-pointer">
                     <input type="checkbox" checked={newItemSpicy} onChange={e => setNewItemSpicy(e.target.checked)} className="w-4 h-4 rounded text-red-600 focus:ring-0 bg-transparent border-white/20" />
@@ -319,6 +373,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                       description: newItemDesc,
                       price: priceNum,
                       category: newItemCategory,
+                      series: newItemCategory === Category.PIZZA ? (newItemSeries as any) : undefined,
                       image: newItemImage || '/icon-192.png',
                       vegetarian: true,
                       spicy: newItemSpicy,
@@ -352,15 +407,118 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
           </div>
         )}
 
+        {/* Admin Search & Category / Series Filter Toolbar */}
+        <div className="mb-6 space-y-3 bg-slate-950/60 p-4 rounded-3xl border border-white/10 shadow-xl">
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="relative w-full sm:w-72">
+              <input
+                type="text"
+                placeholder="🔍 Search items by name, ID or series..."
+                value={adminSearch}
+                onChange={(e) => setAdminSearch(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2 text-xs font-bold text-white outline-none focus:border-red-500 shadow-inner"
+              />
+              {adminSearch && (
+                <button
+                  onClick={() => setAdminSearch('')}
+                  className="absolute right-2.5 top-2 text-slate-400 hover:text-white text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="text-xs font-bold text-slate-400 self-end sm:self-center">
+              Showing <span className="text-white font-black">{sortedMenuItems.length}</span> items
+            </div>
+          </div>
+
+          {/* Category Filter Pills */}
+          <div className="flex flex-wrap gap-1.5 pt-1 border-t border-white/5">
+            <button
+              onClick={() => {
+                setSelectedFilterCategory('all');
+                setSelectedPizzaSeries('all');
+              }}
+              className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                selectedFilterCategory === 'all'
+                  ? 'bg-red-650 text-white shadow-md'
+                  : 'bg-white/[0.04] text-slate-400 border border-white/5 hover:bg-white/10'
+              }`}
+            >
+              All Categories
+            </button>
+            {Object.values(Category).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => {
+                  setSelectedFilterCategory(cat);
+                  if (cat !== Category.PIZZA) setSelectedPizzaSeries('all');
+                }}
+                className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                  selectedFilterCategory === cat
+                    ? 'bg-red-650 text-white shadow-md'
+                    : 'bg-white/[0.04] text-slate-400 border border-white/5 hover:bg-white/10'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Pizza Series Sub-Filter Pills (visible when category is 'all' or 'Pizza') */}
+          {(selectedFilterCategory === 'all' || selectedFilterCategory === Category.PIZZA) && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-white/5 text-[10px]">
+              <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px] mr-1">
+                Pizza Series:
+              </span>
+              {[
+                { id: 'all', label: 'All Series' },
+                { id: 'Cheese series', label: '🧀 Cheese Series' },
+                { id: 'Makhni series', label: '🍛 Makhni Series' },
+                { id: 'Tanduri series', label: '🔥 Tanduri Series' },
+                { id: "Harino's special", label: "⭐ Harino's Special" },
+              ].map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedPizzaSeries(s.id)}
+                  className={`px-2.5 py-1 rounded-lg font-black uppercase tracking-wider transition-all ${
+                    selectedPizzaSeries === s.id
+                      ? 'bg-amber-400 text-slate-950 shadow-sm'
+                      : 'bg-white/[0.04] text-slate-400 border border-white/5 hover:bg-white/10'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2">
           {sortedMenuItems.map((item) => (
             <div key={item.id} className={`rounded-2xl p-4 flex gap-4 shadow-2xl glass-card transition-premium ${!item.available ? 'opacity-50 grayscale-[30%] border border-red-500/20' : ''}`}>
               <img src={item.image} className="w-20 h-20 rounded-xl object-cover" onError={(e) => { e.currentTarget.src = '/icon-192.png'; }} />
               <div className="flex-1 flex flex-col justify-between">
                 <div>
-                  <div className="font-bold flex items-center gap-2">
-                    {item.name}
+                  <div className="font-bold flex flex-wrap items-center gap-2">
+                    <span>{item.name}</span>
                     {item.vegetarian && <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" title="Vegetarian"></span>}
+                    {item.category === Category.PIZZA && (
+                      <span
+                        className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider shadow-sm ${
+                          item.series === 'Cheese series'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            : item.series === 'Makhni series'
+                            ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                            : item.series === 'Tanduri series'
+                            ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                            : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                        }`}
+                      >
+                        {item.series || (item.id === 'p_hs' ? "Harino's special" : item.id?.startsWith('makhni_') ? 'Makhni series' : item.id?.startsWith('tandoori_') ? 'Tanduri series' : 'Cheese series')}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-slate-400 capitalize">{item.category}</div>
                   

@@ -51,6 +51,7 @@ export interface MenuItem {
   sizes?: SizeOption[];
   options?: MenuItemOption[];
   isArchived?: boolean;
+  series?: 'Cheese series' | 'Makhni series' | 'Tanduri series' | "Harino's special" | string;
 }
 
 export interface OfferCard {

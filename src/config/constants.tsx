@@ -136,13 +136,16 @@ export const OFFER_CARDS: OfferCard[] = [
 ];
 
 export const MENU_ITEMS: MenuItem[] = [
-  // --- PIZZAS: 1. Margherita Series ---
+  // =========================================================
+  // --- 1. CHEESE SERIES PIZZAS (13 Items) -------------------
+  // =========================================================
   {
     id: 'p1_co',
     name: "Cheese & Onion Pizza",
     description: "Classic hand-stretched pizza topped with premium mozzarella and fresh red onions.",
     price: 99,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/cheeseonion.jpeg",
     vegetarian: true,
     available: true,
@@ -154,6 +157,7 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "Your choice of juicy tomatoes with a double layer of cheese.",
     price: 119,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/cheesetomato.jpeg",
     vegetarian: true,
     available: true,
@@ -165,6 +169,7 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "Your choice of crisp capsicum with a double layer of cheese.",
     price: 119,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/cheesecap.jpeg",
     vegetarian: true,
     available: true,
@@ -176,6 +181,7 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "Sweet golden corn smothered in mozzarella.",
     price: 129,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/sweetcorn.jpeg",
     vegetarian: true,
     available: true,
@@ -187,20 +193,19 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "Soft paneer chunks smothered in mozzarella.",
     price: 129,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/cheesepaneer.jpeg",
     vegetarian: true,
     available: true,
     sizes: [{ label: 'Regular', price: 129 }, { label: 'Medium', price: 259 }, { label: 'Large', price: 369 }]
   },
-
-
-  // --- PIZZAS: 2. Paneer Special Pizzas ---
   {
     id: 'p2_tp',
     name: "Tandoori Paneer (Paneer + Onion)",
     description: "Smoky tandoori marinated paneer with grilled onions.",
     price: 149,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/tanduripaneer.jpeg",
     vegetarian: true,
     available: true,
@@ -212,6 +217,7 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "Spicy paneer pizza for those who love a hot kick.",
     price: 149,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/teekhapaneer.jpeg",
     vegetarian: true,
     available: true,
@@ -224,20 +230,20 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "The dream combo of grilled paneer and sweet corn.",
     price: 159,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/ultimatepaneer.jpeg",
     vegetarian: true,
     available: true,
     popular: true,
     sizes: [{ label: 'Regular', price: 159 }, { label: 'Medium', price: 299 }, { label: 'Large', price: 419 }]
   },
-
-  // --- PIZZAS: 3. Veg Special Pizzas ---
   {
     id: 'p3_mt',
     name: "Masala Twist (Veg + Blended Spices)",
     description: "Mixed veggies with a Blended spices twist.",
     price: 169,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/masala.jpeg",
     vegetarian: true,
     available: true,
@@ -249,20 +255,20 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "A mountain of fresh vegetables, corn, and extra cheese.",
     price: 169,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/vegover.jpeg",
     vegetarian: true,
     available: true,
     popular: true,
     sizes: [{ label: 'Regular', price: 169 }, { label: 'Medium', price: 299 }, { label: 'Large', price: 429 }]
   },
-
-  // --- PIZZAS: 4. Crunch & Fusion ---
   {
     id: 'p4_mc',
     name: "Mighty Crunch (Onion + Tomato)",
     description: "Extra crunchy base with your choice of onion & tomato toppings.",
     price: 139,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/mightycrunch.jpeg",
     vegetarian: true,
     available: true,
@@ -274,6 +280,7 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "Hot chilli infused base with crunchy onion & capsicum.",
     price: 139,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/chillishot.jpeg",
     vegetarian: true,
     available: true,
@@ -286,19 +293,351 @@ export const MENU_ITEMS: MenuItem[] = [
     description: "The absolute favorite for vegetable enthusiasts.",
     price: 139,
     category: Category.PIZZA,
+    series: 'Cheese series',
     image: "/images/veglover.jpeg",
     vegetarian: true,
     available: true,
     sizes: [{ label: 'Regular', price: 139 }, { label: 'Medium', price: 259 }, { label: 'Large', price: 379 }]
   },
 
-  // --- PIZZAS: 5. Harino's Special ---
+  // =========================================================
+  // --- 2. MAKHNI SERIES PIZZAS (13 Items) -------------------
+  // =========================================================
+  {
+    id: 'makhni_p1_co',
+    name: "Cheese & Onion Makhni Pizza",
+    description: "Rich and creamy makhni gravy base topped with premium mozzarella and fresh red onions.",
+    price: 119,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/cheeseonion.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 119 }, { label: 'Medium', price: 249 }, { label: 'Large', price: 369 }]
+  },
+  {
+    id: 'makhni_p1_t',
+    name: "Cheese & Tomato Makhni Pizza",
+    description: "Royal makhni gravy base with juicy tomatoes and double layer of melted mozzarella.",
+    price: 139,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/cheesetomato.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 139 }, { label: 'Medium', price: 269 }, { label: 'Large', price: 389 }]
+  },
+  {
+    id: 'makhni_p1_cap',
+    name: "Cheese & Capsicum Makhni Pizza",
+    description: "Crisp capsicum smothered in royal butter makhni sauce and gooey mozzarella cheese.",
+    price: 139,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/cheesecap.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 139 }, { label: 'Medium', price: 269 }, { label: 'Large', price: 389 }]
+  },
+  {
+    id: 'makhni_p1_corn',
+    name: "Cheese & Corn Makhni Pizza",
+    description: "Golden sweet corn kernels tossed on a luscious, velvety makhni gravy crust.",
+    price: 149,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/sweetcorn.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 149 }, { label: 'Medium', price: 289 }, { label: 'Large', price: 409 }]
+  },
+  {
+    id: 'makhni_p1_p',
+    name: "Cheese & Paneer Makhni Pizza",
+    description: "Tender cottage cheese paneer cubes drenched in rich makhni sauce with extra cheese.",
+    price: 149,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/cheesepaneer.jpeg",
+    vegetarian: true,
+    available: true,
+    popular: true,
+    sizes: [{ label: 'Regular', price: 149 }, { label: 'Medium', price: 289 }, { label: 'Large', price: 409 }]
+  },
+  {
+    id: 'makhni_p2_tp',
+    name: "Tandoori Paneer Makhni Pizza",
+    description: "The best of both worlds: charred tandoori paneer slices infused with creamy makhni gravy.",
+    price: 169,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/tanduripaneer.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 169 }, { label: 'Medium', price: 319 }, { label: 'Large', price: 449 }]
+  },
+  {
+    id: 'makhni_p2_tkp',
+    name: "Teekha Paneer Makhni Pizza",
+    description: "Fiery green chilies and marinated paneer balanced over smooth, aromatic makhni base.",
+    price: 169,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/teekhapaneer.jpeg",
+    vegetarian: true,
+    available: true,
+    spicy: true,
+    sizes: [{ label: 'Regular', price: 169 }, { label: 'Medium', price: 319 }, { label: 'Large', price: 449 }]
+  },
+  {
+    id: 'makhni_p2_up',
+    name: "Ultimate Paneer Makhni Pizza",
+    description: "Paneer chunks and sweet corn enveloped in luxurious butter makhni sauce and cheese.",
+    price: 179,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/ultimatepaneer.jpeg",
+    vegetarian: true,
+    available: true,
+    popular: true,
+    sizes: [{ label: 'Regular', price: 179 }, { label: 'Medium', price: 329 }, { label: 'Large', price: 459 }]
+  },
+  {
+    id: 'makhni_p3_mt',
+    name: "Masala Twist Makhni Pizza",
+    description: "Indian spice blend veggies infused with authentic Delhi-style creamy makhni sauce.",
+    price: 189,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/masala.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 189 }, { label: 'Medium', price: 319 }, { label: 'Large', price: 449 }]
+  },
+  {
+    id: 'makhni_p3_vo',
+    name: "Veg Overloaded Makhni Pizza",
+    description: "Loaded garden fresh veggies and sweet corn smothered in thick makhni cream gravy.",
+    price: 189,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/vegover.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 189 }, { label: 'Medium', price: 329 }, { label: 'Large', price: 469 }]
+  },
+  {
+    id: 'makhni_p4_mc',
+    name: "Mighty Crunch Makhni Pizza",
+    description: "Crispy crunchy crust crowned with fresh onions, ripe tomatoes, and makhni drizzle.",
+    price: 159,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/mightycrunch.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 159 }, { label: 'Medium', price: 309 }, { label: 'Large', price: 419 }]
+  },
+  {
+    id: 'makhni_p4_cs',
+    name: "Chilli Shot Makhni Pizza",
+    description: "Zesty green chilies, capsicum, and onions paired with a sweet-savory makhni foundation.",
+    price: 159,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/chillishot.jpeg",
+    vegetarian: true,
+    available: true,
+    spicy: true,
+    sizes: [{ label: 'Regular', price: 159 }, { label: 'Medium', price: 309 }, { label: 'Large', price: 419 }]
+  },
+  {
+    id: 'makhni_p4_vl',
+    name: "Veggie Lover Makhni Pizza",
+    description: "The ultimate vegetable symphony layered over aromatic royal makhni sauce.",
+    price: 159,
+    category: Category.PIZZA,
+    series: 'Makhni series',
+    image: "/images/veglover.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 159 }, { label: 'Medium', price: 289 }, { label: 'Large', price: 419 }]
+  },
+
+  // =========================================================
+  // --- 3. TANDURI SERIES PIZZAS (13 Items) ------------------
+  // =========================================================
+  {
+    id: 'tanduri_p1_co',
+    name: "Cheese & Onion Tanduri Pizza",
+    description: "Smoky tandoori sauce base topped with fresh red onions and gooey mozzarella cheese.",
+    price: 119,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/cheeseonion.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 119 }, { label: 'Medium', price: 249 }, { label: 'Large', price: 369 }]
+  },
+  {
+    id: 'tanduri_p1_t',
+    name: "Cheese & Tomato Tanduri Pizza",
+    description: "Smoky tandoori spices with juicy red tomatoes and roasted mozzarella crust.",
+    price: 139,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/cheesetomato.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 139 }, { label: 'Medium', price: 269 }, { label: 'Large', price: 389 }]
+  },
+  {
+    id: 'tanduri_p1_cap',
+    name: "Cheese & Capsicum Tanduri Pizza",
+    description: "Crispy green bell peppers tossed over fiery and smoky tandoori sauce with melted cheese.",
+    price: 139,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/cheesecap.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 139 }, { label: 'Medium', price: 269 }, { label: 'Large', price: 389 }]
+  },
+  {
+    id: 'tanduri_p1_corn',
+    name: "Cheese & Corn Tanduri Pizza",
+    description: "Sweet American corn paired with bold clay-oven tandoori sauce and mozzarella.",
+    price: 149,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/sweetcorn.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 149 }, { label: 'Medium', price: 289 }, { label: 'Large', price: 409 }]
+  },
+  {
+    id: 'tanduri_p1_p',
+    name: "Cheese & Paneer Tanduri Pizza",
+    description: "Fresh tender paneer cubes marinated in authentic Punjabi tandoori spices and cheese.",
+    price: 149,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/cheesepaneer.jpeg",
+    vegetarian: true,
+    available: true,
+    popular: true,
+    sizes: [{ label: 'Regular', price: 149 }, { label: 'Medium', price: 289 }, { label: 'Large', price: 409 }]
+  },
+  {
+    id: 'tanduri_p2_tp',
+    name: "Tandoori Paneer Special Tanduri Pizza",
+    description: "Double tandoori delight: smoky tandoori marinade, roasted paneer, and charred onions.",
+    price: 169,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/tanduripaneer.jpeg",
+    vegetarian: true,
+    available: true,
+    popular: true,
+    sizes: [{ label: 'Regular', price: 169 }, { label: 'Medium', price: 319 }, { label: 'Large', price: 449 }]
+  },
+  {
+    id: 'tanduri_p2_tkp',
+    name: "Teekha Paneer Tanduri Pizza",
+    description: "Extra spicy tandoori paneer with chopped hot green chilies for true spice lovers.",
+    price: 169,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/teekhapaneer.jpeg",
+    vegetarian: true,
+    available: true,
+    spicy: true,
+    sizes: [{ label: 'Regular', price: 169 }, { label: 'Medium', price: 319 }, { label: 'Large', price: 449 }]
+  },
+  {
+    id: 'tanduri_p2_up',
+    name: "Ultimate Paneer Tanduri Pizza",
+    description: "Generous cottage cheese chunks and crunchy corn smothered in smoky tandoori sauce.",
+    price: 179,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/ultimatepaneer.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 179 }, { label: 'Medium', price: 329 }, { label: 'Large', price: 459 }]
+  },
+  {
+    id: 'tanduri_p3_mt',
+    name: "Masala Twist Tanduri Pizza",
+    description: "Mixed vegetables roasted with chatpata masala spices over a warm tandoori base.",
+    price: 189,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/masala.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 189 }, { label: 'Medium', price: 319 }, { label: 'Large', price: 449 }]
+  },
+  {
+    id: 'tanduri_p3_vo',
+    name: "Veg Overloaded Tanduri Pizza",
+    description: "Heaped mountain of fresh seasonal vegetables bathed in smoky tandoori gravy and cheese.",
+    price: 189,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/vegover.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 189 }, { label: 'Medium', price: 329 }, { label: 'Large', price: 469 }]
+  },
+  {
+    id: 'tanduri_p4_mc',
+    name: "Mighty Crunch Tanduri Pizza",
+    description: "Crispy thin-crust edge loaded with crunchy onions, fresh tomatoes, and spicy tandoori dip.",
+    price: 159,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/mightycrunch.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 159 }, { label: 'Medium', price: 309 }, { label: 'Large', price: 419 }]
+  },
+  {
+    id: 'tanduri_p4_cs',
+    name: "Chilli Shot Tanduri Pizza",
+    description: "Fiery chili explosion with crisp bell peppers, red onions, and rustic tandoori seasoning.",
+    price: 159,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/chillishot.jpeg",
+    vegetarian: true,
+    available: true,
+    spicy: true,
+    sizes: [{ label: 'Regular', price: 159 }, { label: 'Medium', price: 309 }, { label: 'Large', price: 419 }]
+  },
+  {
+    id: 'tanduri_p4_vl',
+    name: "Veggie Lover Tanduri Pizza",
+    description: "Farm fresh vegetables marinated and baked in smoky tandoori aromatics and rich mozzarella.",
+    price: 159,
+    category: Category.PIZZA,
+    series: 'Tanduri series',
+    image: "/images/veglover.jpeg",
+    vegetarian: true,
+    available: true,
+    sizes: [{ label: 'Regular', price: 159 }, { label: 'Medium', price: 289 }, { label: 'Large', price: 419 }]
+  },
+
+  // =========================================================
+  // --- 4. HARINO'S SPECIAL SERIES (1 Item) ------------------
+  // =========================================================
   {
     id: 'p_hs',
     name: "Harino's Special",
     description: "The ultimate signature masterpiece loaded with premium paneer, golden corn, tangy olives, and secret house spices. Truly because Hari knows best!",
     price: 219,
     category: Category.PIZZA,
+    series: "Harino's special",
     image: "/images/hari.jpeg",
     vegetarian: true,
     available: true,

@@ -29,6 +29,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   onRefresh,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedPizzaSeries, setSelectedPizzaSeries] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [cart, setCart] = useState<POSCartItem[]>([]);
   const [sizeSelections, setSizeSelections] = useState<Record<string, string>>({});
@@ -63,9 +64,25 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
       if (item.available === false) return false;
       const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
       const matchesSearch = !searchQuery.trim() || item.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
-      return matchesCat && matchesSearch;
+      if (!matchesCat || !matchesSearch) return false;
+
+      if ((selectedCategory === 'All' || selectedCategory === Category.PIZZA) && selectedPizzaSeries !== 'All') {
+        if (item.category !== Category.PIZZA) return false;
+        const itemSeries =
+          item.series ||
+          (item.id === 'p_hs'
+            ? "Harino's special"
+            : item.id?.startsWith('makhni_')
+            ? 'Makhni series'
+            : item.id?.startsWith('tandoori_')
+            ? 'Tanduri series'
+            : 'Cheese series');
+        if (itemSeries !== selectedPizzaSeries) return false;
+      }
+
+      return true;
     });
-  }, [effectiveMenuItems, selectedCategory, searchQuery]);
+  }, [effectiveMenuItems, selectedCategory, selectedPizzaSeries, searchQuery]);
 
   const getItemCurrentPrice = (item: MenuItem, size?: string) => {
     if (item.sizes && item.sizes.length > 0) {
@@ -329,7 +346,12 @@ Thank you for dining with Harino's! 🍕`;
               {categories.map((cat) => (
                 <button
                   key={cat}
-                  onClick={() => setSelectedCategory(cat)}
+                  onClick={() => {
+                    setSelectedCategory(cat);
+                    if (cat !== 'All' && cat !== Category.PIZZA) {
+                      setSelectedPizzaSeries('All');
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                     selectedCategory === cat
                       ? 'bg-red-650 text-white shadow-md'
@@ -340,6 +362,34 @@ Thank you for dining with Harino's! 🍕`;
                 </button>
               ))}
             </div>
+
+            {/* Pizza Series Pills */}
+            {(selectedCategory === 'All' || selectedCategory === Category.PIZZA) && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-white/10 text-[9px] w-full">
+                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px] mr-1">
+                  Series:
+                </span>
+                {[
+                  { id: 'All', label: 'All Series' },
+                  { id: 'Cheese series', label: '🧀 Cheese' },
+                  { id: 'Makhni series', label: '🍛 Makhni' },
+                  { id: 'Tanduri series', label: '🔥 Tanduri' },
+                  { id: "Harino's special", label: "⭐ Special" },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setSelectedPizzaSeries(s.id)}
+                    className={`px-2 py-0.5 rounded-lg font-black uppercase tracking-wider transition-all ${
+                      selectedPizzaSeries === s.id
+                        ? 'bg-amber-400 text-slate-950 shadow-sm'
+                        : 'bg-white/[0.04] text-slate-400 border border-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Menu Items Grid: Vertical scroll only */}
@@ -364,7 +414,14 @@ Thank you for dining with Harino's! 🍕`;
                     />
                     <div className="min-w-0 flex-1">
                       <h4 className="text-xs font-black text-white truncate leading-tight">{item.name}</h4>
-                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{item.category}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{item.category}</p>
+                        {item.category === Category.PIZZA && (
+                          <span className="text-[8px] font-black uppercase px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30 truncate">
+                            {item.series || (item.id === 'p_hs' ? "Special" : item.id?.startsWith('makhni_') ? 'Makhni' : item.id?.startsWith('tandoori_') ? 'Tanduri' : 'Cheese')}
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-1 text-xs sm:text-sm font-black text-red-400">Rs {currentPrice}</div>
                     </div>
                   </div>

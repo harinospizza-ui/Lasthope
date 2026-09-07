@@ -479,59 +479,90 @@ export const getDisplayOrderId = (orderId: string): string => {
 };
 
 export const extendMenuItemsWithGeneratedSeries = (items: MenuItem[]): MenuItem[] => {
-  const extended: MenuItem[] = [];
-  
-  // Filter out any generated items that might be cached or passed in
-  const sourceItems = items.filter(
-    (item) => 
-      item &&
-      item.id &&
-      !item.id.startsWith('cheese_') && 
-      !item.id.startsWith('masala_') &&
-      !item.id.startsWith('makhni_') &&
-      !item.id.startsWith('tandoori_')
+  if (!items || !Array.isArray(items)) return [];
+
+  // Check if items already have Makhni or Tanduri series present
+  const hasMakhniSeries = items.some(
+    (item) => item && (item.series === 'Makhni series' || (item.id && item.id.startsWith('makhni_')))
+  );
+  const hasTanduriSeries = items.some(
+    (item) => item && (item.series === 'Tanduri series' || (item.id && item.id.startsWith('tandoori_')))
   );
 
-  for (const item of sourceItems) {
-    extended.push(item);
-
-    // Exclude Harino's Special (p_hs) from the series generator
-    if (item.category === Category.PIZZA && item.id !== 'p_hs') {
-      // 1. Makhni Series version
-      if (!item.name.toLowerCase().includes('makhni')) {
-        const makhniId = `makhni_${item.id}`;
-        extended.push({
-          ...item,
-          id: makhniId,
-          name: `${item.name.replace(" Pizza", "").split(" (")[0]} Makhni Pizza`,
-          description: `Rich and creamy makhni gravy base. ${item.description}`,
-          price: item.price + 30,
-          sizes: item.sizes?.map((sz) => ({
-            label: sz.label,
-            price: sz.label === 'Regular' ? sz.price + 30 : sz.label === 'Medium' ? sz.price + 45 : sz.label === 'Large' ? sz.price + 60 : sz.price + 30,
-          })),
-        });
+  if (hasMakhniSeries && hasTanduriSeries) {
+    // Already has all series, ensure every pizza has appropriate series assigned if missing
+    return items.map((item) => {
+      if (item.category === Category.PIZZA && !item.series) {
+        if (item.id === 'p_hs') return { ...item, series: "Harino's special" };
+        if (item.id?.startsWith('makhni_')) return { ...item, series: 'Makhni series' };
+        if (item.id?.startsWith('tandoori_')) return { ...item, series: 'Tanduri series' };
+        return { ...item, series: 'Cheese series' };
       }
-
-      // 2. Tandoori Series version
-      if (!item.name.toLowerCase().includes('tandoori')) {
-        const tandooriId = `tandoori_${item.id}`;
-        extended.push({
-          ...item,
-          id: tandooriId,
-          name: `${item.name.replace(" Pizza", "").split(" (")[0]} Tandoori Pizza`,
-          description: `Smoky tandoori sauce base. ${item.description}`,
-          price: item.price + 25,
-          sizes: item.sizes?.map((sz) => ({
-            label: sz.label,
-            price: sz.label === 'Regular' ? sz.price + 25 : sz.label === 'Medium' ? sz.price + 35 : sz.label === 'Large' ? sz.price + 50 : sz.price + 25,
-          })),
-        });
-      }
-    }
+      return item;
+    });
   }
 
-  return extended;
+  // If items only contain base pizzas (e.g. from an older Firestore backup), generate them with the exact +20/+30/+40 rule
+  const result: MenuItem[] = [];
+  for (const item of items) {
+    if (!item) continue;
+    if (item.category === Category.PIZZA) {
+      if (item.id === 'p_hs') {
+        result.push({ ...item, series: "Harino's special" });
+        continue;
+      }
+      // Tag base pizza as Cheese series
+      const cheeseItem = { ...item, series: item.series || 'Cheese series' };
+      result.push(cheeseItem);
+
+      // Generate Makhni series (+20 small, +30 med, +40 large)
+      const makhniId = `makhni_${item.id}`;
+      result.push({
+        ...item,
+        id: makhniId,
+        series: 'Makhni series',
+        name: `${item.name.replace(" Pizza", "").split(" (")[0]} Makhni Pizza`,
+        description: `Rich and creamy makhni gravy base. ${item.description}`,
+        price: item.price + 20,
+        sizes: item.sizes?.map((sz) => ({
+          label: sz.label,
+          price:
+            sz.label === 'Regular'
+              ? sz.price + 20
+              : sz.label === 'Medium'
+              ? sz.price + 30
+              : sz.label === 'Large'
+              ? sz.price + 40
+              : sz.price + 20,
+        })),
+      });
+
+      // Generate Tanduri series (+20 small, +30 med, +40 large)
+      const tandooriId = `tandoori_${item.id}`;
+      result.push({
+        ...item,
+        id: tandooriId,
+        series: 'Tanduri series',
+        name: `${item.name.replace(" Pizza", "").split(" (")[0]} Tandoori Pizza`,
+        description: `Smoky tandoori sauce base. ${item.description}`,
+        price: item.price + 20,
+        sizes: item.sizes?.map((sz) => ({
+          label: sz.label,
+          price:
+            sz.label === 'Regular'
+              ? sz.price + 20
+              : sz.label === 'Medium'
+              ? sz.price + 30
+              : sz.label === 'Large'
+              ? sz.price + 40
+              : sz.price + 20,
+        })),
+      });
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
 };
 
 const App: React.FC = () => {

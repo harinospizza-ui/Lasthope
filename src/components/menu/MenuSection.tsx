@@ -59,12 +59,36 @@ const MenuCard: React.FC<MenuCardProps> = ({ item, offers, cartSubtotal, onAdd }
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
 
-        {/* Pure Veg Badge */}
-        <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 backdrop-blur-md shadow-sm">
-          <div className="flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-emerald-600 p-0.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+        {/* Pure Veg Badge + Pizza Series Badge */}
+        <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+          <div className="flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 backdrop-blur-md shadow-sm">
+            <div className="flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-emerald-600 p-0.5">
+              <div className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800">100% Veg</span>
           </div>
-          <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800">100% Veg</span>
+
+          {item.category === Category.PIZZA && item.series && (
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-md backdrop-blur-md ${
+                item.series === 'Cheese series'
+                  ? 'bg-amber-500 text-slate-950'
+                  : item.series === 'Makhni series'
+                  ? 'bg-orange-600 text-white'
+                  : item.series === 'Tanduri series'
+                  ? 'bg-red-650 text-white'
+                  : 'bg-yellow-400 text-yellow-950'
+              }`}
+            >
+              {item.series === 'Cheese series'
+                ? '🧀 Cheese Series'
+                : item.series === 'Makhni series'
+                ? '🍛 Makhni Series'
+                : item.series === 'Tanduri series'
+                ? '🔥 Tanduri Series'
+                : "⭐ Harino's Special"}
+            </span>
+          )}
         </div>
 
         {/* Badges: Popular / Spicy */}
@@ -166,8 +190,17 @@ const MenuCard: React.FC<MenuCardProps> = ({ item, offers, cartSubtotal, onAdd }
   );
 };
 
+const PIZZA_SERIES_TABS = [
+  { id: 'all', name: 'All Pizzas', icon: '🍕' },
+  { id: 'Cheese series', name: 'Cheese Series', icon: '🧀' },
+  { id: 'Makhni series', name: 'Makhni Series', icon: '🍛' },
+  { id: 'Tanduri series', name: 'Tanduri Series', icon: '🔥' },
+  { id: "Harino's special", name: "Harino's Special", icon: '⭐' },
+];
+
 const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, cartSubtotal }) => {
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [pizzaSeriesFilter, setPizzaSeriesFilter] = useState<string>('all');
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [quickFilter, setQuickFilter] = useState<'all' | 'popular' | 'spicy' | 'under199'>('all');
 
@@ -181,12 +214,17 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
     { id: Category.BEVERAGES, name: 'Beverages', icon: '🥤' },
   ], []);
 
-  // Filter items based on activeCategory, quickFilter, and searchFilter
+  // Filter items based on activeCategory, pizzaSeriesFilter, quickFilter, and searchFilter
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       // Category filter (if not 'all')
       if (activeCategory !== 'all' && item.category !== activeCategory) {
         return false;
+      }
+
+      // Pizza series filter when browsing Pizzas
+      if (activeCategory === Category.PIZZA && pizzaSeriesFilter !== 'all') {
+        if (item.series !== pizzaSeriesFilter) return false;
       }
 
       // Quick filter
@@ -200,12 +238,13 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
         const matchesName = item.name.toLowerCase().includes(query);
         const matchesDesc = item.description?.toLowerCase().includes(query);
         const matchesCategory = item.category?.toLowerCase().includes(query);
-        if (!matchesName && !matchesDesc && !matchesCategory) return false;
+        const matchesSeries = item.series?.toLowerCase().includes(query);
+        if (!matchesName && !matchesDesc && !matchesCategory && !matchesSeries) return false;
       }
 
       return true;
     });
-  }, [items, activeCategory, quickFilter, searchFilter]);
+  }, [items, activeCategory, pizzaSeriesFilter, quickFilter, searchFilter]);
 
   // Track refs for horizontal carousels
   const trackRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -224,14 +263,12 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
   // 9-Second Idle Auto-Scroll implementation
   useEffect(() => {
     const handleUserActivity = () => {
-      // Instantly cancel any active auto-scroll when user touches/interacts
       if (autoScrollIntervalRef.current) {
         clearInterval(autoScrollIntervalRef.current);
         autoScrollIntervalRef.current = null;
       }
       isAutoScrollingRef.current = false;
 
-      // Reset the 9-second idle countdown
       if (idleTimerRef.current) {
         clearTimeout(idleTimerRef.current);
       }
@@ -253,7 +290,6 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
 
         if (validTracks.length === 0) return;
 
-        // Advance the track currently in the viewport
         for (const track of validTracks) {
           const rect = track.getBoundingClientRect();
           const inView = rect.top < window.innerHeight && rect.bottom > 0;
@@ -276,7 +312,6 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
     const events = ['touchstart', 'touchmove', 'touchend', 'mousemove', 'mousedown', 'keydown', 'wheel', 'scroll', 'pointerdown'];
     events.forEach((ev) => window.addEventListener(ev, handleUserActivity, { passive: true }));
 
-    // Start 9s timer
     idleTimerRef.current = setTimeout(startIdleAutoScroll, 9000);
 
     return () => {
@@ -286,17 +321,47 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
     };
   }, []);
 
+  // Define section groups for the 'all' view so the 4 pizza series are presented cleanly
+  const sectionsToRender = useMemo(() => {
+    if (activeCategory === 'all') {
+      return [
+        { id: 'series-cheese', name: 'Cheese Series Pizzas', icon: '🧀', items: filteredItems.filter((i) => i.category === Category.PIZZA && (i.series === 'Cheese series' || (!i.series && i.id !== 'p_hs' && !i.id.startsWith('makhni_') && !i.id.startsWith('tandoori_')))) },
+        { id: 'series-makhni', name: 'Makhni Series Pizzas', icon: '🍛', items: filteredItems.filter((i) => i.category === Category.PIZZA && (i.series === 'Makhni series' || i.id.startsWith('makhni_'))) },
+        { id: 'series-tanduri', name: 'Tanduri Series Pizzas', icon: '🔥', items: filteredItems.filter((i) => i.category === Category.PIZZA && (i.series === 'Tanduri series' || i.id.startsWith('tandoori_'))) },
+        { id: 'series-special', name: "Harino's Special Pizza", icon: '⭐', items: filteredItems.filter((i) => i.category === Category.PIZZA && (i.series === "Harino's special" || i.id === 'p_hs')) },
+        { id: Category.MOMOS, name: 'Momos', icon: '🥟', items: filteredItems.filter((i) => i.category === Category.MOMOS) },
+        { id: Category.BURGERS, name: 'Burgers', icon: '🍔', items: filteredItems.filter((i) => i.category === Category.BURGERS) },
+        { id: Category.FRIES, name: 'Fries', icon: '🍟', items: filteredItems.filter((i) => i.category === Category.FRIES) },
+        { id: Category.SIDES, name: 'Sides & Calzones', icon: '🥟', items: filteredItems.filter((i) => i.category === Category.SIDES) },
+        { id: Category.BEVERAGES, name: 'Beverages', icon: '🥤', items: filteredItems.filter((i) => i.category === Category.BEVERAGES) },
+      ].filter((sec) => sec.items.length > 0);
+    } else if (activeCategory === Category.PIZZA && pizzaSeriesFilter === 'all') {
+      return [
+        { id: 'series-cheese', name: 'Cheese Series', icon: '🧀', items: filteredItems.filter((i) => i.series === 'Cheese series' || (!i.series && i.id !== 'p_hs' && !i.id.startsWith('makhni_') && !i.id.startsWith('tandoori_'))) },
+        { id: 'series-makhni', name: 'Makhni Series', icon: '🍛', items: filteredItems.filter((i) => i.series === 'Makhni series' || i.id.startsWith('makhni_')) },
+        { id: 'series-tanduri', name: 'Tanduri Series', icon: '🔥', items: filteredItems.filter((i) => i.series === 'Tanduri series' || i.id.startsWith('tandoori_')) },
+        { id: 'series-special', name: "Harino's Special", icon: '⭐', items: filteredItems.filter((i) => i.series === "Harino's special" || i.id === 'p_hs') },
+      ].filter((sec) => sec.items.length > 0);
+    }
+    return null;
+  }, [activeCategory, pizzaSeriesFilter, filteredItems]);
+
   return (
     <section className="space-y-8">
       {/* Unified Single Category & Filter Bar */}
       <div className="sticky top-16 z-30 bg-slate-900/95 backdrop-blur-md -mx-4 px-4 py-3 border-b border-white/10 shadow-lg">
-        {/* Category Navigation Pills */}
+        {/* Main Category Navigation Pills */}
         <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
           {categories.map((cat) => (
             <button
               key={cat.id}
               type="button"
-              onClick={() => setActiveCategory(cat.id)}
+              onClick={() => {
+                setActiveCategory(cat.id);
+                if (cat.id !== Category.PIZZA) {
+                  setPizzaSeriesFilter('all');
+                }
+              }}
               className={`flex items-center gap-1.5 shrink-0 px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
                 activeCategory === cat.id
                   ? 'bg-red-650 text-white shadow-lg shadow-red-650/30 scale-105'
@@ -309,13 +374,37 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
           ))}
         </div>
 
+        {/* Dedicated Pizza Series Filter Bar (shown when Pizzas category is active) */}
+        {activeCategory === Category.PIZZA && (
+          <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto hide-scrollbar pb-1 border-t border-white/10 pt-2 text-[10px]">
+            <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px] shrink-0 mr-1">
+              Series:
+            </span>
+            {PIZZA_SERIES_TABS.map((series) => (
+              <button
+                key={series.id}
+                type="button"
+                onClick={() => setPizzaSeriesFilter(series.id)}
+                className={`flex items-center gap-1 shrink-0 px-3 py-1.5 rounded-xl font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  pizzaSeriesFilter === series.id
+                    ? 'bg-amber-400 text-slate-950 shadow-md scale-105'
+                    : 'bg-white/10 text-slate-300 hover:bg-white/15 hover:text-white'
+                }`}
+              >
+                <span>{series.icon}</span>
+                <span>{series.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Quick Filter Chips */}
         <div className="flex items-center gap-2 mt-2.5 overflow-x-auto hide-scrollbar text-[10px]">
           <button
             type="button"
             onClick={() => setQuickFilter('all')}
             className={`px-3 py-1 rounded-xl font-bold uppercase tracking-wider transition-all cursor-pointer ${
-              quickFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white'
+              quickFilter === 'all' ? 'bg-white text-slate-900 shadow-sm font-black' : 'text-slate-400 hover:text-white'
             }`}
           >
             All Filters
@@ -360,6 +449,7 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
             type="button"
             onClick={() => {
               setActiveCategory('all');
+              setPizzaSeriesFilter('all');
               setQuickFilter('all');
               setSearchFilter('');
             }}
@@ -368,79 +458,76 @@ const MenuSection: React.FC<MenuSectionProps> = ({ items, onAddToCart, offers, c
             Reset Filters
           </button>
         </div>
-      ) : activeCategory === 'all' ? (
-        /* Horizontal scrolling rows grouped by category to eliminate long vertical scrolling */
+      ) : sectionsToRender ? (
+        /* Render Series or Category Sections in Horizontal Rows */
         <div className="space-y-8">
-          {categories
-            .filter((cat) => cat.id !== 'all')
-            .map((cat) => {
-              const catItems = filteredItems.filter((item) => item.category === cat.id);
-              if (catItems.length === 0) return null;
-
-              return (
-                <div key={cat.id} className="space-y-3">
-                  {/* Category Header with Scroll Buttons */}
-                  <div className="flex items-center justify-between px-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{cat.icon}</span>
-                      <h3 className="font-display text-lg font-black text-slate-900">{cat.name}</h3>
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                        {catItems.length}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => scrollTrack(cat.id, -300)}
-                        className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center text-sm font-bold shadow-sm transition-all cursor-pointer active:scale-90"
-                        aria-label={`Scroll ${cat.name} left`}
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => scrollTrack(cat.id, 300)}
-                        className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center text-sm font-bold shadow-sm transition-all cursor-pointer active:scale-90"
-                        aria-label={`Scroll ${cat.name} right`}
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Horizontal Scroll Row */}
-                  <div
-                    ref={(el) => {
-                      trackRefs.current[cat.id] = el;
-                    }}
-                    className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scroll-smooth snap-x snap-mandatory hide-scrollbar"
-                  >
-                    {catItems.map((item) => (
-                      <div key={item.id} className="w-[280px] sm:w-[320px] shrink-0 snap-start flex flex-col">
-                        <MenuCard
-                          item={item}
-                          offers={offers}
-                          cartSubtotal={cartSubtotal}
-                          onAdd={(selectedSize) => onAddToCart(item, selectedSize)}
-                        />
-                      </div>
-                    ))}
-                  </div>
+          {sectionsToRender.map((sec) => (
+            <div key={sec.id} className="space-y-3">
+              {/* Header with Scroll Buttons */}
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{sec.icon}</span>
+                  <h3 className="font-display text-lg font-black text-slate-900">{sec.name}</h3>
+                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {sec.items.length}
+                  </span>
                 </div>
-              );
-            })}
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => scrollTrack(sec.id, -300)}
+                    className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center text-sm font-bold shadow-sm transition-all cursor-pointer active:scale-90"
+                    aria-label={`Scroll ${sec.name} left`}
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollTrack(sec.id, 300)}
+                    className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center text-sm font-bold shadow-sm transition-all cursor-pointer active:scale-90"
+                    aria-label={`Scroll ${sec.name} right`}
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
+
+              {/* Horizontal Scroll Row */}
+              <div
+                ref={(el) => {
+                  trackRefs.current[sec.id] = el;
+                }}
+                className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scroll-smooth snap-x snap-mandatory hide-scrollbar"
+              >
+                {sec.items.map((item) => (
+                  <div key={item.id} className="w-[280px] sm:w-[320px] shrink-0 snap-start flex flex-col">
+                    <MenuCard
+                      item={item}
+                      offers={offers}
+                      cartSubtotal={cartSubtotal}
+                      onAdd={(selectedSize) => onAddToCart(item, selectedSize)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
-        /* Selected Category View: Horizontal carousel with manual scroll arrows */
+        /* Single Category / Single Series Horizontal Carousel */
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <span className="text-xl">
-                {categories.find((c) => c.id === activeCategory)?.icon || '🍕'}
+                {activeCategory === Category.PIZZA && pizzaSeriesFilter !== 'all'
+                  ? PIZZA_SERIES_TABS.find((p) => p.id === pizzaSeriesFilter)?.icon || '🍕'
+                  : categories.find((c) => c.id === activeCategory)?.icon || '🍽️'}
               </span>
               <h3 className="font-display text-lg font-black text-slate-900">
-                {categories.find((c) => c.id === activeCategory)?.name || 'Dishes'}
+                {activeCategory === Category.PIZZA && pizzaSeriesFilter !== 'all'
+                  ? PIZZA_SERIES_TABS.find((p) => p.id === pizzaSeriesFilter)?.name || 'Pizzas'
+                  : categories.find((c) => c.id === activeCategory)?.name || 'Dishes'}
               </h3>
               <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
                 {filteredItems.length}

@@ -211,41 +211,21 @@ const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Notification Alerts Button */}
-            <button
-              onClick={handleRequestNotifs}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale cursor-pointer ${
-                notifStatus === 'granted'
-                  ? isScrolledOrLight
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm'
-                    : 'bg-emerald-600/30 border-emerald-500/40 text-emerald-300 backdrop-blur-md'
-                  : isScrolledOrLight
-                  ? 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100 shadow-sm'
-                  : 'bg-white/10 border-white/10 text-white hover:bg-white/20 backdrop-blur-md'
-              }`}
-              title={notifStatus === 'granted' ? 'Alerts Active (Click to test)' : 'Enable Order, Wallet & Offer Alerts'}
-            >
-              <span>{notifStatus === 'granted' ? '🔔' : '🔕'}</span>
-              <span className="hidden sm:inline">
-                {notifStatus === 'granted' ? 'Alerts On' : 'Alerts'}
-              </span>
-            </button>
-
-            {/* Orders History Button */}
-            <button
-              onClick={onViewOrders}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale cursor-pointer ${
-                activeView === 'orders'
-                  ? 'bg-red-600 border-red-600 text-white shadow-md'
-                  : isScrolledOrLight
-                  ? 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100 shadow-sm'
-                  : 'bg-white/10 border-white/10 text-white hover:bg-white/20 backdrop-blur-md'
-              }`}
-              title="Order History (Last 3 Orders)"
-            >
-              <span>📜</span>
-              <span className="hidden xs:inline">Orders</span>
-            </button>
+            {/* Notification Alerts Button: Disappears once enabled/granted to save screen space */}
+            {notifStatus !== 'granted' && (
+              <button
+                onClick={handleRequestNotifs}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-premium btn-hover-scale cursor-pointer ${
+                  isScrolledOrLight
+                    ? 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100 shadow-sm'
+                    : 'bg-white/10 border-white/10 text-white hover:bg-white/20 backdrop-blur-md'
+                }`}
+                title="Enable Order, Wallet & Offer Alerts"
+              >
+                <span>🔕</span>
+                <span className="hidden sm:inline">Alerts</span>
+              </button>
+            )}
 
             {customerProfile && onWalletClick && (
               <button

@@ -35,6 +35,7 @@ interface CartSidebarProps {
   campaign?: FestivalCampaign | null;
   festivalDiscountAmount?: number;
   rawFoodSubtotal?: number;
+  onViewOrders?: () => void;
 }
 
 const CartSidebar: React.FC<CartSidebarProps> = ({
@@ -67,6 +68,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   campaign,
   festivalDiscountAmount = 0,
   rawFoodSubtotal,
+  onViewOrders,
 }) => {
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -114,44 +116,74 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   return (
     <>
       <div
-        className={`fixed inset-0 z-[70] bg-slate-950/60 backdrop-blur-sm transition-opacity duration-400 ${
+        className={`fixed inset-0 z-[140] bg-slate-950/70 backdrop-blur-sm transition-opacity duration-400 ${
           isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         onClick={onClose}
       />
 
       <aside
-        className={`fixed top-0 right-0 z-[80] flex h-screen supports-[height:100dvh]:h-[100dvh] w-full max-w-full flex-col bg-white border-l border-slate-100 shadow-[0_0_80px_rgba(0,0,0,0.22)] transition-transform duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] md:max-w-md ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
+        className={`fixed inset-0 z-[150] flex h-screen supports-[height:100dvh]:h-[100dvh] w-full flex-col bg-white shadow-2xl transition-all duration-300 ease-out ${
+          isOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
         }`}
         style={isOpen ? swipeDismiss.style : undefined}
         {...(isOpen ? swipeDismiss.bind : {})}
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="border-b border-slate-100 px-4 pb-4 pt-[max(env(safe-area-inset-top),14px)] sm:px-6">
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-200" />
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="mb-1 text-[9px] font-black uppercase tracking-[0.28em] text-red-600">
-                  Your Basket
+          <div className="border-b border-slate-100 px-4 pb-4 pt-[max(env(safe-area-inset-top),14px)] sm:px-6 bg-slate-50/80 backdrop-blur-md">
+            <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
+            <div className="flex items-center justify-between gap-3 max-w-4xl mx-auto w-full">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Back to menu"
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:text-red-600 hover:border-red-200 cursor-pointer"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.28em] text-red-600">
+                    Your Basket
+                  </div>
+                  <h2 className="text-xl font-display font-bold text-slate-900 sm:text-2xl">Checkout & Delivery</h2>
                 </div>
-                <h2 className="text-2xl font-display font-bold text-slate-900 sm:text-3xl">Checkout</h2>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close cart"
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:text-red-600"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 6l12 12M18 6L6 18" />
-                </svg>
-              </button>
+
+              <div className="flex items-center gap-2">
+                {onViewOrders && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onViewOrders();
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer"
+                    title="View Order History"
+                  >
+                    <span>📜</span>
+                    <span className="hidden sm:inline">Order History</span>
+                    <span className="sm:hidden">Orders</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close cart"
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:text-red-600 cursor-pointer"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-            <div className="bg-slate-50/60 p-4 sm:p-5">
+            <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-5">
               <div className="mb-5 grid grid-cols-3 gap-2">
                 <button
                   onClick={() => setOrderType('takeaway')}
@@ -204,6 +236,26 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                   <div className="text-[9px] text-slate-400">At outlet</div>
                 </button>
               </div>
+
+              {onViewOrders && pastOrders.length > 0 && (
+                <div className="mb-4 flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📜</span>
+                    <span className="text-slate-700 font-bold">Past Orders ({pastOrders.length})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onViewOrders();
+                    }}
+                    className="text-red-600 font-black text-xs hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>View History</span>
+                    <span>➔</span>
+                  </button>
+                </div>
+              )}
 
               {orderType === 'delivery' ? (
                 <>

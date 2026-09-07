@@ -544,7 +544,7 @@ const App: React.FC = () => {
   const [notification, setNotification] = useState<string | null>(null);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(StorageService.getCustomerProfile());
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
-  const [isServiceModeModalOpen, setIsServiceModeModalOpen] = useState(true);
+  const [isServiceModeModalOpen, setIsServiceModeModalOpen] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [vegOnly, setVegOnly] = useState(false);
@@ -866,32 +866,27 @@ const App: React.FC = () => {
             console.log('Routine update active: loaded silently in background without prompting permission.');
           }
         } else if (!isNative && !isStandalone) {
-          // Running in browser as WebApp on Android, iOS, or Desktop
-          const alreadyMigrated = localStorage.getItem('harinos_migrated_to_native') === 'true';
-          const dismissedAt = Number(localStorage.getItem('harinos_install_modal_dismissed_at') || '0');
-          const hasDismissedRecently = Date.now() - dismissedAt < 1000 * 60 * 60 * 8; // 8 hours snooze
+          // Running in browser as WebApp on Android, iOS, or Desktop:
+          // Pre-load update config silently so user can tap "Install updates" whenever they desire,
+          // but DO NOT block or pop up on initial load, preventing scary "Harmful file" browser warnings.
+          try {
+            const response = await fetch('https://harinos.store/app/version.json?t=' + Date.now(), {
+              headers: { 'Cache-Control': 'no-cache' }
+            });
+            const data = response.ok ? await response.json() : { version: '1.0.0' };
 
-          if (!alreadyMigrated && !hasDismissedRecently) {
-            try {
-              const response = await fetch('https://harinos.store/app/version.json?t=' + Date.now(), {
-                headers: { 'Cache-Control': 'no-cache' }
-              });
-              const data = response.ok ? await response.json() : { version: '1.0.0' };
-
-              setAndroidUpdateConfig({
-                latestVersion: data.version || '1.0.0',
-                releaseNotes: isIOS
-                  ? "Install Harino's on your iPhone for 1-tap food ordering, live kitchen order notifications (preparing, ready, out for delivery), and instant wallet cashback updates."
-                  : "Install the official Harino's App for instant loading, live kitchen status notifications (preparing, ready, out for delivery), and wallet alerts.",
-                isForceUpdate: false,
-                apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
-                isConversionPrompt: true,
-              });
-
-              setShowAndroidUpdateModal(true);
-            } catch (e) {
-              console.warn('Webapp conversion check notice:', e);
-            }
+            setAndroidUpdateConfig({
+              latestVersion: data.version || '1.0.0',
+              releaseNotes: isIOS
+                ? "Install Harino's on your iPhone for 1-tap food ordering, live kitchen order notifications (preparing, ready, out for delivery), and instant wallet cashback updates."
+                : "Install the official Harino's App for instant loading, live kitchen status notifications (preparing, ready, out for delivery), and wallet alerts.",
+              isForceUpdate: false,
+              apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
+              isConversionPrompt: true,
+            });
+            // Intentionally not calling setShowAndroidUpdateModal(true) on initial web load
+          } catch (e) {
+            console.warn('Webapp conversion check notice:', e);
           }
         } else if (!isNative && isStandalone && isAndroid) {
           // Running as PWA shortcut on Android -> prompt to convert to native APK
@@ -1757,9 +1752,6 @@ const App: React.FC = () => {
 
   const filteredItems = useMemo(() => {
     let result = menuItems;
-    if (selectedCategory !== 'All') {
-      result = result.filter((item) => item.category === selectedCategory);
-    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -1768,16 +1760,8 @@ const App: React.FC = () => {
           item.description.toLowerCase().includes(q)
       );
     }
-    if (vegOnly) {
-      // Harino's Pizza is pure veg. Categorized items have Category enum values.
-      // Filter out any non-veg if defined, or match category types.
-      result = result.filter((item) => item.category !== 'nonveg');
-    }
-    if (popularOnly) {
-      result = result.filter((item) => item.popular);
-    }
     return result;
-  }, [selectedCategory, menuItems, searchQuery, vegOnly, popularOnly]);
+  }, [menuItems, searchQuery]);
 
   const baseSubtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.basePrice * item.quantity, 0),
@@ -2323,36 +2307,7 @@ const App: React.FC = () => {
             )}
 
             <div ref={menuRef} className="max-w-7xl mx-auto px-4 mt-8 md:mt-12 pb-24 scroll-mt-24">
-              <div className="mb-6 flex justify-end">
-                <button
-                  onClick={() => setPopularOnly(!popularOnly)}
-                  className={`px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
-                    popularOnly
-                      ? 'bg-amber-50 border-amber-300 text-amber-850 font-black scale-105 shadow-sm'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
-                  }`}
-                >
-                  ⭐ Popular Only
-                </button>
-              </div>
 
-              <div className="relative mb-8 md:mb-12">
-                <div className="flex space-x-2 overflow-x-auto pb-4 pt-2 px-1 hide-scrollbar snap-x snap-mandatory scroll-smooth">
-                  {categoryButtons.map((category) => (
-                    <button
-                      key={category}
-                      onClick={() => handleExploreCategory(category)}
-                      className={`snap-start whitespace-nowrap px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border shadow-sm flex-shrink-0 cursor-pointer ${selectedCategory === category
-                          ? 'bg-red-655 border-red-655 text-white scale-105 shadow-md shadow-red-900/10'
-                          : 'bg-white border-slate-200 text-slate-500 hover:text-red-655'
-                        }`}
-                    >
-                      {category}
-                    </button>
-                  ))}
-                </div>
-                <div className="absolute right-0 top-0 h-full w-12 bg-gradient-to-l from-cream-50/30 to-transparent pointer-events-none md:hidden" />
-              </div>
 
               {!isStoreOpen && (
                 <div className="bg-amber-50 border border-amber-200 p-6 rounded-[2rem] text-center mb-10">
@@ -2482,6 +2437,7 @@ const App: React.FC = () => {
         onDetectLocation={detectLocation}
         pastOrders={pastOrders}
         onReorder={handleReorder}
+        onViewOrders={openOrdersView}
         customerProfile={customerProfile}
         useWallet={useWallet}
         setUseWallet={setUseWallet}

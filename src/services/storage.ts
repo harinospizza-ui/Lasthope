@@ -49,14 +49,15 @@ export const StorageService = {
   getPastOrders: (): Order[] => {
     const saved = safeStorage.getItem(window.localStorage, KEYS.ORDERS);
     try {
-      return saved ? JSON.parse(saved).slice(0, 3) : [];
+      return saved ? JSON.parse(saved).slice(0, 30) : [];
     } catch {
       return [];
     }
   },
   saveOrder: (order: Order) => {
     const orders = StorageService.getPastOrders();
-    const updatedOrders = [order, ...orders].slice(0, 3);
+    const filtered = orders.filter((o) => o.id !== order.id);
+    const updatedOrders = [order, ...filtered].slice(0, 30);
     safeStorage.setItem(window.localStorage, KEYS.ORDERS, JSON.stringify(updatedOrders));
   },
   saveAdminSession: (session: AdminSession): void => writeJson(KEYS.ADMIN_SESSION, session),

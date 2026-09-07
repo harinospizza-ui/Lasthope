@@ -1455,9 +1455,19 @@ const App: React.FC = () => {
   }, []);
 
   const openOrdersView = useCallback(() => {
+    setIsCartOpen(false);
+    setIsCategoryModalOpen(false);
+    setIsPaymentOpen(false);
+    setShowOrderSuccess(false);
     setView('orders');
-    pushAppScreen('orders');
-  }, [pushAppScreen]);
+
+    const currentState = window.history.state as { app?: string; screen?: AppScreen } | null;
+    if (currentState?.app === APP_HISTORY_NAMESPACE && currentState.screen && currentState.screen !== 'menu') {
+      replaceAppScreen('orders');
+    } else {
+      pushAppScreen('orders');
+    }
+  }, [pushAppScreen, replaceAppScreen]);
 
   const openCartView = useCallback(() => {
     setIsCartOpen(true);
@@ -1779,7 +1789,7 @@ const App: React.FC = () => {
     setIsCartOpen(true);
     pushAppScreen('cart');
     showNotification('Last order restored to basket.');
-  }, [pushAppScreen, showNotification]);
+  }, [menuItems, pushAppScreen, showNotification]);
 
   const filteredItems = useMemo(() => {
     let result = menuItems;
@@ -2025,7 +2035,7 @@ const App: React.FC = () => {
     }
 
     StorageService.saveOrder(placedOrder);
-    setPastOrders((currentOrders) => [placedOrder, ...currentOrders].slice(0, 3));
+    setPastOrders((currentOrders) => [placedOrder, ...currentOrders.filter((o) => o.id !== placedOrder.id)].slice(0, 30));
     setLatestOrder(placedOrder);
     setDismissedOrderId(null);
     localStorage.removeItem('dismissed_tracker_order_id');
@@ -2358,7 +2368,7 @@ const App: React.FC = () => {
           </>
         ) : (
           <div style={ordersSwipeDismiss.style} {...ordersSwipeDismiss.bind}>
-            <PastOrders orders={pastOrders} onReorder={handleReorder} />
+            <PastOrders orders={pastOrders} onReorder={handleReorder} onBackToMenu={returnToMenu} />
           </div>
         )}
       </main>

@@ -6,10 +6,11 @@ import { getDisplayOrderId } from '../../App';
 interface PastOrdersProps {
   orders: Order[];
   onReorder: (order: Order) => void;
+  onBackToMenu?: () => void;
 }
 
-const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
-  const recentOrders = orders.slice(0, 3);
+const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder, onBackToMenu }) => {
+  const recentOrders = orders;
 
   const handleAskForBill = (order: Order) => {
     const rawPhone = order.outletPhone || '+917818958571';
@@ -22,19 +23,50 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder }) => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-16">
-      <div className="flex flex-col items-center mb-12">
-        <h2 className="text-5xl font-display font-bold text-slate-900 mb-2">Order History</h2>
+    <div className="max-w-4xl mx-auto px-4 py-12 sm:py-16">
+      {/* Top Header & Back Button */}
+      <div className="flex items-center justify-between mb-8">
+        {onBackToMenu && (
+          <button
+            type="button"
+            onClick={onBackToMenu}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:text-red-650 hover:border-red-200 font-black text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer active:scale-95"
+          >
+            <span className="text-base font-black leading-none">‹</span>
+            <span>Back to Menu</span>
+          </button>
+        )}
+        {recentOrders.length > 0 && (
+          <span className="text-xs font-black uppercase tracking-wider text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl">
+            {recentOrders.length} {recentOrders.length === 1 ? 'Order' : 'Orders'}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-col items-center mb-10 text-center">
+        <h2 className="text-4xl sm:text-5xl font-display font-bold text-slate-900 mb-2">Order History</h2>
         <div className="h-1.5 w-24 bg-red-600 rounded-full"></div>
-        <p className="mt-4 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-          Showing your last 3 orders • Swipe right to go back
+        <p className="mt-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+          Review your past orders & tap Re-order to repeat anytime
         </p>
       </div>
 
       {recentOrders.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-[3rem] shadow-sm border border-orange-100">
-          <div className="text-6xl mb-6">📜</div>
-          <p className="text-xl font-display font-bold text-slate-400">No past orders yet. Let's start cooking!</p>
+        <div className="text-center py-16 px-6 bg-white rounded-[2.5rem] shadow-sm border border-orange-100 max-w-lg mx-auto">
+          <div className="text-6xl mb-4">📜</div>
+          <h3 className="text-2xl font-display font-bold text-slate-900 mb-2">No past orders yet</h3>
+          <p className="text-xs text-slate-500 mb-6 font-medium leading-relaxed">
+            Your saved orders will appear here so you can re-order your favorite pizzas with a single tap!
+          </p>
+          {onBackToMenu && (
+            <button
+              type="button"
+              onClick={onBackToMenu}
+              className="px-6 py-3 rounded-2xl bg-red-650 hover:bg-red-600 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-red-650/20 active:scale-95 cursor-pointer"
+            >
+              🍕 Explore Menu Now
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-8">

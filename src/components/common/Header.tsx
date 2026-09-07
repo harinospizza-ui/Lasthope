@@ -249,6 +249,18 @@ const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
+            {activeView === 'orders' && (
+              <button
+                type="button"
+                onClick={onViewMenu}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-red-650 text-white shadow-md hover:bg-red-600 transition-all cursor-pointer active:scale-95"
+                title="Back to Menu"
+              >
+                <span>🍽️</span>
+                <span>Menu</span>
+              </button>
+            )}
+
             <div className="relative flex items-center space-x-2">
               <button
                 onClick={onCartClick}

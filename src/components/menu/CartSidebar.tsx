@@ -157,7 +157,6 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      onClose();
                       onViewOrders();
                     }}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer"
@@ -246,7 +245,6 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      onClose();
                       onViewOrders();
                     }}
                     className="text-red-600 font-black text-xs hover:underline flex items-center gap-1 cursor-pointer"

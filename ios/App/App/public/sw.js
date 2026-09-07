@@ -12,38 +12,30 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  const { request } = event;
 
-  if (request.method !== 'GET') {
-    return;
+/**
+ * Handle direct postMessage from client to show notification
+ */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data;
+    event.waitUntil(
+      self.registration.showNotification(title || "Harino's Pizza", {
+        body: options?.body || '',
+        icon: options?.icon || '/icon-192.png',
+        badge: options?.badge || '/icon-192.png',
+        tag: options?.tag || `harinos-${Date.now()}`,
+        data: options?.data || {},
+        vibrate: options?.vibrate || [400, 200, 400, 200, 400],
+        requireInteraction: options?.requireInteraction || false,
+        renotify: options?.renotify !== false,
+      })
+    );
   }
-
-  const requestUrl = new URL(request.url);
-  if (requestUrl.origin !== self.location.origin) {
-    return;
-  }
-
-  const shouldBypassCache =
-    request.mode === 'navigate' ||
-    request.destination === 'script' ||
-    request.destination === 'style' ||
-    request.destination === 'worker' ||
-    request.destination === 'manifest' ||
-    request.destination === 'font' ||
-    request.destination === 'document' ||
-    requestUrl.pathname.startsWith('/assets/') ||
-    requestUrl.pathname === '/version.json';
-
-  if (!shouldBypassCache) {
-    return;
-  }
-
-  event.respondWith(fetch(request, { cache: 'no-store' }));
 });
 
 /**
- * Handle push notifications from Firebase Cloud Messaging
+ * Handle push notifications from Firebase Cloud Messaging or Web Push
  */
 self.addEventListener('push', (event) => {
   if (!event.data) {
@@ -51,28 +43,32 @@ self.addEventListener('push', (event) => {
     return;
   }
 
-  let payload;
+  let payload = {};
   try {
     payload = event.data.json();
   } catch (error) {
-    console.error('Error parsing push notification data:', error);
-    return;
+    try {
+      payload = { title: "Harino's Pizza", body: event.data.text() };
+    } catch {
+      console.error('Error parsing push notification data:', error);
+      return;
+    }
   }
 
-  const { notification, data } = payload;
-  if (!notification) {
-    console.warn('Push notification received without notification field');
-    return;
-  }
+  const notification = payload.notification || {};
+  const data = payload.data || {};
+  const notifTitle = notification.title || data.title || payload.title || "Harino's Pizza";
+  const notifBody = notification.body || data.body || payload.body || "You have an update from Harino's";
 
   const options = {
-    body: notification.body || '',
-    icon: notification.icon || '/icon-192.png',
-    badge: notification.badge || '/icon-192.png',
-    tag: data?.tag || 'harinos-notification',
-    data: data || {},
-    vibrate: [300, 200, 300],
+    body: notifBody,
+    icon: notification.icon || data.icon || '/icon-192.png',
+    badge: notification.badge || data.badge || '/icon-192.png',
+    tag: data?.tag || notification.tag || `harinos-${Date.now()}`,
+    data: data,
+    vibrate: [400, 200, 400, 200, 400],
     requireInteraction: false,
+    renotify: true,
     actions: [
       {
         action: 'open',
@@ -88,7 +84,7 @@ self.addEventListener('push', (event) => {
   };
 
   const promises = [];
-  promises.push(self.registration.showNotification(notification.title || 'Harino\'s', options));
+  promises.push(self.registration.showNotification(notifTitle, options));
 
   // Set homescreen app icon badge if pendingCount exists
   if (data && data.pendingCount) {
@@ -152,5 +148,21 @@ self.addEventListener('notificationclick', (event) => {
  */
 self.addEventListener('notificationclose', (event) => {
   console.log('Notification closed:', event.notification.tag);
+});
+
+// PWA fetch handler for caching and offline routing fallback
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    fetch(event.request).catch(async () => {
+      if (event.request.mode === 'navigate') {
+        const cache = await caches.open('harinos-offline-cache');
+        const cachedResponse = await cache.match('/index.html');
+        if (cachedResponse) return cachedResponse;
+      }
+      return caches.match(event.request).then((response) => response || Response.error());
+    })
+  );
 });
 

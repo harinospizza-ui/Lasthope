@@ -789,6 +789,8 @@ const App: React.FC = () => {
       try {
         const granted = await requestNotificationPermission();
         if (granted || (typeof Notification !== 'undefined' && Notification.permission === 'granted')) {
+          const { BackgroundService } = await import('./services/backgroundService');
+          BackgroundService.start();
           const { getOrCreateFCMToken, sendTokenToServer } = await import('./services/fcmService');
           const token = await getOrCreateFCMToken();
           if (token) {
@@ -838,8 +840,15 @@ const App: React.FC = () => {
           
           if (isFirstRun.current) {
             isFirstRun.current = false;
+            localStorage.setItem('harinos_last_seen_broadcast', docId);
             return;
           }
+
+          const lastSeen = localStorage.getItem('harinos_last_seen_broadcast');
+          if (lastSeen === docId) {
+            return;
+          }
+          localStorage.setItem('harinos_last_seen_broadcast', docId);
           
           const title = latestDoc.title;
           const body = latestDoc.body;

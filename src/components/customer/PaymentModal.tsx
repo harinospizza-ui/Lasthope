@@ -217,36 +217,48 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleOpenUpiApp('tez://upi/pay')}
-                    className="flex flex-col items-center justify-center p-2.5 rounded-2xl border border-slate-200 bg-white hover:border-red-400 hover:bg-red-50/40 transition-all shadow-sm group active:scale-95"
+                    className="flex flex-col items-center justify-center p-2 rounded-2xl border border-slate-200/90 bg-white hover:border-emerald-500 hover:bg-emerald-50/30 transition-all shadow-sm group active:scale-95"
+                    title="Google Pay"
                   >
-                    <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🟢</span>
+                    <div className="w-10 h-10 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                      <img src="/images/gpay.png" alt="Google Pay" className="w-8 h-8 object-contain drop-shadow-sm" />
+                    </div>
                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-700">GPay</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleOpenUpiApp('phonepe://pay')}
-                    className="flex flex-col items-center justify-center p-2.5 rounded-2xl border border-slate-200 bg-white hover:border-purple-400 hover:bg-purple-50/40 transition-all shadow-sm group active:scale-95"
+                    className="flex flex-col items-center justify-center p-2 rounded-2xl border border-slate-200/90 bg-white hover:border-purple-500 hover:bg-purple-50/30 transition-all shadow-sm group active:scale-95"
+                    title="PhonePe"
                   >
-                    <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🟣</span>
+                    <div className="w-10 h-10 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                      <img src="/images/phonepe.png" alt="PhonePe" className="w-8 h-8 object-contain drop-shadow-sm" />
+                    </div>
                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-700">PhonePe</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleOpenUpiApp('paytmmp://pay')}
-                    className="flex flex-col items-center justify-center p-2.5 rounded-2xl border border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50/40 transition-all shadow-sm group active:scale-95"
+                    className="flex flex-col items-center justify-center p-2 rounded-2xl border border-slate-200/90 bg-white hover:border-sky-500 hover:bg-sky-50/30 transition-all shadow-sm group active:scale-95"
+                    title="Paytm"
                   >
-                    <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🔵</span>
+                    <div className="w-10 h-10 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                      <img src="/images/paytm.png" alt="Paytm" className="w-8 h-8 object-contain drop-shadow-sm" />
+                    </div>
                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-700">Paytm</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleOpenUpiApp()}
-                    className="flex flex-col items-center justify-center p-2.5 rounded-2xl border border-slate-200 bg-white hover:border-red-400 hover:bg-red-50/40 transition-all shadow-sm group active:scale-95"
+                    className="flex flex-col items-center justify-center p-2 rounded-2xl border border-slate-200/90 bg-white hover:border-orange-500 hover:bg-orange-50/30 transition-all shadow-sm group active:scale-95"
+                    title="Any UPI App"
                   >
-                    <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">📱</span>
+                    <div className="w-10 h-10 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                      <img src="/images/upi.svg" alt="Any UPI" className="w-8 h-8 object-contain drop-shadow-sm" />
+                    </div>
                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-700">Any UPI</span>
                   </button>
                 </div>

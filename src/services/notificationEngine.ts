@@ -2,6 +2,7 @@ import { collection, doc, onSnapshot, query, where, orderBy, limit, Unsubscribe 
 import { db } from './firebaseClient';
 import { NotificationService } from './notification';
 import { StorageService } from './storage';
+import { BackgroundService } from './backgroundService';
 import type { CustomerProfile, Order, OfferCard } from '../types';
 
 let isEngineStarted = false;
@@ -69,6 +70,10 @@ const initializeLocalCache = () => {
         trackedOrderIds.add(o.id);
         const cached = localStorage.getItem(`harinos_order_status_${o.id}`);
         knownOrderStatuses.set(o.id, cached || o.status);
+        // Seed notified status to prevent alert spam on startup
+        if (!localStorage.getItem(`harinos_notified_status_${o.id}`)) {
+          localStorage.setItem(`harinos_notified_status_${o.id}`, cached || o.status);
+        }
       }
     });
 
@@ -133,6 +138,13 @@ export const handleOrderStatusUpdate = (
 
   // Only notify when status actually transitioned from one state to another (e.g. new -> preparing -> ready -> out_for_delivery)
   if (previousStatus && previousStatus !== newStatus) {
+    // Deduplication check: Do NOT notify if this exact status transition was already alerted
+    const lastNotified = localStorage.getItem(`harinos_notified_status_${orderId}`);
+    if (lastNotified === newStatus) {
+      return;
+    }
+    localStorage.setItem(`harinos_notified_status_${orderId}`, newStatus);
+
     console.log(`[NotificationEngine] Order ${orderId} status changed from "${previousStatus}" to "${newStatus}"`);
     NotificationService.notifyOrderStatus(orderId, newStatus, {
       orderType: order.orderType || 'delivery',
@@ -384,14 +396,18 @@ const watchOffers = () => {
           // If this is a newly discovered offer that wasn't previously known
           if (!knownOfferIds.has(offer.id)) {
             knownOfferIds.add(offer.id);
-            console.log(`[NotificationEngine] New offer broadcast: ${offer.offerTitle}`);
-            NotificationService.show(
-              `🔥 New Offer: ${offer.offerTitle}`,
-              offer.offerDescription || offer.description || 'Check out our latest pizza specials today!',
-              offer.image || '/icon-192.png',
-              'warning',
-              `offer-${offer.id}`
-            );
+            const alreadyNotified = localStorage.getItem(`harinos_notified_offer_${offer.id}`);
+            if (!alreadyNotified) {
+              localStorage.setItem(`harinos_notified_offer_${offer.id}`, 'true');
+              console.log(`[NotificationEngine] New offer broadcast: ${offer.offerTitle}`);
+              NotificationService.show(
+                `🔥 New Offer: ${offer.offerTitle}`,
+                offer.offerDescription || offer.description || 'Check out our latest pizza specials today!',
+                offer.image || '/icon-192.png',
+                'warning',
+                `offer-${offer.id}`
+              );
+            }
           }
         });
       },
@@ -416,6 +432,9 @@ export const startNotificationEngine = (profile?: CustomerProfile | null): (() =
 
   isEngineStarted = true;
   initializeLocalCache();
+
+  // Start continuous background keep-alive
+  BackgroundService.start();
 
   const phone = profile?.phone || StorageService.getCustomerProfile()?.phone;
   const customerId = profile?.id || StorageService.getCustomerProfile()?.id;

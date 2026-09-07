@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
+  <rect width="160" height="160" rx="32" fill="#FFFFFF"/>
+  <g transform="translate(10, 16)">
+    <!-- NPCI Official Double Chevron Arrows -->
+    <path d="M56 18 L92 68 L70 68 L44 32 Z" fill="#008238"/>
+    <path d="M72 18 L108 68 L86 68 L60 32 Z" fill="#F37021"/>
+    <!-- Bold UPI Lettermark -->
+    <text x="70" y="104" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="900" font-style="italic" fill="#2E3192" text-anchor="middle" letter-spacing="1.5">UPI</text>
+    <!-- Subtitle -->
+    <text x="70" y="120" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="9" font-weight="800" fill="#71717A" text-anchor="middle" letter-spacing="1.5">BHIM / ALL APPS</text>
+  </g>
+</svg>

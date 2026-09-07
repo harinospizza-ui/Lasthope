@@ -1,3 +1,5 @@
+// Unified Service Worker for Harino's Pizza (PWA, Push Notifications & Background Alerts)
+
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -12,24 +14,85 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// BroadcastChannel for instant background thread synchronization
+let broadcastChannel = null;
+try {
+  if (typeof BroadcastChannel !== 'undefined') {
+    broadcastChannel = new BroadcastChannel('harinos_background_sync');
+    broadcastChannel.onmessage = (event) => {
+      if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+        displayNotification(event.data.title, event.data.options);
+      }
+    };
+  }
+} catch (e) {
+  // BroadcastChannel fallback
+}
+
+function displayNotification(title, options) {
+  return self.registration.showNotification(title || "Harino's Pizza", {
+    body: options?.body || '',
+    icon: options?.icon || '/icon-192.png',
+    badge: options?.badge || '/icon-192.png',
+    tag: options?.tag || `harinos-${Date.now()}`,
+    data: options?.data || {},
+    vibrate: options?.vibrate || [500, 250, 500, 250, 500],
+    requireInteraction: options?.requireInteraction || false,
+    renotify: options?.renotify !== false,
+    actions: options?.actions || [
+      { action: 'open', title: 'Open Harinos', icon: '/icon-192.png' },
+      { action: 'track', title: 'Track Order', icon: '/icon-192.png' },
+    ],
+  });
+}
 
 /**
- * Handle direct postMessage from client to show notification
+ * Handle direct postMessage from client / background service
  */
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+  if (!event.data) return;
+
+  if (event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
+    event.waitUntil(displayNotification(title, options));
+  } else if (event.data.type === 'HEARTBEAT') {
+    // Keep-alive acknowledge
+    if (event.source && 'postMessage' in event.source) {
+      event.source.postMessage({ type: 'HEARTBEAT_ACK', timestamp: Date.now() });
+    }
+  }
+});
+
+/**
+ * Handle Periodic Background Sync (Android Chrome / Modern PWA)
+ */
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'harinos-order-sync') {
+    console.log('[SW] Periodic background sync triggered');
     event.waitUntil(
-      self.registration.showNotification(title || "Harino's Pizza", {
-        body: options?.body || '',
-        icon: options?.icon || '/icon-192.png',
-        badge: options?.badge || '/icon-192.png',
-        tag: options?.tag || `harinos-${Date.now()}`,
-        data: options?.data || {},
-        vibrate: options?.vibrate || [400, 200, 400, 200, 400],
-        requireInteraction: options?.requireInteraction || false,
-        renotify: options?.renotify !== false,
-      })
+      (async () => {
+        const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        clientList.forEach((client) => {
+          client.postMessage({ type: 'BACKGROUND_PERIODIC_CHECK', timestamp: Date.now() });
+        });
+      })(),
+    );
+  }
+});
+
+/**
+ * Handle One-Off Background Sync
+ */
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'harinos-sync-orders') {
+    console.log('[SW] Background sync triggered');
+    event.waitUntil(
+      (async () => {
+        const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        clientList.forEach((client) => {
+          client.postMessage({ type: 'BACKGROUND_SYNC_TRIGGER', timestamp: Date.now() });
+        });
+      })(),
     );
   }
 });
@@ -66,7 +129,7 @@ self.addEventListener('push', (event) => {
     badge: notification.badge || data.badge || '/icon-192.png',
     tag: data?.tag || notification.tag || `harinos-${Date.now()}`,
     data: data,
-    vibrate: [400, 200, 400, 200, 400],
+    vibrate: [500, 250, 500, 250, 500],
     requireInteraction: false,
     renotify: true,
     actions: [
@@ -123,8 +186,7 @@ self.addEventListener('notificationclick', (event) => {
 
       // Check if app is already open
       for (const client of clientList) {
-        if (client.url === '/' && 'focus' in client) {
-          // App is open, send message and focus it
+        if ('focus' in client) {
           client.postMessage({
             type: 'FCM_NOTIFICATION_CLICK',
             orderId,
@@ -165,4 +227,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-

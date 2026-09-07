@@ -99,22 +99,7 @@ export const NotificationService = {
       } catch {}
     }
 
-    // 3. Dispatch to in-app toast notification stack
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('harinos-notification', {
-          detail: {
-            id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            title,
-            message: body,
-            type,
-            timestamp: new Date().toISOString(),
-          },
-        })
-      );
-    }
-
-    // 4. Send system push notification if permitted
+    // 3. Send system notification outside the app (Notification shade / Lockscreen / Action Center)
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       const options = {
         body,

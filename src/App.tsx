@@ -582,7 +582,6 @@ const App: React.FC = () => {
   const [isWalletPaymentOpen, setIsWalletPaymentOpen] = useState(false);
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [instagramUrl, setInstagramUrl] = useState<string>('');
-  const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
 
   const customerProfileRef = useRef(customerProfile);
   customerProfileRef.current = customerProfile;
@@ -817,15 +816,6 @@ const App: React.FC = () => {
           
           if (title && body) {
             NotificationService.show(title, body, icon);
-            
-            const newNotif = {
-              id: docId || `broadcast-${Date.now()}`,
-              title,
-              message: body,
-              type: 'info' as const,
-              timestamp: new Date().toISOString()
-            };
-            setInAppNotifications(prev => [newNotif, ...prev]);
           }
         });
       });
@@ -833,27 +823,6 @@ const App: React.FC = () => {
     
     return () => unsubscribe();
   }, [configLoaded]);
-
-  // Listen to in-app custom notifications and auto-dismiss
-  useEffect(() => {
-    const handleNotificationEvent = (e: any) => {
-      const detail = e.detail;
-      if (detail && detail.title) {
-        setInAppNotifications((prev) => [detail, ...prev.slice(0, 9)]);
-      }
-    };
-
-    window.addEventListener('harinos-notification', handleNotificationEvent);
-    return () => window.removeEventListener('harinos-notification', handleNotificationEvent);
-  }, []);
-
-  useEffect(() => {
-    if (inAppNotifications.length === 0) return;
-    const timer = setTimeout(() => {
-      setInAppNotifications((prev) => prev.slice(0, prev.length - 1));
-    }, 6000);
-    return () => clearTimeout(timer);
-  }, [inAppNotifications]);
 
   // Automated Native App Update & Installation logic for First-time & Returning users
   useEffect(() => {
@@ -1268,13 +1237,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleUnauthorized = () => {
-      const newNotif: InAppNotification = {
-        id: Math.random().toString(),
-        title: 'Session Expired',
-        message: 'Your staff session has expired. Please log in again.',
-        type: 'warning'
-      };
-      setInAppNotifications(prev => [newNotif, ...prev]);
+      setNotification('Session Expired: Please log in again.');
     };
     window.addEventListener('harinos-unauthorized', handleUnauthorized);
     return () => {
@@ -1311,29 +1274,6 @@ const App: React.FC = () => {
       }
     };
 
-    const handleBrowserNotification = (order: Order) => {
-      if (!order.status || !order.id) return;
-      const cacheKey = `harinos_order_notified_status_${order.id}`;
-      const lastStatus = localStorage.getItem(cacheKey);
-
-      if (lastStatus !== order.status) {
-        // If order is old and we haven't tracked it before, don't spam a notification on first load.
-        // We only trigger notifications if it's a fresh update or the order is less than 1 hour old.
-        const orderTime = order.receivedAt ? new Date(order.receivedAt).getTime() : (order.date ? new Date(order.date).getTime() : 0);
-        const ageMinutes = (Date.now() - orderTime) / (1000 * 60);
-
-        if (ageMinutes < 120 || (lastStatus && lastStatus !== order.status)) {
-          NotificationService.notifyOrderStatus(order.id, order.status, {
-            orderType: order.orderType,
-            customerName: order.customerName,
-            total: order.total,
-          });
-        }
-        localStorage.setItem(cacheKey, order.status);
-      }
-      lastNotifiedStatusRef.current[order.id] = order.status;
-    };
-
     const unsubscribe = subscribeServerOrder(
       trackedOrderId,
       (order) => {
@@ -1346,7 +1286,6 @@ const App: React.FC = () => {
         }
         if (order.status) {
           handleCancellationRefreshes(order.status);
-          handleBrowserNotification(order);
         }
       },
       () => undefined,
@@ -1444,43 +1383,19 @@ const App: React.FC = () => {
   const showNotification = useCallback((messageOrObj: string | { title: string; message: string; type?: 'success' | 'info' | 'warning' | 'error' }) => {
     let title = "Harino's Pizza";
     let message = "";
-    let type: 'success' | 'info' | 'warning' | 'error' = "info";
 
     if (typeof messageOrObj === 'string') {
       message = messageOrObj;
-      if (message.toLowerCase().includes('added')) {
-        title = "Added to Basket";
-        type = "success";
-      } else if (message.toLowerCase().includes('copied') || message.toLowerCase().includes('copied!')) {
-        title = "Link Copied";
-        type = "success";
-      } else if (message.toLowerCase().includes('unable') || message.toLowerCase().includes('failed') || message.toLowerCase().includes('required')) {
-        title = "Attention Required";
-        type = "warning";
-      } else if (message.toLowerCase().includes('restored')) {
-        title = "Basket Restored";
-        type = "success";
-      } else if (message.toLowerCase().includes('dine-in')) {
-        title = "Dine-in Only";
-        type = "info";
-      } else if (message.toLowerCase().includes('received') || message.toLowerCase().includes('syncing')) {
-        title = "Order Received";
-        type = "success";
-      }
     } else {
       title = messageOrObj.title;
       message = messageOrObj.message;
-      type = messageOrObj.type || "info";
     }
 
-    const id = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const newNotif = { id, title, message, type };
-
-    setInAppNotifications((current) => [...current, newNotif]);
-
+    const textToShow = message || title;
+    setNotification(textToShow);
     setTimeout(() => {
-      setInAppNotifications((current) => current.filter((n) => n.id !== id));
-    }, 4500);
+      setNotification((curr) => (curr === textToShow ? null : curr));
+    }, 2500);
   }, []);
 
   const refreshNearestOutletMatch = useCallback(
@@ -2707,44 +2622,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Premium Glassmorphic Toast Notification Stack */}
-      <div className="fixed top-24 right-4 z-[250] flex flex-col gap-3 w-full max-w-sm pointer-events-none">
-        {inAppNotifications.map((notif) => {
-          let icon = "ℹ️";
-          let borderClass = "border-blue-500/30";
-          let bgClass = "bg-slate-900/95 text-white";
-          if (notif.type === 'success') {
-            icon = "✅";
-            borderClass = "border-emerald-500/30";
-          } else if (notif.type === 'warning') {
-            icon = "⚠️";
-            borderClass = "border-amber-500/30";
-          } else if (notif.type === 'error') {
-            icon = "❌";
-            borderClass = "border-red-500/30";
-          }
-
-          return (
-            <div
-              key={notif.id}
-              className={`pointer-events-auto flex items-start gap-3 p-4 rounded-2xl border ${borderClass} ${bgClass} backdrop-blur-md shadow-2xl animate-slide-in-right transition-all max-w-[90%] md:max-w-md ml-auto`}
-            >
-              <span className="text-xl shrink-0 mt-0.5">{icon}</span>
-              <div className="flex-1">
-                <h4 className="text-xs font-black uppercase tracking-wider">{notif.title}</h4>
-                <p className="text-[10px] font-semibold opacity-90 mt-1">{notif.message}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInAppNotifications((current) => current.filter((n) => n.id !== notif.id))}
-                className="text-slate-400 hover:text-white text-xs font-bold leading-none p-1"
-              >
-                &times;
-              </button>
-            </div>
-          );
-        })}
-      </div>
 
       {notification && (
         <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[90%] md:max-w-xs">

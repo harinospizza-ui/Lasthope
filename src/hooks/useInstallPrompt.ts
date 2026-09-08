@@ -8,7 +8,8 @@ interface BeforeInstallPromptEvent extends Event {
 
 const isRunningStandalone = (): boolean =>
   window.matchMedia('(display-mode: standalone)').matches ||
-  Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+  Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone) ||
+  localStorage.getItem('harinos_app_installed') === 'true';
 
 const isIosDevice = (): boolean => {
   const userAgent = window.navigator.userAgent.toLowerCase();
@@ -19,7 +20,7 @@ const isIosDevice = (): boolean => {
 
 export const useInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(() => isRunningStandalone());
 
   const isNative = Capacitor.isNativePlatform();
 
@@ -39,10 +40,15 @@ export const useInstallPrompt = () => {
     const handleInstalled = () => {
       setDeferredPrompt(null);
       setIsInstalled(true);
+      localStorage.setItem('harinos_app_installed', 'true');
     };
 
     const refreshInstallState = () => {
-      setIsInstalled(isRunningStandalone());
+      const installed = isRunningStandalone();
+      setIsInstalled(installed);
+      if (installed) {
+        localStorage.setItem('harinos_app_installed', 'true');
+      }
     };
 
     refreshInstallState();
@@ -88,6 +94,7 @@ export const useInstallPrompt = () => {
       if (choiceResult.outcome === 'accepted') {
         setIsInstalled(true);
         setDeferredPrompt(null);
+        localStorage.setItem('harinos_app_installed', 'true');
         return 'accepted';
       }
       return 'dismissed';
@@ -97,10 +104,17 @@ export const useInstallPrompt = () => {
     }
   };
 
+  const markAsInstalled = () => {
+    setIsInstalled(true);
+    setDeferredPrompt(null);
+    localStorage.setItem('harinos_app_installed', 'true');
+  };
+
   return {
     canPromptInstall,
     needsIosInstructions,
     isInstalled,
     promptInstall,
+    markAsInstalled,
   };
 };

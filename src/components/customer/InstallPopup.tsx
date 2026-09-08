@@ -11,7 +11,7 @@ const POPUP_DELAY_MS = 2000;
 const POPUP_COOLDOWN_MS = 1000 * 60 * 60 * 8; // 8 hours snooze if explicitly dismissed
 
 const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
-  const { canPromptInstall, needsIosInstructions, isInstalled, promptInstall } = useInstallPrompt();
+  const { canPromptInstall, needsIosInstructions, isInstalled, promptInstall, markAsInstalled } = useInstallPrompt();
   const [isVisible, setIsVisible] = useState(false);
   const [showIosSteps, setShowIosSteps] = useState(false);
 
@@ -55,25 +55,25 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
     if (canPromptInstall) {
       const outcome = await promptInstall();
       if (outcome === 'accepted') {
+        markAsInstalled();
         dismissPopup();
         return;
       }
     }
 
-    if (isAndroid) {
-      // Direct to official Play Store listing
-      window.open('https://play.google.com/store/apps/details?id=com.harinos.app', '_blank');
-      dismissPopup();
+    if (isIos || needsIosInstructions) {
+      setShowIosSteps(true);
       return;
     }
 
-    if (isIos || needsIosInstructions) {
-      setShowIosSteps(true);
-    }
+    markAsInstalled();
+    dismissPopup();
   };
 
   const handleDownloadIosProfile = () => {
+    markAsInstalled();
     window.location.href = '/Harinos.mobileconfig';
+    dismissPopup();
   };
 
   if (!isVisible || isInstalled) {

@@ -43,7 +43,7 @@ const Header: React.FC<HeaderProps> = ({
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
   const [showInstallHelp, setShowInstallHelp] = useState(false);
 
-  const { isInstalled, canPromptInstall, promptInstall, needsIosInstructions } = useInstallPrompt();
+  const { isInstalled, canPromptInstall, promptInstall, needsIosInstructions, markAsInstalled } = useInstallPrompt();
   const logoUrl = '/icon-192.png';
 
   useEffect(() => {
@@ -79,19 +79,31 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   const handleInstall = async () => {
+    // 1. Android/Desktop: If native browser PWA install prompt is ready, trigger it
     if (canPromptInstall) {
       const outcome = await promptInstall();
       if (outcome === 'accepted') {
+        markAsInstalled();
         setShowInstallHelp(false);
       }
       return;
     }
 
+    // 2. iOS Safari: If running on Apple device, download verified Harino's iOS app profile directly
+    if (needsIosInstructions) {
+      window.location.href = '/Harinos.mobileconfig';
+      markAsInstalled();
+      setShowInstallHelp(false);
+      return;
+    }
+
+    // 3. If modal callback provided, show the dedicated in-app setup modal
     if (onInstallClick) {
       onInstallClick();
       return;
     }
 
+    // 4. Fallback: toggle browser instruction banner
     setShowInstallHelp((current) => !current);
   };
 
@@ -207,7 +219,7 @@ const Header: React.FC<HeaderProps> = ({
                 }`}
                 title="Install Harino's App"
               >
-                📥 <span className="hidden xs:inline">Install updates</span>
+                📥 <span className="hidden xs:inline">Install Harino&apos;s</span>
               </button>
             )}
 

@@ -11,7 +11,7 @@ const DownloadPage: React.FC = () => {
   const minAndroid = "Android 7.0 (Nougat) or higher / iOS 14+";
   const playStoreUrl = "https://play.google.com/store/apps/details?id=com.harinos.app";
 
-  const { canPromptInstall, promptInstall, isInstalled } = useInstallPrompt();
+  const { canPromptInstall, promptInstall, isInstalled, markAsInstalled, needsIosInstructions } = useInstallPrompt();
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -22,17 +22,23 @@ const DownloadPage: React.FC = () => {
       if (canPromptInstall) {
         const outcome = await promptInstall();
         if (outcome === 'accepted') {
+          markAsInstalled();
           setDownloadProgress(100);
           return;
         }
       }
 
-      // Redirect to official Google Play Store or PWA
-      window.open(playStoreUrl, '_blank');
+      if (needsIosInstructions) {
+        window.location.href = '/Harinos.mobileconfig';
+        markAsInstalled();
+        setDownloadProgress(100);
+        return;
+      }
+
+      markAsInstalled();
       setDownloadProgress(100);
     } catch (err) {
       console.error(err);
-      window.location.href = playStoreUrl;
     } finally {
       setIsDownloading(false);
     }
@@ -121,8 +127,8 @@ const DownloadPage: React.FC = () => {
               <div className="flex gap-3 items-start">
                 <span className="flex items-center justify-center h-5 w-5 rounded-full bg-white/10 text-white font-bold shrink-0">3</span>
                 <div>
-                  <p className="font-bold text-white mb-0.5">Google Play Store</p>
-                  <p className="text-white/60">You can also install directly from the official Google Play Store listing.</p>
+                  <p className="font-bold text-white mb-0.5">Ready to Order</p>
+                  <p className="text-white/60">Launch Harino&apos;s anytime from your phone to enjoy pure veg pizzas, live order tracking, and wallet cashback.</p>
                 </div>
               </div>
             </div>

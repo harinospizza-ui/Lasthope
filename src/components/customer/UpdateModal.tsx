@@ -33,7 +33,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || 
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-  const { canPromptInstall, promptInstall } = useInstallPrompt();
+  const { canPromptInstall, promptInstall, markAsInstalled } = useInstallPrompt();
 
   const cleanupPwaAndMigrate = async () => {
     try {
@@ -64,7 +64,9 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
       setError('');
 
       if (isIOS) {
-        // iOS: Show guided home screen installation & profile download
+        // iOS: Directly download official Harino's iOS profile & show guide
+        window.location.href = '/Harinos.mobileconfig';
+        markAsInstalled();
         await cleanupPwaAndMigrate();
         setIsDownloading(false);
         setShowIosGuide(true);
@@ -123,20 +125,27 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
         if (canPromptInstall) {
           const outcome = await promptInstall();
           if (outcome === 'accepted') {
+            markAsInstalled();
             await cleanupPwaAndMigrate();
             setInstallReady(true);
+            setTimeout(() => onLater(), 1500);
             return;
           }
         }
 
-        // If prompt not available or dismissed, direct to Google Play Store
-        const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.harinos.app';
-        window.open(playStoreUrl, '_blank');
+        markAsInstalled();
+        await cleanupPwaAndMigrate();
         setInstallReady(true);
       } else {
         // Desktop / Other browser: clean caches and trigger browser install
         if (canPromptInstall) {
-          await promptInstall();
+          const outcome = await promptInstall();
+          if (outcome === 'accepted') {
+            markAsInstalled();
+            setTimeout(() => onLater(), 1500);
+          }
+        } else {
+          markAsInstalled();
         }
         await cleanupPwaAndMigrate();
         setInstallReady(true);
@@ -150,6 +159,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   };
 
   const handleDownloadIosProfile = () => {
+    markAsInstalled();
     window.location.href = '/Harinos.mobileconfig';
   };
 

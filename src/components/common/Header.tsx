@@ -79,16 +79,16 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   const handleInstall = async () => {
-    if (onInstallClick) {
-      onInstallClick();
-      return;
-    }
-
     if (canPromptInstall) {
       const outcome = await promptInstall();
       if (outcome === 'accepted') {
         setShowInstallHelp(false);
       }
+      return;
+    }
+
+    if (onInstallClick) {
+      onInstallClick();
       return;
     }
 

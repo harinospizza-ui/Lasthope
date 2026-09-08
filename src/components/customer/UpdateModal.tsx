@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { useInstallPrompt } from '../../hooks/useInstallPrompt';
 
 const ApkInstaller = registerPlugin<any>('ApkInstaller');
 
@@ -31,6 +32,8 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || 
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  const { canPromptInstall, promptInstall } = useInstallPrompt();
 
   const cleanupPwaAndMigrate = async () => {
     try {
@@ -116,60 +119,31 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
         setDownloadProgress(100);
         await ApkInstaller.installApk({ filePath: writeResult.uri });
       } else if (isAndroid) {
-        // Customer running WebApp / PWA on Android
-        const targetApk = apkUrl || 'https://harinos.store/downloads/Harinos.apk';
-        
-        try {
-          const response = await fetch(targetApk);
-          if (!response.ok) throw new Error('Failed to download Harino\'s App APK');
-
-          const contentLength = response.headers.get('content-length');
-          const total = contentLength ? parseInt(contentLength, 10) : 0;
-          const reader = response.body?.getReader();
-
-          let receivedLength = 0;
-          const chunks: Uint8Array[] = [];
-
-          if (reader) {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              chunks.push(value);
-              receivedLength += value.length;
-              if (total > 0) {
-                setDownloadProgress(Math.round((receivedLength / total) * 100));
-              }
-            }
+        // Android WebApp / PWA
+        if (canPromptInstall) {
+          const outcome = await promptInstall();
+          if (outcome === 'accepted') {
+            await cleanupPwaAndMigrate();
+            setInstallReady(true);
+            return;
           }
-
-          const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
-          const blobUrl = window.URL.createObjectURL(blob);
-          const anchor = document.createElement('a');
-          anchor.href = blobUrl;
-          anchor.download = 'Harinos.apk';
-          document.body.appendChild(anchor);
-          anchor.click();
-          document.body.removeChild(anchor);
-          window.URL.revokeObjectURL(blobUrl);
-        } catch {
-          // Fallback direct navigation if fetch is blocked
-          window.location.href = targetApk;
         }
 
-        setDownloadProgress(100);
-        await cleanupPwaAndMigrate();
+        // If prompt not available or dismissed, direct to Google Play Store
+        const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.harinos.app';
+        window.open(playStoreUrl, '_blank');
         setInstallReady(true);
       } else {
         // Desktop / Other browser: clean caches and trigger browser install
+        if (canPromptInstall) {
+          await promptInstall();
+        }
         await cleanupPwaAndMigrate();
         setInstallReady(true);
       }
     } catch (err: any) {
       console.error('Update error:', err);
-      setError(err.message || 'Error occurred downloading package.');
-      if (isAndroid && !isNative) {
-        window.location.href = apkUrl || 'https://harinos.store/downloads/Harinos.apk';
-      }
+      setError(err.message || 'Error occurred during installation.');
     } finally {
       setIsDownloading(false);
     }
@@ -252,13 +226,13 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
               <span>Installation Ready</span>
             </div>
             <p className="text-xs text-white/80 leading-relaxed font-medium">
-              1. Tap the <b>Harinos.apk</b> download notification on your phone to complete the install.
+              1. Tap &quot;Add&quot; or &quot;Install&quot; on your device prompt to add Harino&apos;s Pizza to your home screen.
             </p>
             <p className="text-xs text-white/80 leading-relaxed font-medium">
-              2. You can safely remove the old web shortcut from your home screen. All your profile and cart details are already preserved.
+              2. You can now launch Harino&apos;s directly from your apps list with 100% pure veg deliciousness!
             </p>
             <p className="text-[10px] text-white/50 leading-relaxed">
-              🛡️ Harino&apos;s is 100% verified & safe. If prompted by your phone, select <b>&quot;Allow from this source&quot;</b> or <b>&quot;Install anyway&quot;</b>.
+              🛡️ Harino&apos;s is 100% verified & safe.
             </p>
           </div>
         ) : (

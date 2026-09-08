@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "apk": "https://harinos.store/downloads/Harinos.apk",
+  "apk": "https://play.google.com/store/apps/details?id=com.harinos.app",
   "isMajorVersion": false,
   "force": false,
   "message": "Routine updates load automatically in the background without prompting for permission. Set isMajorVersion to true when releasing big new features."

@@ -897,7 +897,7 @@ const App: React.FC = () => {
               latestVersion: data.version,
               releaseNotes: data.message || 'A major new version of Harino\'s is here with exciting new features!',
               isForceUpdate: Boolean(data.force),
-              apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
+              apkUrl: data.apk || 'https://play.google.com/store/apps/details?id=com.harinos.app',
               isConversionPrompt: false,
             });
             setShowAndroidUpdateModal(true);
@@ -921,7 +921,7 @@ const App: React.FC = () => {
                 ? "Install Harino's on your iPhone for 1-tap food ordering, live kitchen order notifications (preparing, ready, out for delivery), and instant wallet cashback updates."
                 : "Install the official Harino's App for instant loading, live kitchen status notifications (preparing, ready, out for delivery), and wallet alerts.",
               isForceUpdate: false,
-              apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
+              apkUrl: data.apk || 'https://play.google.com/store/apps/details?id=com.harinos.app',
               isConversionPrompt: true,
             });
             // Intentionally not calling setShowAndroidUpdateModal(true) on initial web load
@@ -946,7 +946,7 @@ const App: React.FC = () => {
               latestVersion: data.version || '1.0.0',
               releaseNotes: 'Switch from the web shortcut to Harino\'s official native app for instant loading, live kitchen notifications (preparing, ready, out for delivery), and GPS tracking.',
               isForceUpdate: false,
-              apkUrl: data.apk || 'https://harinos.store/downloads/Harinos.apk',
+              apkUrl: data.apk || 'https://play.google.com/store/apps/details?id=com.harinos.app',
               isConversionPrompt: true,
             });
 

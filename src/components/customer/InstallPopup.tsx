@@ -61,8 +61,8 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
     }
 
     if (isAndroid) {
-      // Trigger instant APK download
-      window.location.href = 'https://harinos.store/downloads/Harinos.apk';
+      // Direct to official Play Store listing
+      window.open('https://play.google.com/store/apps/details?id=com.harinos.app', '_blank');
       dismissPopup();
       return;
     }

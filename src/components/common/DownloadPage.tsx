@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useInstallPrompt } from '../../hooks/useInstallPrompt';
 
 const DownloadPage: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
@@ -6,55 +7,32 @@ const DownloadPage: React.FC = () => {
   const [showInstructions, setShowInstructions] = useState(false);
 
   const currentVersion = "1.0.0";
-  const fileSize = "15.4 MB";
-  const minAndroid = "Android 7.0 (Nougat) or higher";
-  const apkUrl = "https://harinos.store/downloads/Harinos.apk";
+  const fileSize = "Fast & Lightweight (< 5 MB)";
+  const minAndroid = "Android 7.0 (Nougat) or higher / iOS 14+";
+  const playStoreUrl = "https://play.google.com/store/apps/details?id=com.harinos.app";
+
+  const { canPromptInstall, promptInstall, isInstalled } = useInstallPrompt();
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.preventDefault();
     try {
       setIsDownloading(true);
-      setDownloadProgress(0);
       setShowInstructions(true);
 
-      const response = await fetch(apkUrl);
-      if (!response.ok) throw new Error('Download failed');
-
-      const contentLength = response.headers.get('content-length');
-      const total = contentLength ? parseInt(contentLength, 10) : 0;
-      
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No body stream');
-
-      let receivedLength = 0;
-      const chunks = [];
-
-      while(true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        receivedLength += value.length;
-        if (total > 0) {
-          setDownloadProgress(Math.round((receivedLength / total) * 100));
+      if (canPromptInstall) {
+        const outcome = await promptInstall();
+        if (outcome === 'accepted') {
+          setDownloadProgress(100);
+          return;
         }
       }
 
-      const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'Harinos.apk';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
+      // Redirect to official Google Play Store or PWA
+      window.open(playStoreUrl, '_blank');
       setDownloadProgress(100);
-      localStorage.setItem('harinos_apk_installed', 'true');
     } catch (err) {
       console.error(err);
-      // Fallback: direct anchor link
-      window.location.href = apkUrl;
+      window.location.href = playStoreUrl;
     } finally {
       setIsDownloading(false);
     }
@@ -107,62 +85,44 @@ const DownloadPage: React.FC = () => {
             className="w-full cta-glow rounded-2xl bg-red-650 hover:bg-red-500 text-white py-4.5 text-[11px] font-black uppercase tracking-[0.25em] transition-premium active:scale-[0.98] shadow-xl shadow-red-950/20 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
           >
             {isDownloading ? (
-              <span>Downloading APK ({downloadProgress}%)</span>
+              <span>Opening Harino&apos;s App...</span>
             ) : (
               <>
-                📥 <span>Download APK</span>
+                📥 <span>Install Harino&apos;s App</span>
               </>
             )}
           </button>
         </div>
 
-        {/* Live Progress Bar */}
-        {isDownloading && downloadProgress !== null && (
-          <div className="mt-4 w-full bg-white/5 rounded-full h-2 overflow-hidden border border-white/5">
-            <div 
-              className="h-full bg-red-600 rounded-full transition-all duration-300" 
-              style={{ width: `${downloadProgress}%` }}
-            />
-          </div>
-        )}
-
         {/* Step-by-step Installation Instructions */}
         {showInstructions && (
           <div className="mt-8 border-t border-white/10 pt-6 text-left animate-fade-in">
             <h3 className="text-sm font-black uppercase tracking-[0.15em] text-amber-300 mb-4">
-              How to Install (Android guide)
+              Instant Setup Guide
             </h3>
             
             <div className="space-y-4 text-xs text-white/80 leading-relaxed">
               <div className="flex gap-3 items-start">
                 <span className="flex items-center justify-center h-5 w-5 rounded-full bg-white/10 text-white font-bold shrink-0">1</span>
                 <div>
-                  <p className="font-bold text-white mb-0.5">Allow browser downloads</p>
-                  <p className="text-white/60">If Chrome prompts you to download the file, click <b>OK</b> or <b>Download Anyway</b>.</p>
+                  <p className="font-bold text-white mb-0.5">Click &quot;Install Harino&apos;s App&quot;</p>
+                  <p className="text-white/60">When your browser asks to install or add to Home screen, tap <b>Install</b> or <b>Add</b>.</p>
                 </div>
               </div>
 
               <div className="flex gap-3 items-start">
                 <span className="flex items-center justify-center h-5 w-5 rounded-full bg-white/10 text-white font-bold shrink-0">2</span>
                 <div>
-                  <p className="font-bold text-white mb-0.5">Open the APK file</p>
-                  <p className="text-white/60">Once the download is complete, click <b>Open</b> from your browser or find <b>Harinos.apk</b> in your device&apos;s Downloads folder.</p>
+                  <p className="font-bold text-white mb-0.5">Instant App Access</p>
+                  <p className="text-white/60">Harino&apos;s Pizza will be added straight to your phone&apos;s home screen and app launcher with pure veg branding.</p>
                 </div>
               </div>
 
               <div className="flex gap-3 items-start">
                 <span className="flex items-center justify-center h-5 w-5 rounded-full bg-white/10 text-white font-bold shrink-0">3</span>
                 <div>
-                  <p className="font-bold text-white mb-0.5">Enable Unknown Sources</p>
-                  <p className="text-white/60">If prompted, click <b>Settings</b> and toggle on <b>&quot;Allow from this source&quot;</b>.</p>
-                </div>
-              </div>
-
-              <div className="flex gap-3 items-start">
-                <span className="flex items-center justify-center h-5 w-5 rounded-full bg-white/10 text-white font-bold shrink-0">4</span>
-                <div>
-                  <p className="font-bold text-white mb-0.5">Complete installation</p>
-                  <p className="text-white/60">Tap <b>Install</b>, then click <b>Open</b> to launch the native Harino&apos;s Pizza App!</p>
+                  <p className="font-bold text-white mb-0.5">Google Play Store</p>
+                  <p className="text-white/60">You can also install directly from the official Google Play Store listing.</p>
                 </div>
               </div>
             </div>

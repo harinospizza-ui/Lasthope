@@ -81,29 +81,25 @@ const Header: React.FC<HeaderProps> = ({
   const handleInstall = async () => {
     // 1. Android/Desktop: If native browser PWA install prompt is ready, trigger it
     if (canPromptInstall) {
-      const outcome = await promptInstall();
-      if (outcome === 'accepted') {
-        markAsInstalled();
-        setShowInstallHelp(false);
-      }
-      return;
+      try {
+        const outcome = await promptInstall();
+        if (outcome === 'accepted') {
+          markAsInstalled();
+          setShowInstallHelp(false);
+          // Request notification permission on accept
+          NotificationService.requestPermission().catch(() => {});
+          return;
+        }
+      } catch {}
     }
 
-    // 2. iOS Safari: If running on Apple device, download verified Harino's iOS app profile directly
-    if (needsIosInstructions) {
-      window.location.href = '/Harinos.mobileconfig';
-      markAsInstalled();
-      setShowInstallHelp(false);
-      return;
-    }
-
-    // 3. If modal callback provided, show the dedicated in-app setup modal
+    // 2. Open dedicated PWA install guide modal
     if (onInstallClick) {
       onInstallClick();
       return;
     }
 
-    // 4. Fallback: toggle browser instruction banner
+    // 3. Fallback: toggle browser instruction banner
     setShowInstallHelp((current) => !current);
   };
 

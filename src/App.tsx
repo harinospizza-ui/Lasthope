@@ -929,31 +929,8 @@ const App: React.FC = () => {
             console.warn('Webapp conversion check notice:', e);
           }
         } else if (!isNative && isStandalone && isAndroid) {
-          // Running as PWA shortcut on Android -> prompt to convert to native APK
-          const alreadyMigrated = localStorage.getItem('harinos_migrated_to_native') === 'true';
-          if (alreadyMigrated) {
-            window.location.href = 'harinos://open';
-            return;
-          }
-
-          try {
-            const response = await fetch('https://harinos.store/app/version.json?t=' + Date.now(), {
-              headers: { 'Cache-Control': 'no-cache' }
-            });
-            const data = response.ok ? await response.json() : { version: '1.0.0' };
-
-            setAndroidUpdateConfig({
-              latestVersion: data.version || '1.0.0',
-              releaseNotes: 'Switch from the web shortcut to Harino\'s official native app for instant loading, live kitchen notifications (preparing, ready, out for delivery), and GPS tracking.',
-              isForceUpdate: false,
-              apkUrl: data.apk || 'https://play.google.com/store/apps/details?id=com.harinos.app',
-              isConversionPrompt: true,
-            });
-
-            setShowAndroidUpdateModal(true);
-          } catch (e) {
-            console.warn('Webapp conversion check notice:', e);
-          }
+          // Running as PWA standalone app on Android: perfectly configured for progressive web experience
+          console.log('[PWA] Harino\'s running in standalone mode on Android.');
         }
       } catch (err) {
         console.warn('Update check failed:', err);
@@ -2162,13 +2139,13 @@ const App: React.FC = () => {
           view === 'orders'
         }
       />
-      {showAndroidUpdateModal && androidUpdateConfig && (
+      {showAndroidUpdateModal && (
         <UpdateModal
-          latestVersion={androidUpdateConfig.latestVersion}
-          releaseNotes={androidUpdateConfig.releaseNotes}
-          isForceUpdate={androidUpdateConfig.isForceUpdate}
-          apkUrl={androidUpdateConfig.apkUrl}
-          isConversionPrompt={androidUpdateConfig.isConversionPrompt}
+          latestVersion={androidUpdateConfig?.latestVersion}
+          releaseNotes={androidUpdateConfig?.releaseNotes}
+          isForceUpdate={androidUpdateConfig?.isForceUpdate}
+          apkUrl={androidUpdateConfig?.apkUrl}
+          isConversionPrompt={androidUpdateConfig?.isConversionPrompt}
           onLater={() => {
             localStorage.setItem('harinos_install_modal_dismissed_at', Date.now().toString());
             setShowAndroidUpdateModal(false);

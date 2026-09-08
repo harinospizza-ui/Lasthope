@@ -28,13 +28,6 @@ const DownloadPage: React.FC = () => {
         }
       }
 
-      if (needsIosInstructions) {
-        window.location.href = '/Harinos.mobileconfig';
-        markAsInstalled();
-        setDownloadProgress(100);
-        return;
-      }
-
       markAsInstalled();
       setDownloadProgress(100);
     } catch (err) {

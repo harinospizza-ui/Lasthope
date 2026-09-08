@@ -114,8 +114,12 @@ const FirstTimeUserModal: React.FC<FirstTimeUserModalProps> = ({
     if (canPromptInstall) {
       const outcome = await promptInstall();
       if (outcome === 'accepted') {
-        alert("Thank you for installing Harino's App!");
+        markAsInstalled();
+        alert("Thank you for adding Harino's to your Home Screen!");
       }
+    } else {
+      markAsInstalled();
+      alert("Harino's Web App is ready! Check your browser menu to add to Home screen.");
     }
   };
 

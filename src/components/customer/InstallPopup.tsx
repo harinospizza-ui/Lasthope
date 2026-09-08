@@ -144,18 +144,21 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
               </div>
               <div className="space-y-2 text-xs leading-relaxed text-white/80 font-medium">
                 <p>1. In Safari, tap the <b>Share icon</b> (<span className="text-sm">⎋</span>) at the bottom.</p>
-                <p>2. Scroll and choose <b>&quot;Add to Home Screen&quot;</b> (<span className="text-sm font-bold">＋</span>).</p>
+                <p>2. Scroll down and choose <b>&quot;Add to Home Screen&quot;</b> (<span className="text-sm font-bold">＋</span>).</p>
                 <p>3. Tap <b>&quot;Add&quot;</b> at top right to place Harino&apos;s on your screen.</p>
               </div>
 
               <div className="mt-3 pt-2.5 border-t border-white/10">
                 <button
                   type="button"
-                  onClick={handleDownloadIosProfile}
-                  className="w-full py-2 px-3 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl text-[11px] font-bold text-amber-300 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  onClick={() => {
+                    markAsInstalled();
+                    dismissPopup();
+                  }}
+                  className="w-full py-2 px-3 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl text-[11px] font-bold text-emerald-300 flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
-                  <span>📥</span>
-                  <span>Download iOS Profile (.mobileconfig)</span>
+                  <span>✓</span>
+                  <span>I Have Added It to Home Screen</span>
                 </button>
               </div>
             </div>
@@ -167,7 +170,7 @@ const InstallPopup: React.FC<InstallPopupProps> = ({ blocked = false }) => {
               onClick={handlePrimaryAction}
               className="cta-glow w-full rounded-2xl bg-red-650 hover:bg-red-500 py-3.5 text-[11px] font-black uppercase tracking-[0.2em] text-white shadow-xl shadow-red-950/30 transition-transform active:scale-[0.98] cursor-pointer"
             >
-              Install updates
+              📥 Install Harino&apos;s PWA
             </button>
             <button
               type="button"

@@ -29,8 +29,7 @@ export const isRunningStandalone = (): boolean => {
     window.matchMedia('(display-mode: standalone)').matches ||
     window.matchMedia('(display-mode: fullscreen)').matches ||
     window.matchMedia('(display-mode: minimal-ui)').matches ||
-    Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone) ||
-    localStorage.getItem('harinos_app_installed') === 'true'
+    Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)
   );
 };
 

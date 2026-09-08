@@ -1,14 +1,34 @@
-// Unified Service Worker for Harino's Pizza (PWA, Push Notifications & Background Alerts)
+const CACHE_NAME = 'harinos-pwa-v2';
+const PRECACHE_ASSETS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
+        console.warn('[SW] Precache notice:', err);
+      });
+    }).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const cacheKeys = await caches.keys();
-      await Promise.all(cacheKeys.map((cacheKey) => caches.delete(cacheKey)));
+      await Promise.all(
+        cacheKeys.map((cacheKey) => {
+          if (cacheKey !== CACHE_NAME && cacheKey !== 'harinos-offline-cache') {
+            return caches.delete(cacheKey);
+          }
+          return Promise.resolve();
+        })
+      );
       await self.clients.claim();
     })(),
   );
@@ -216,14 +236,33 @@ self.addEventListener('notificationclose', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // Ignore cross-origin requests like Firebase or Google fonts
+  if (url.origin !== self.location.origin) return;
+
   event.respondWith(
-    fetch(event.request).catch(async () => {
-      if (event.request.mode === 'navigate') {
-        const cache = await caches.open('harinos-offline-cache');
-        const cachedResponse = await cache.match('/index.html');
-        if (cachedResponse) return cachedResponse;
-      }
-      return caches.match(event.request).then((response) => response || Response.error());
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+
+        if (event.request.mode === 'navigate') {
+          const cache = await caches.open(CACHE_NAME);
+          const cachedIndex = await cache.match('/index.html');
+          if (cachedIndex) return cachedIndex;
+        }
+
+        return Response.error();
+      })
   );
 });

@@ -164,19 +164,21 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
               )}
             </div>
 
-            {/* Native browser install button if prompt is available */}
-            {canPromptInstall && (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={handleInstallClick}
-                  disabled={isInstalling}
-                  className="w-full cta-glow rounded-2xl bg-red-650 hover:bg-red-500 text-white py-4 text-xs font-black uppercase tracking-[0.2em] transition-premium active:scale-[0.98] cursor-pointer shadow-xl shadow-red-950/40"
-                >
-                  {isInstalling ? 'Opening Install Dialog...' : '📥 Install Harino\'s App'}
-                </button>
-              </div>
-            )}
+            {/* Install Action Button */}
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                disabled={isInstalling}
+                className="w-full cta-glow rounded-2xl bg-red-650 hover:bg-red-500 text-white py-4 text-xs font-black uppercase tracking-[0.2em] transition-premium active:scale-[0.98] cursor-pointer shadow-xl shadow-red-950/40"
+              >
+                {isInstalling
+                  ? 'Opening Install Dialog...'
+                  : canPromptInstall
+                  ? '📥 Install Harino\'s App'
+                  : '📥 Follow Steps Below to Install'}
+              </button>
+            </div>
 
             {/* Step-by-Step Guided Instructions for Browsers / iOS / Android */}
             <div className="mt-4 text-left bg-slate-950/60 border border-white/10 rounded-2xl p-4 space-y-3">

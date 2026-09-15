@@ -66,20 +66,25 @@ export interface FestivalCampaign {
 /**
  * Calculates a dynamic ISO timestamp string in IST (+05:30) offset.
  */
-const toISTString = (dateStr: string, timeStr: string): string => {
+export const toISTString = (dateStr: string, timeStr: string): string => {
   return `${dateStr}T${timeStr}+05:30`;
 };
 
 /**
- * Computes a date that is `daysOffset` days before a given date string (YYYY-MM-DD).
+ * Computes a date that is `days` days offset from a given date string (YYYY-MM-DD).
+ * Uses UTC arithmetic at 12:00 UTC to ensure zero timezone or DST drift.
  */
-const subtractDays = (dateStr: string, days: number): string => {
-  const d = new Date(`${dateStr}T00:00:00+05:30`);
-  d.setDate(d.getDate() - days);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
+export const addDaysIST = (dateStr: string, days: number): string => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(date.getUTCDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+};
+
+export const subtractDaysIST = (dateStr: string, days: number): string => {
+  return addDaysIST(dateStr, -days);
 };
 
 /**
@@ -93,11 +98,18 @@ export const getCampaignsForYear = (year: number): FestivalCampaign[] => {
     if (!yearConfig || !yearConfig.festivalDay) continue;
 
     const festivalDay = yearConfig.festivalDay;
-    const festivalDayEnd = yearConfig.festivalDayEnd || festivalDay;
+    let festivalDayEnd = yearConfig.festivalDayEnd;
+    if (!festivalDayEnd) {
+      if (yearConfig.offerDurationDays && yearConfig.offerDurationDays > 1) {
+        festivalDayEnd = addDaysIST(festivalDay, yearConfig.offerDurationDays - 1);
+      } else {
+        festivalDayEnd = festivalDay;
+      }
+    }
     const themeDurationDays = yearConfig.themeDurationDays || 7;
 
-    // Theme starts exactly `themeDurationDays` (default 7 days) before the festival day
-    const themeStartDateStr = subtractDays(festivalDay, themeDurationDays);
+    // Theme starts exactly `themeDurationDays` before the festival day in IST
+    const themeStartDateStr = subtractDaysIST(festivalDay, themeDurationDays);
     const themeEndDateStr = festivalDayEnd;
 
     const startDate = toISTString(themeStartDateStr, '00:00:00');

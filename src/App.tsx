@@ -1810,7 +1810,20 @@ const App: React.FC = () => {
     [activeOfferCards, cartWithBonuses],
   );
 
-  const activeCampaign = useMemo(() => getActiveFestivalCampaign(), []);
+  const [activeCampaign, setActiveCampaign] = useState(() => getActiveFestivalCampaign());
+
+  useEffect(() => {
+    const updateActiveCampaign = () => {
+      setActiveCampaign(getActiveFestivalCampaign());
+    };
+    // Re-check periodically so at midnight the moment a festival ends, it is immediately removed
+    const timer = setInterval(updateActiveCampaign, 30000);
+    window.addEventListener('focus', updateActiveCampaign);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', updateActiveCampaign);
+    };
+  }, []);
 
   const subtotal = useMemo(
     () => pricedCart.reduce((sum, item) => sum + item.totalPrice, 0),

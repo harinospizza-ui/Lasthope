@@ -574,11 +574,11 @@ export const MULTI_YEAR_FESTIVALS: MultiYearFestivalDefinition[] = [
     priority: 90,
     dateSource: 'lunar',
     datesByYear: {
-      2026: { festivalDay: '2026-09-14', festivalDayEnd: '2026-09-15', campaignStartDays: 5, offerDurationDays: 2, themeDurationDays: 7 },
-      2027: { festivalDay: '2027-09-04', festivalDayEnd: '2027-09-05', campaignStartDays: 5, offerDurationDays: 2, themeDurationDays: 7 },
-      2028: { festivalDay: '2028-08-24', festivalDayEnd: '2028-08-25', campaignStartDays: 5, offerDurationDays: 2, themeDurationDays: 7 },
-      2029: { festivalDay: '2029-09-12', festivalDayEnd: '2029-09-13', campaignStartDays: 5, offerDurationDays: 2, themeDurationDays: 7 },
-      2030: { festivalDay: '2030-09-01', festivalDayEnd: '2030-09-02', campaignStartDays: 5, offerDurationDays: 2, themeDurationDays: 7 },
+      2026: { festivalDay: '2026-09-14', campaignStartDays: 5, offerDurationDays: 1, themeDurationDays: 5 },
+      2027: { festivalDay: '2027-09-04', campaignStartDays: 5, offerDurationDays: 1, themeDurationDays: 5 },
+      2028: { festivalDay: '2028-08-24', campaignStartDays: 5, offerDurationDays: 1, themeDurationDays: 5 },
+      2029: { festivalDay: '2029-09-12', campaignStartDays: 5, offerDurationDays: 1, themeDurationDays: 5 },
+      2030: { festivalDay: '2030-09-01', campaignStartDays: 5, offerDurationDays: 1, themeDurationDays: 5 },
     },
     theme: {
       primaryAccent: '#ea580c',

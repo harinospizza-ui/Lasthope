@@ -104,19 +104,28 @@ export const getFestivalLifecycleState = (
   const offerStartTs = new Date(campaign.offerStartDate).getTime();
   const offerEndTs = new Date(campaign.offerEndDate).getTime();
 
-  // 1. ACTIVE_OFFER: Strictly active if current IST calendar day is within festival observance dates,
-  //    or current millisecond timestamp is within the active offer window.
+  // STRICT RULE 1: If current IST date is past festival offer end date OR current timestamp is past offerEndTs,
+  // the festival has concluded and MUST immediately be marked as ENDED.
+  if (currentISTDate > offerEndDateStr || currentTs > offerEndTs) {
+    return 'ENDED';
+  }
+
+  // STRICT RULE 2: ACTIVE_OFFER only while current IST calendar day is within the exact festival offer dates
+  // AND current millisecond timestamp is within the offer window.
   if (
-    (currentISTDate >= offerStartDateStr && currentISTDate <= offerEndDateStr) ||
-    (currentTs >= offerStartTs && currentTs <= offerEndTs)
+    currentISTDate >= offerStartDateStr &&
+    currentISTDate <= offerEndDateStr &&
+    currentTs >= offerStartTs &&
+    currentTs <= offerEndTs
   ) {
     return 'ACTIVE_OFFER';
   }
 
-  // 2. PRE_FESTIVAL: Campaign theme is underway, but festival celebration is upcoming in IST.
+  // STRICT RULE 3: PRE_FESTIVAL only before the festival date while within the advance theme window.
   if (
-    (currentISTDate >= themeStartDateStr && currentISTDate < offerStartDateStr) ||
-    (currentTs >= startTs && currentTs < offerStartTs)
+    currentISTDate < offerStartDateStr &&
+    currentTs < offerStartTs &&
+    (currentISTDate >= themeStartDateStr || currentTs >= startTs)
   ) {
     return 'PRE_FESTIVAL';
   }
@@ -151,25 +160,18 @@ export const isCampaignUpcomingOffer = (
  * 2. Pre-festival theme campaign with highest priority score
  * 3. Latest start date (tie-breaker)
  * 4. Deterministic alphabetical ID
+ * 
+ * CRITICAL RULE: Campaigns with lifecycle state 'ENDED' are strictly filtered out and never returned.
  */
 export const getActiveFestivalCampaign = (overrideDate?: Date | string): FestivalCampaign | null => {
-  const currentTs = getNowTimestampIST(overrideDate);
   const currentYear = getCurrentYearIST(overrideDate);
-  const currentISTDate = getISTDateString(overrideDate || currentTs);
   const allCampaigns = getAllGeneratedFestivalCampaigns(currentYear);
 
   const activeCampaigns = allCampaigns.filter((campaign) => {
     if (!campaign.enabled) return false;
-    const themeStartDateStr = campaign.startDate.split('T')[0];
-    const themeEndDateStr = campaign.endDate.split('T')[0];
-    const startTs = new Date(campaign.startDate).getTime();
-    const endTs = new Date(campaign.endDate).getTime();
-
-    // Active if either IST calendar date matches campaign window or timestamp matches
-    return (
-      (currentISTDate >= themeStartDateStr && currentISTDate <= themeEndDateStr) ||
-      (currentTs >= startTs && currentTs <= endTs)
-    );
+    const state = getFestivalLifecycleState(campaign, overrideDate);
+    // Once a festival concludes, it is NEVER active and must not be returned
+    return state === 'ACTIVE_OFFER' || state === 'PRE_FESTIVAL';
   });
 
   if (activeCampaigns.length === 0) {

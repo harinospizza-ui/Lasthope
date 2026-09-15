@@ -136,18 +136,17 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
 
-  const activeCampaign = useMemo(() => getActiveFestivalCampaign(), []);
-
   const subtotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
 
   const { discountAmount: festivalDiscountAmount, discountedSubtotal: finalSubtotal } = useMemo(() => {
+    const activeCampaign = getActiveFestivalCampaign();
     if (activeCampaign && activeCampaign.offer.enabled) {
       return calculateFestivalDiscount(activeCampaign, cart);
     }
     return { discountAmount: 0, discountedSubtotal: subtotal };
-  }, [activeCampaign, cart, subtotal]);
+  }, [cart, subtotal]);
 
   const grandTotal = Math.round(finalSubtotal);
 

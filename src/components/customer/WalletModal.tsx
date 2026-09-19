@@ -152,29 +152,16 @@ export const WalletModal: React.FC<WalletModalProps> = ({
     setIsApplyingCode(true);
     try {
       const allCustomers = await getServerCustomers();
-      const referrer = allCustomers.find((c) => c.referralCode === code && c.verified);
+      const referrer = allCustomers.find((c) => c.referralCode === code && c.id !== customerProfile.id);
 
       if (referrer) {
-        const updatedReferrer = { ...referrer, rewardPoints: (referrer.rewardPoints ?? 0) + 100 };
-        const tx: WalletTransaction = {
-          id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          customerId: referrer.id,
-          customerName: referrer.name,
-          customerPhone: referrer.phone,
-          amount: 10,
-          type: 'reward',
-          status: 'completed',
-          createdAt: new Date().toISOString()
-        };
-        await saveWalletTransactionToServer(tx);
-        await saveCustomerToServer(updatedReferrer);
-
         const updatedSelf: CustomerProfile = {
           ...customerProfile,
           referralApplied: true,
-          referralCodeUsed: true,
+          referralCodeUsed: false,
           referralLocked: true,
           referredBy: code,
+          referralRewardPaid: false,
           referralAppliedAt: new Date().toISOString()
         };
         await saveCustomerToServer(updatedSelf);
@@ -182,8 +169,8 @@ export const WalletModal: React.FC<WalletModalProps> = ({
         onProfileChange(updatedSelf);
         setInputReferralCode('');
         showNotification({
-          title: 'Referral Applied',
-          message: 'Referral code applied! Reward sent to referrer.',
+          title: 'Referral Code Applied!',
+          message: 'Referral code applied! Your referrer will receive 200 coins once your first order is completed.',
           type: 'success'
         });
       } else {
@@ -523,9 +510,16 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
               if (isUsed) {
                 return (
-                  <div className="text-xs font-bold text-emerald-600 text-center py-1 flex items-center justify-center gap-1.5">
-                    <span>✓</span>
-                    <span>Referral reward applied to your account.</span>
+                  <div className="text-xs font-bold text-emerald-600 text-center py-1 flex flex-col items-center justify-center gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span>✓</span>
+                      <span>Referral code linked ({customerProfile.referredBy || 'Applied'})</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {customerProfile.referralRewardPaid
+                        ? 'Referral reward completed for first order.'
+                        : 'Your referrer will receive 200 coins after your 1st completed order.'}
+                    </span>
                   </div>
                 );
               }

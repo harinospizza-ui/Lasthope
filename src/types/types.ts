@@ -151,6 +151,7 @@ export interface Order {
   walletAmountRedeemed?: number;
   rewardPointsRedeemed?: number;
   rewardPointsEarned?: number;
+  coinsReversed?: boolean;
   isDeleted?: boolean;
   cancelledBy?: string;
   cancellationReason?: string;
@@ -219,6 +220,7 @@ export interface CustomerProfile {
   rewardPoints?: number;
   loyaltyPoints?: number;
   referralCodeUsed?: boolean;
+  referralRewardPaid?: boolean;
   referralAttemptsRemaining?: number;
   referralLocked?: boolean;
   referralAppliedAt?: string;

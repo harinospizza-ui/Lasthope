@@ -408,7 +408,7 @@ export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: st
     id: orderId,
     receivedAt: new Date().toISOString(),
     date: new Date().toLocaleString(),
-    status: 'new',
+    status: order.status || 'new',
     auditTrail: [{
       timestamp: new Date().toISOString(),
       updatedBy: order.customerName ? String(order.customerName) : 'customer',
@@ -424,6 +424,10 @@ export const saveFullOrderToServer = async (order: Omit<Order, 'id'> & { id?: st
   try {
     await setDoc(doc(db(), 'orderHistory', orderId), sanitizedOrder);
   } catch (err) { }
+
+  if (nextOrder.status === 'done') {
+    void processReferralRewardOnOrderDone(nextOrder).catch(console.error);
+  }
 
   try {
     const { notifyCustomerStatusChange, notifyStaffNewOrder } = await import('./notificationService');
@@ -651,6 +655,372 @@ export const updateDailyStats = async (order: Order, previousStatus: OrderStatus
   }
 };
 
+/**
+ * Deduct gained reward coins and refund redeemed wallet/coins when an order is cancelled or deleted.
+ * Idempotent: safe against duplicate runs using order.coinsReversed flag.
+ */
+export const reverseOrderCoinsAndRefunds = async (
+  orderData: Order,
+  performerUsername: string,
+  contextReason: string
+): Promise<void> => {
+  if (orderData.coinsReversed) {
+    return; // Already reversed, avoid duplicate deductions
+  }
+
+  const dbInstance = db();
+  const rawPhone = (orderData.customerPhone || '').replace(/\D/g, '');
+  const phone10 = rawPhone.slice(-10);
+  const custId = orderData.customerId || '';
+  const custId10 = custId.replace(/\D/g, '').slice(-10);
+
+  const candidateIds = Array.from(
+    new Set([phone10, rawPhone, custId, custId10])
+  ).filter((id): id is string => Boolean(id) && id !== '_init_placeholder');
+
+  if (candidateIds.length === 0) {
+    return;
+  }
+
+  // Find customer document
+  let targetCustRef: any = null;
+  let targetProfileRef: any = null;
+  let targetCustData: CustomerProfile | null = null;
+  let resolvedId = '';
+
+  for (const cid of candidateIds) {
+    const cRef = doc(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION, cid);
+    const snap = await getDoc(cRef);
+    if (snap.exists()) {
+      targetCustRef = cRef;
+      targetProfileRef = doc(dbInstance, 'customerProfiles', cid);
+      targetCustData = snap.data() as CustomerProfile;
+      resolvedId = cid;
+      break;
+    }
+  }
+
+  if (!targetCustRef) {
+    for (const cid of candidateIds) {
+      const pRef = doc(dbInstance, 'customerProfiles', cid);
+      const snap = await getDoc(pRef);
+      if (snap.exists()) {
+        targetProfileRef = pRef;
+        targetCustRef = doc(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION, cid);
+        targetCustData = snap.data() as CustomerProfile;
+        resolvedId = cid;
+        break;
+      }
+    }
+  }
+
+  // If still not found by direct ID, query by phone
+  if (!targetCustRef && phone10) {
+    const q1 = query(collection(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION), where('phone', '==', phone10));
+    const qSnap1 = await getDocs(q1);
+    if (!qSnap1.empty) {
+      targetCustRef = qSnap1.docs[0].ref;
+      resolvedId = qSnap1.docs[0].id;
+      targetProfileRef = doc(dbInstance, 'customerProfiles', resolvedId);
+      targetCustData = qSnap1.docs[0].data() as CustomerProfile;
+    }
+  }
+
+  if (!targetCustRef || !targetCustData) {
+    console.warn('Could not locate customer document for coin/wallet reversal:', {
+      orderId: orderData.id,
+      customerPhone: orderData.customerPhone,
+      customerId: orderData.customerId
+    });
+    return;
+  }
+
+  const walletRef = doc(dbInstance, 'wallets', resolvedId);
+
+  const walletRefund = orderData.walletAmountRedeemed ?? 0;
+  const coinsRefundValue = orderData.rewardPointsRedeemed ?? 0; // Rs discount from coins
+  const coinsRefundPoints = Math.round(coinsRefundValue * 10);
+  const coinsEarnedPoints = orderData.rewardPointsEarned !== undefined
+    ? orderData.rewardPointsEarned
+    : Math.floor((orderData.subtotal || orderData.total || 0) / 10);
+
+  try {
+    await runTransaction(dbInstance, async (tx) => {
+      const freshSnap = await tx.get(targetCustRef);
+      if (!freshSnap.exists()) return;
+      const currentCust = freshSnap.data() as CustomerProfile;
+
+      let walletBalance = currentCust.walletBalance ?? 0;
+      let rewardPoints = currentCust.rewardPoints ?? currentCust.coins ?? 0;
+
+      if (walletRefund > 0) {
+        walletBalance += walletRefund;
+      }
+      if (coinsRefundPoints > 0) {
+        rewardPoints += coinsRefundPoints;
+      }
+      if (coinsEarnedPoints > 0) {
+        rewardPoints = Math.max(0, rewardPoints - coinsEarnedPoints);
+      }
+
+      const updatedFields = {
+        walletBalance,
+        rewardPoints,
+        coins: rewardPoints
+      };
+
+      tx.update(targetCustRef, updatedFields);
+      tx.set(targetProfileRef, updatedFields, { merge: true });
+      tx.set(walletRef, { customerId: resolvedId, balance: walletBalance }, { merge: true });
+
+      // 1. Audit log: Gained coins deduction
+      if (coinsEarnedPoints > 0) {
+        const txId = `tx_${Date.now()}_deduct_${Math.random().toString(36).slice(2, 6)}`;
+        const deductTx: WalletTransaction = {
+          id: txId,
+          customerId: resolvedId,
+          customerName: currentCust.name || orderData.customerName || 'Customer',
+          customerPhone: orderData.customerPhone || currentCust.phone,
+          amount: -(coinsEarnedPoints / 10), // Rs equivalent (-Rs X)
+          type: 'reward',
+          status: 'completed',
+          createdAt: new Date().toISOString()
+        };
+        const txRef = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
+        tx.set(txRef, deductTx, { merge: true });
+      }
+
+      // 2. Audit log: Wallet amount refund
+      if (walletRefund > 0) {
+        const txId = `tx_${Date.now()}_wrefund_${Math.random().toString(36).slice(2, 6)}`;
+        const walletTx: WalletTransaction = {
+          id: txId,
+          customerId: resolvedId,
+          customerName: currentCust.name || orderData.customerName || 'Customer',
+          customerPhone: orderData.customerPhone || currentCust.phone,
+          amount: walletRefund,
+          type: 'credit',
+          status: 'completed',
+          createdAt: new Date().toISOString()
+        };
+        const txRef = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
+        tx.set(txRef, walletTx, { merge: true });
+      }
+
+      // 3. Audit log: Redeemed coins refund
+      if (coinsRefundPoints > 0) {
+        const txId = `tx_${Date.now()}_crefund_${Math.random().toString(36).slice(2, 6)}`;
+        const coinsTx: WalletTransaction = {
+          id: txId,
+          customerId: resolvedId,
+          customerName: currentCust.name || orderData.customerName || 'Customer',
+          customerPhone: orderData.customerPhone || currentCust.phone,
+          amount: coinsRefundValue,
+          type: 'reward',
+          status: 'completed',
+          createdAt: new Date().toISOString()
+        };
+        const txRef = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
+        tx.set(txRef, coinsTx, { merge: true });
+      }
+
+      // Sync local storage cache
+      const localCusts = StorageService.getAdminCustomers();
+      const cIdx = localCusts.findIndex(c => c.id === resolvedId);
+      if (cIdx >= 0) {
+        localCusts[cIdx] = {
+          ...localCusts[cIdx],
+          ...updatedFields
+        };
+        StorageService.saveAdminCustomers(localCusts);
+      }
+    });
+  } catch (err) {
+    console.error(`Failed atomic coin/wallet reversal on ${contextReason}:`, err);
+  }
+};
+
+/**
+ * Process referral reward when an order is completed (status === 'done').
+ * Referrer receives exactly 200 coins ONLY upon the referee's 1st successful completed order.
+ */
+export const processReferralRewardOnOrderDone = async (orderData: Order): Promise<void> => {
+  const customerPhone = orderData.customerPhone;
+  if (!customerPhone) return;
+
+  const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10);
+  if (!cleanPhone) return;
+
+  const dbInstance = db();
+  let customerData: CustomerProfile | null = null;
+  let customerRef: any = null;
+  let profileRef: any = null;
+
+  // Search customer
+  const custSnap = await getDoc(doc(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone));
+  if (custSnap.exists()) {
+    customerData = custSnap.data() as CustomerProfile;
+    customerRef = custSnap.ref;
+    profileRef = doc(dbInstance, 'customerProfiles', cleanPhone);
+  } else {
+    const pSnap = await getDoc(doc(dbInstance, 'customerProfiles', cleanPhone));
+    if (pSnap.exists()) {
+      customerData = pSnap.data() as CustomerProfile;
+      customerRef = doc(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone);
+      profileRef = pSnap.ref;
+    }
+  }
+
+  if (!customerData) return;
+
+  const referredBy = customerData.referredBy;
+  // If no referral code was used or reward was already paid, nothing to do
+  if (!referredBy || customerData.referralRewardPaid) {
+    return;
+  }
+
+  // Check if this is the customer's 1st successful completed order
+  const ordersQuery = query(
+    collection(dbInstance, FIRESTORE_ORDERS_COLLECTION),
+    where('status', '==', 'done')
+  );
+  const ordersSnap = await getDocs(ordersQuery);
+
+  const previousCompletedCount = ordersSnap.docs.filter((d) => {
+    if (d.id === orderData.id) return false;
+    const od = d.data() as Order;
+    if (od.isDeleted) return false;
+    const oPhone = (od.customerPhone || '').replace(/\D/g, '').slice(-10);
+    const oCustId = (od.customerId || '').replace(/\D/g, '').slice(-10);
+    return oPhone === cleanPhone || oCustId === cleanPhone;
+  }).length;
+
+  if (previousCompletedCount > 0) {
+    // Not their 1st successful order
+    return;
+  }
+
+  // Find referrer
+  let referrerDoc: CustomerProfile | null = null;
+  let referrerRef: any = null;
+  let referrerProfileRef: any = null;
+
+  const refQuery1 = query(
+    collection(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION),
+    where('referralCode', '==', referredBy)
+  );
+  const refSnap1 = await getDocs(refQuery1);
+  if (!refSnap1.empty) {
+    referrerDoc = refSnap1.docs[0].data() as CustomerProfile;
+    referrerRef = refSnap1.docs[0].ref;
+    referrerProfileRef = doc(dbInstance, 'customerProfiles', referrerDoc.id);
+  } else {
+    const refQuery2 = query(
+      collection(dbInstance, 'customerProfiles'),
+      where('referralCode', '==', referredBy)
+    );
+    const refSnap2 = await getDocs(refQuery2);
+    if (!refSnap2.empty) {
+      referrerDoc = refSnap2.docs[0].data() as CustomerProfile;
+      referrerRef = doc(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION, referrerDoc.id);
+      referrerProfileRef = refSnap2.docs[0].ref;
+    }
+  }
+
+  if (!referrerDoc || !referrerRef) {
+    console.warn(`Referrer with code ${referredBy} not found.`);
+    return;
+  }
+
+  // Make sure referrer is not referee
+  const referrerPhone10 = (referrerDoc.phone || referrerDoc.id || '').replace(/\D/g, '').slice(-10);
+  if (referrerPhone10 === cleanPhone) {
+    return;
+  }
+
+  // Execute atomic award of 200 coins
+  try {
+    await runTransaction(dbInstance, async (tx) => {
+      const refFresh = await tx.get(referrerRef);
+      if (!refFresh.exists()) return;
+      const refCurrent = refFresh.data() as CustomerProfile;
+
+      // 200 Coins for successful first order of referred customer
+      const currentCoins = refCurrent.rewardPoints ?? refCurrent.coins ?? 0;
+      const updatedReferrerCoins = currentCoins + 200;
+      const updatedReferralCount = (refCurrent.referralCount ?? 0) + 1;
+      const updatedReferralEarnings = (refCurrent.referralEarnings ?? 0) + 20; // Rs 20 value (200 coins)
+
+      const referrerUpdate = {
+        rewardPoints: updatedReferrerCoins,
+        coins: updatedReferrerCoins,
+        referralCount: updatedReferralCount,
+        referralEarnings: updatedReferralEarnings
+      };
+
+      tx.update(referrerRef, referrerUpdate);
+      tx.set(referrerProfileRef, referrerUpdate, { merge: true });
+
+      // Mark referee
+      const refereeUpdate: Partial<CustomerProfile> = {
+        verified: true,
+        referralRewardPaid: true,
+        referralCodeUsed: true,
+        referralLocked: true,
+        referralApplied: true,
+        referralAppliedAt: customerData?.referralAppliedAt || new Date().toISOString()
+      };
+
+      tx.update(customerRef, refereeUpdate);
+      tx.set(profileRef, refereeUpdate, { merge: true });
+
+      // Transaction log for referrer (200 coins = Rs 20)
+      const txId = `tx_${Date.now()}_ref_${Math.random().toString(36).slice(2, 6)}`;
+      const referrerTx: WalletTransaction = {
+        id: txId,
+        customerId: referrerDoc.id,
+        customerName: referrerDoc.name || 'Referrer',
+        customerPhone: referrerDoc.phone || '',
+        amount: 20, // Rs 20 (200 coins)
+        type: 'reward',
+        status: 'completed',
+        createdAt: new Date().toISOString()
+      };
+      const txDocRef = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
+      tx.set(txDocRef, referrerTx);
+    });
+
+    // Update local admin cache if present
+    const localCusts = StorageService.getAdminCustomers();
+    const rIdx = localCusts.findIndex(c => c.id === referrerDoc?.id);
+    if (rIdx >= 0) {
+      localCusts[rIdx] = {
+        ...localCusts[rIdx],
+        rewardPoints: (localCusts[rIdx].rewardPoints ?? 0) + 200,
+        coins: (localCusts[rIdx].coins ?? 0) + 200,
+        referralCount: (localCusts[rIdx].referralCount ?? 0) + 1,
+        referralEarnings: (localCusts[rIdx].referralEarnings ?? 0) + 20
+      };
+    }
+    const cIdx = localCusts.findIndex(c => c.id === cleanPhone);
+    if (cIdx >= 0) {
+      localCusts[cIdx] = {
+        ...localCusts[cIdx],
+        verified: true,
+        referralRewardPaid: true,
+        referralCodeUsed: true,
+        referralLocked: true,
+        referralApplied: true
+      };
+    }
+    StorageService.saveAdminCustomers(localCusts);
+
+    console.log(`Successfully credited 200 referral coins to ${referrerDoc.name || referrerDoc.id} for first order of ${cleanPhone}`);
+  } catch (e) {
+    console.error('Failed to run transaction for 200 referral reward:', e);
+  }
+};
+
 export const updateServerOrderStatus = async (orderId: string, status: OrderStatus, reason?: string): Promise<void> => {
   const session = StorageService.getAdminSession();
   const callerName = session ? session.username : 'system';
@@ -673,96 +1043,9 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
   }
 
   if (status === 'cancelled') {
-    // 1. Process customer wallet and coins refund
-    if (orderData.customerPhone) {
-      const cleanPhone = orderData.customerPhone.replace(/\D/g, '');
-      const dbInstance = db();
-      const custRef = doc(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone);
-      const profileRef = doc(dbInstance, 'customerProfiles', cleanPhone);
-      const walletRef = doc(dbInstance, 'wallets', cleanPhone);
-      
-      try {
-        await runTransaction(dbInstance, async (tx) => {
-          const custSnap = await tx.get(custRef);
-          if (!custSnap.exists()) return;
-          const custData = custSnap.data() as CustomerProfile;
+    // 1. Process customer wallet and coins refund / deduction
+    await reverseOrderCoinsAndRefunds(orderData, callerName, 'order cancellation');
 
-          const walletRefund = orderData.walletAmountRedeemed ?? 0;
-          const coinsRefundValue = orderData.rewardPointsRedeemed ?? 0; // Rs value of coins redeemed
-          const coinsRefundPoints = Math.round(coinsRefundValue * 10);
-          const coinsEarnedPoints = orderData.rewardPointsEarned ?? 0;
-
-          let walletBalance = custData.walletBalance ?? 0;
-          let rewardPoints = custData.rewardPoints ?? 0;
-
-          if (walletRefund > 0) {
-            walletBalance += walletRefund;
-          }
-          if (coinsRefundPoints > 0) {
-            rewardPoints += coinsRefundPoints;
-          }
-          if (coinsEarnedPoints > 0) {
-            rewardPoints = Math.max(0, rewardPoints - coinsEarnedPoints);
-          }
-
-          const updatedFields = {
-            walletBalance,
-            rewardPoints,
-            coins: rewardPoints
-          };
-
-          tx.update(custRef, updatedFields);
-          tx.update(profileRef, updatedFields);
-          tx.set(walletRef, { customerId: cleanPhone, balance: walletBalance }, { merge: true });
-
-          // Log wallet transactions for audit
-          if (walletRefund > 0) {
-            const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-            const walletTx: WalletTransaction = {
-              id: txId,
-              customerId: cleanPhone,
-              customerName: custData.name || orderData.customerName || 'Customer',
-              customerPhone: orderData.customerPhone,
-              amount: walletRefund,
-              type: 'credit',
-              status: 'completed',
-              createdAt: new Date().toISOString()
-            };
-            const txIdRef = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
-            tx.set(txIdRef, walletTx, { merge: true });
-          }
-
-          if (coinsRefundPoints > 0) {
-            const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-            const coinsTx: WalletTransaction = {
-              id: txId,
-              customerId: cleanPhone,
-              customerName: custData.name || orderData.customerName || 'Customer',
-              customerPhone: orderData.customerPhone,
-              amount: coinsRefundValue,
-              type: 'reward',
-              status: 'completed',
-              createdAt: new Date().toISOString()
-            };
-            const txIdRef = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txId);
-            tx.set(txIdRef, coinsTx, { merge: true });
-          }
-
-          // Sync local admin storage if relevant
-          const localCusts = StorageService.getAdminCustomers();
-          const cIdx = localCusts.findIndex(c => c.id === cleanPhone);
-          if (cIdx >= 0) {
-            localCusts[cIdx] = {
-              ...localCusts[cIdx],
-              ...updatedFields
-            };
-            StorageService.saveAdminCustomers(localCusts);
-          }
-        });
-      } catch (err) {
-        console.error('Failed atomic refund on cancellation:', err);
-      }
-    }
     // 2. Update order document with status: 'cancelled' and details
     const auditTrail = orderData.auditTrail || [];
     auditTrail.push({
@@ -776,6 +1059,7 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
 
     const cancelledUpdate = {
       status: 'cancelled' as OrderStatus,
+      coinsReversed: true,
       cancellationReason: reason || '',
       cancelledBy: callerName,
       statusUpdatedAt: new Date().toISOString(),
@@ -836,129 +1120,7 @@ export const updateServerOrderStatus = async (orderId: string, status: OrderStat
 
     if (status === 'done') {
       try {
-        const customerPhone = orderData.customerPhone;
-        if (customerPhone) {
-          const cleanPhone = customerPhone.replace(/\D/g, '');
-          const customerRef = doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, cleanPhone);
-          const customerSnap = await getDoc(customerRef);
-          if (customerSnap.exists()) {
-            const customerData = customerSnap.data() as CustomerProfile;
-            const referredBy = customerData.referredBy;
-            const referralCodeUsed = customerData.referralCodeUsed;
-
-            // Check if this is the customer's 1st successful completed order
-            const ordersQuery = query(
-              collection(db(), FIRESTORE_ORDERS_COLLECTION),
-              where('customerPhone', '==', customerPhone),
-              where('status', '==', 'done')
-            );
-            const ordersSnap = await getDocs(ordersQuery);
-            
-            const previousCompletedCount = ordersSnap.docs.filter(
-              (d) => d.id !== cleanId && d.data().isDeleted !== true
-            ).length;
-
-            if (previousCompletedCount === 0) {
-              const refereeUpdate: any = {
-                verified: true
-              };
-
-              const dbInstance = db();
-              const profileRef = doc(dbInstance, 'customerProfiles', cleanPhone);
-              const verifyRef = doc(dbInstance, 'customerVerificationRequests', cleanPhone);
-
-              let referrerDoc: CustomerProfile | null = null;
-              let referrerRef: any = null;
-
-              if (referredBy && !referralCodeUsed) {
-                const referrerQuery = query(
-                  collection(dbInstance, FIRESTORE_CUSTOMERS_COLLECTION),
-                  where('referralCode', '==', referredBy)
-                );
-                const referrerSnap = await getDocs(referrerQuery);
-
-                if (!referrerSnap.empty) {
-                  referrerDoc = referrerSnap.docs[0].data() as CustomerProfile;
-                  referrerRef = referrerSnap.docs[0].ref;
-                } else {
-                  const pQuery = query(
-                    collection(dbInstance, 'customerProfiles'),
-                    where('referralCode', '==', referredBy)
-                  );
-                  const pSnap = await getDocs(pQuery);
-                  if (!pSnap.empty) {
-                    referrerDoc = pSnap.docs[0].data() as CustomerProfile;
-                    referrerRef = pSnap.docs[0].ref;
-                  }
-                }
-
-                if (referrerDoc && referrerRef) {
-                  refereeUpdate.referralApplied = true;
-                  refereeUpdate.referralCodeUsed = true;
-                  refereeUpdate.referralLocked = true;
-                  refereeUpdate.referralAppliedAt = new Date().toISOString();
-                }
-              }
-
-              try {
-                await runTransaction(dbInstance, async (tx) => {
-                  // Update referee
-                  tx.update(customerRef, refereeUpdate);
-                  tx.update(profileRef, refereeUpdate);
-                  tx.set(verifyRef, {
-                    status: 'verified',
-                    verifiedAt: new Date().toISOString(),
-                    verifiedBy: 'system'
-                  }, { merge: true });
-
-                  // Update referrer if exists
-                  if (referrerDoc && referrerRef) {
-                    const referrerProfileRef = doc(dbInstance, 'customerProfiles', referrerDoc.id);
-                    const refSnap = await tx.get(referrerRef);
-                    if (refSnap.exists()) {
-                      const refData = refSnap.data() as CustomerProfile;
-                      const updatedReferrerCoins = (refData.rewardPoints ?? 0) + 100;
-                      const updatedReferralCount = (refData.referralCount ?? 0) + 1;
-
-                      const referrerUpdate = {
-                        rewardPoints: updatedReferrerCoins,
-                        coins: updatedReferrerCoins,
-                        referralCount: updatedReferralCount
-                      };
-
-                      tx.update(referrerRef, referrerUpdate);
-                      tx.update(referrerProfileRef, referrerUpdate);
-
-                      const txIdRef = `tx_${Date.now()}_ref_${Math.random().toString(36).slice(2, 6)}`;
-                      const referrerTx: WalletTransaction = {
-                        id: txIdRef,
-                        customerId: referrerDoc.id,
-                        customerName: referrerDoc.name,
-                        customerPhone: referrerDoc.phone,
-                        amount: 10,
-                        type: 'reward',
-                        status: 'completed',
-                        createdAt: new Date().toISOString()
-                      };
-                      const txIdRefDoc = doc(dbInstance, FIRESTORE_WALLET_TRANSACTIONS_COLLECTION, txIdRef);
-                      tx.set(txIdRefDoc, referrerTx);
-                    }
-                  }
-                });
-
-                // Sync local admin storage if relevant
-                const localCusts = StorageService.getAdminCustomers();
-                const selfIdx = localCusts.findIndex(c => c.id === cleanPhone);
-                if (selfIdx >= 0) {
-                  localCusts[selfIdx] = { ...localCusts[selfIdx], ...refereeUpdate };
-                  StorageService.saveAdminCustomers(localCusts);
-                }
-              } catch (e) {
-                console.error('Failed to run atomic transaction for referral reward first order:', e);
-              }
-            }
-          }
-        }
+        await processReferralRewardOnOrderDone(orderData);
       } catch (err) {
         console.error('Failed to process referral rewards:', err);
       }
@@ -993,6 +1155,19 @@ export const deleteOrderFromServer = async (orderId: string): Promise<void> => {
 
   const cleanId = orderId.trim();
   const orderDocRef = doc(db(), FIRESTORE_ORDERS_COLLECTION, cleanId);
+
+  // Before deleting, if the order was not cancelled, reverse earned coins and refund redeemed wallet/coins
+  try {
+    const snap = await getDoc(orderDocRef);
+    if (snap.exists()) {
+      const orderData = snap.data() as Order;
+      if (orderData.status !== 'cancelled' && !orderData.coinsReversed) {
+        await reverseOrderCoinsAndRefunds(orderData, session.username, 'order deletion');
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to reverse coins before order deletion:', err);
+  }
 
   const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   await setDoc(doc(db(), 'security_logs', logId), {
@@ -1470,6 +1645,8 @@ export const initCustomerLogin = async (
       name: updatedName,
       fullName: updatedFullName,
       referredBy: referredByVal ?? null,
+      referralApplied: referredByVal ? true : customerData.referralApplied,
+      referralRewardPaid: customerData.referralRewardPaid ?? false,
       lastLogin: new Date().toISOString()
     };
     await setDoc(profileRef, updatedProfile);
@@ -1652,26 +1829,8 @@ export const initCustomerLogin = async (
     }
   }
 
-  // Credit 200 Coins (Reward Points) to the customer whose referral code was used
-  if (referrerDocFound) {
-    const referrerId = referrerDocFound.id || referrerDocFound.phone;
-    const currentReferrerPoints = referrerDocFound.rewardPoints || referrerDocFound.coins || 0;
-    const updatedReferrerPoints = currentReferrerPoints + 200;
-    try {
-      await updateDoc(doc(db(), FIRESTORE_CUSTOMERS_COLLECTION, referrerId), {
-        rewardPoints: updatedReferrerPoints,
-        coins: updatedReferrerPoints,
-      });
-      await updateDoc(doc(db(), 'customerProfiles', referrerId), {
-        rewardPoints: updatedReferrerPoints,
-        coins: updatedReferrerPoints,
-      });
-    } catch (e) {
-      console.warn('Failed to credit 200 referral bonus points to referrer:', e);
-    }
-  }
-
   // Every new customer receives 100 welcome coins for opening the account
+  // Referrer will receive 200 coins ONLY after this customer completes their first successful order
   const welcomeCoins = 100;
 
   const customerProfile: CustomerProfile = {
@@ -1692,8 +1851,10 @@ export const initCustomerLogin = async (
     createdAt: nowStr,
     lastLogin: nowStr,
     referralAttemptsRemaining: 3,
-    referralCodeUsed: referredByVal ? true : false,
+    referralCodeUsed: false,
+    referralApplied: referredByVal ? true : false,
     referralLocked: referredByVal ? true : false,
+    referralRewardPaid: false,
     referralCode: referralCode,
     referredBy: referredByVal ?? null
   };

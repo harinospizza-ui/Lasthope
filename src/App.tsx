@@ -1046,6 +1046,56 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Real-time synchronization of customer profile (coins, wallet balance, verification status)
+  useEffect(() => {
+    if (!configLoaded || !customerProfile?.phone) return;
+    const cleanId = customerProfile.phone.replace(/\D/g, '').slice(-10);
+    if (!cleanId) return;
+
+    let unsubscribe: () => void = () => {};
+    import('firebase/firestore').then(({ doc, onSnapshot }) => {
+      import('./services/firebaseClient').then(({ db }) => {
+        unsubscribe = onSnapshot(
+          doc(db(), 'customers', cleanId),
+          (snap) => {
+            if (!snap.exists()) return;
+            const serverCust = snap.data() as CustomerProfile;
+            const currentProf = customerProfileRef.current;
+            if (!currentProf) return;
+
+            const serverCoins = serverCust.rewardPoints ?? serverCust.coins ?? 0;
+            const localCoins = currentProf.rewardPoints ?? currentProf.coins ?? 0;
+            const serverWallet = serverCust.walletBalance ?? 0;
+            const localWallet = currentProf.walletBalance ?? 0;
+
+            if (
+              serverCoins !== localCoins ||
+              serverWallet !== localWallet ||
+              serverCust.verified !== currentProf.verified ||
+              serverCust.status !== currentProf.status ||
+              serverCust.referralRewardPaid !== currentProf.referralRewardPaid
+            ) {
+              const updated: CustomerProfile = {
+                ...currentProf,
+                ...serverCust,
+                walletBalance: serverWallet,
+                rewardPoints: serverCoins,
+                coins: serverCoins,
+                verified: !!serverCust.verified,
+                status: serverCust.status ?? currentProf.status ?? 'active',
+                avatar: currentProf.avatar || serverCust.avatar
+              };
+              updateLocalCustomerProfile(updated);
+            }
+          },
+          (err) => console.warn('Customer live sync notice:', err)
+        );
+      });
+    });
+
+    return () => unsubscribe();
+  }, [configLoaded, customerProfile?.phone]);
+
   // Real-time legacy user sync: detects profiles from previous versions and pushes to Firestore for admin verification
   useEffect(() => {
     if (!configLoaded) return;
@@ -1057,7 +1107,7 @@ const App: React.FC = () => {
           const { getDoc, doc, setDoc } = await import('firebase/firestore');
           const { db } = await import('./services/firebaseClient');
           
-          const cleanId = localProfile.phone.replace(/\D/g, '');
+          const cleanId = localProfile.phone.replace(/\D/g, '').slice(-10);
           const docRef = doc(db(), 'customers', cleanId);
           const snap = await getDoc(docRef);
           

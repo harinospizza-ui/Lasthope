@@ -3,6 +3,7 @@ import { CustomerLocation, Order, OrderType, OutletConfig, PricedCartItem, Custo
 import { DeliveryPricingSummary } from '../../config/deliveryPricing';
 import { useSwipeDismiss } from '../../hooks/useSwipeDismiss';
 import { getCartItemId } from '../../utils/offerUtils';
+import { openOrganicMapsNavigation } from '../../utils/outletUtils';
 import { FestivalCampaign } from '../../config/festivalCampaigns';
 
 interface CartSidebarProps {
@@ -36,6 +37,7 @@ interface CartSidebarProps {
   festivalDiscountAmount?: number;
   rawFoodSubtotal?: number;
   onViewOrders?: () => void;
+  onOpenLocationMap?: () => void;
 }
 
 const CartSidebar: React.FC<CartSidebarProps> = ({
@@ -69,6 +71,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
   festivalDiscountAmount = 0,
   rawFoodSubtotal,
   onViewOrders,
+  onOpenLocationMap,
 }) => {
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -261,18 +264,30 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                     <div className="mb-2 flex items-start justify-between gap-3">
                       <div>
                         <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">
-                          Location Routing
+                          Location Routing (10 KM Zone)
                         </div>
                         <div className="mt-1 text-sm font-bold text-slate-900">
                           {nearestOutlet ? nearestOutlet.name : 'Nearest outlet not resolved yet'}
                         </div>
                       </div>
-                      <button
-                        onClick={onDetectLocation}
-                        className="text-[8px] font-black uppercase tracking-widest text-red-600 underline"
-                      >
-                        {customerLocation ? 'Refresh' : 'Enable'}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {onOpenLocationMap && (
+                          <button
+                            type="button"
+                            onClick={onOpenLocationMap}
+                            className="text-[9px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-xl border border-emerald-200 transition-colors"
+                          >
+                            🗺️ 10 KM Map
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={onDetectLocation}
+                          className="text-[9px] font-black uppercase tracking-widest text-red-600 underline"
+                        >
+                          {customerLocation ? 'Refresh' : 'Enable'}
+                        </button>
+                      </div>
                     </div>
 
                     {nearestOutlet ? (
@@ -289,13 +304,48 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                               ? `${outletDistanceKm.toFixed(1)} km`
                               : 'Not available'}
                         </p>
+
+                        {customerLocation && (
+                          <div className="mt-2.5 p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between text-[11px] gap-2">
+                            <div className="truncate min-w-0">
+                              <span className="font-bold text-slate-800 block truncate">📍 {customerLocation.address || 'GPS Coordinates'}</span>
+                              {customerLocation.latitude && customerLocation.longitude && (
+                                <span className="text-[10px] text-slate-500">
+                                  {customerLocation.latitude.toFixed(4)}, {customerLocation.longitude.toFixed(4)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {onOpenLocationMap && (
+                                <button
+                                  type="button"
+                                  onClick={onOpenLocationMap}
+                                  className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 text-[9px] font-black uppercase tracking-wider hover:bg-slate-100"
+                                >
+                                  Adjust
+                                </button>
+                              )}
+                              {customerLocation.latitude && customerLocation.longitude && (
+                                <button
+                                  type="button"
+                                  onClick={() => openOrganicMapsNavigation(customerLocation.latitude!, customerLocation.longitude!)}
+                                  className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider hover:bg-emerald-500 shadow-xs"
+                                  title="Open in Organic Maps"
+                                >
+                                  📱 OM
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700">
                           Customer location is mandatory before order placement
                         </p>
                       </div>
                     ) : (
                       <p className="text-[10px] text-slate-500">
-                        Allow location access so the app can calculate your road distance and route this order.
+                        Allow location access or pick on map to calculate your road distance and route this order.
                       </p>
                     )}
                   </div>
@@ -303,17 +353,17 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                   <div className="space-y-3">
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
                       <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-blue-700">
-                        Delivery Conditions
+                        Delivery Conditions (10 KM Active Radius)
                       </div>
                       <div className="space-y-1.5 text-[10px] font-medium text-blue-800/80">
-                        <p>Road distance is used for pricing, not straight-line distance.</p>
+                        <p>Road distance is used for pricing, mapped within Organic Maps 10 KM coverage.</p>
                         <p>Up to 3 km: free delivery from Rs 150.</p>
-                        <p>4 km: Rs 250 minimum, 5 km: Rs 350 minimum, 6 km: Rs 450 minimum, 7 km: Rs 550 minimum.</p>
+                        <p>3 to 10 km: +Rs 100 free delivery minimum per additional km.</p>
                         <p>
                           If the cart is below the required minimum for that route, delivery is charged at Rs{' '}
                           {nearestOutlet?.deliveryChargePerKm ?? 15} per road km.
                         </p>
-                        <p>Maximum delivery radius is {nearestOutlet?.deliveryRadiusKm ?? 7} road km.</p>
+                        <p>Maximum delivery radius is {nearestOutlet?.deliveryRadiusKm ?? 10} road km.</p>
                       </div>
                     </div>
 

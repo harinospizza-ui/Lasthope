@@ -2,6 +2,7 @@
 import React from 'react';
 import { Order } from '../../types';
 import { getDisplayOrderId } from '../../App';
+import { openOrganicMapsNavigation } from '../../utils/outletUtils';
 
 interface PastOrdersProps {
   orders: Order[];
@@ -98,7 +99,17 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder, onBackToMenu
                     <p className="text-slate-400 text-sm font-medium">📍 {order.distanceKm.toFixed(1)} km away</p>
                   )}
                   {order.orderType === 'delivery' && ((order.customerLocation?.latitude && order.customerLocation?.longitude) || order.customerLocationUrl) && (
-                    <div className="mt-1">
+                    <div className="mt-1 flex items-center gap-2">
+                      {order.customerLocation?.latitude && order.customerLocation?.longitude && (
+                        <button
+                          type="button"
+                          onClick={() => openOrganicMapsNavigation(order.customerLocation!.latitude, order.customerLocation!.longitude, `Order #${order.id}`)}
+                          className="text-xs font-bold text-emerald-600 hover:text-emerald-500 underline flex items-center gap-1"
+                          title="Open Organic Maps navigation"
+                        >
+                          📱 Organic Maps
+                        </button>
+                      )}
                       <a
                         href={
                           order.customerLocation?.latitude && order.customerLocation?.longitude
@@ -109,7 +120,7 @@ const PastOrders: React.FC<PastOrdersProps> = ({ orders, onReorder, onBackToMenu
                         rel="noreferrer"
                         className="text-xs font-bold text-red-600 hover:text-red-500 underline flex items-center gap-1"
                       >
-                        🗺️ View Delivery Location on Map
+                        🗺️ Google Maps
                       </a>
                     </div>
                   )}

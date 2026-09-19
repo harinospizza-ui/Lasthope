@@ -59,6 +59,7 @@ import MoodFilterBar, { MoodFilterType } from './components/menu/MoodFilterBar';
 import QuickReorderBar from './components/customer/QuickReorderBar';
 import HotUpdateToast from './components/common/HotUpdateToast';
 import { HapticsService } from './services/hapticsService';
+import DeliveryLocationModal from './components/customer/DeliveryLocationModal';
 
 interface InAppNotification {
   id: string;
@@ -577,6 +578,7 @@ const App: React.FC = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [showOrderSuccess, setShowOrderSuccess] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(StorageService.getCustomerProfile());
@@ -2597,6 +2599,7 @@ const App: React.FC = () => {
         isResolvingOutletMatch={isResolvingOutletMatch}
         customerLocation={customerLocation}
         onDetectLocation={detectLocation}
+        onOpenLocationMap={() => setIsLocationModalOpen(true)}
         pastOrders={pastOrders}
         onReorder={handleReorder}
         onViewOrders={openOrdersView}
@@ -2706,6 +2709,20 @@ const App: React.FC = () => {
             addToCart(customizeItem, selectedSize, selectedOptions, specialInstructions);
             setCustomizeItem(null);
             setCustomizeItemSize(undefined);
+          }}
+        />
+      )}
+
+      {isLocationModalOpen && (
+        <DeliveryLocationModal
+          isOpen={isLocationModalOpen}
+          onClose={() => setIsLocationModalOpen(false)}
+          currentLocation={customerLocation}
+          outlet={selectedOutlet || activeOutlets[0] || OUTLET_LOCATIONS[0]}
+          onConfirmLocation={(newLoc) => {
+            setCustomerLocation(newLoc);
+            StorageService.saveCustomerLocation(newLoc);
+            showNotification('Delivery location set via Organic Maps 10 KM zone.');
           }}
         />
       )}

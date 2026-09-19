@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Order, OrderStatus, AdminSession } from '../../types';
+import { openOrganicMapsNavigation } from '../../utils/outletUtils';
+import OrganicDeliveryMap from '../common/OrganicDeliveryMap';
 
 interface AdminOrdersProps {
   session: AdminSession;
@@ -20,6 +22,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
   const [cancelReasonText, setCancelReasonText] = useState<{ [orderId: string]: string }>({});
   const [showCancelPrompt, setShowCancelPrompt] = useState<{ [orderId: string]: boolean }>({});
   const [showAuditLogs, setShowAuditLogs] = useState<{ [orderId: string]: boolean }>({});
+  const [viewingMapOrder, setViewingMapOrder] = useState<Order | null>(null);
 
   const parseOrderDate = (order: Order): Date => {
     if (order.receivedAt) {
@@ -194,23 +197,43 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                       </div>
 
                       {order.orderType === 'delivery' && (
-                        <div className="mt-2 text-xs font-semibold text-slate-350">
-                          📍 Delivery Address: {order.customerLocation?.address || 'Customer GPS Location'}
+                        <div className="mt-2 text-xs font-semibold text-slate-350 flex flex-wrap items-center gap-2">
+                          <span>📍 Delivery Address: {order.customerLocation?.address || 'Customer GPS Location'}</span>
                           {((order.customerLocation?.latitude && order.customerLocation?.longitude) || (order.customerLocationUrl && order.customerLocationUrl.startsWith('http'))) ? (
-                            <a
-                              href={
-                                order.customerLocation?.latitude && order.customerLocation?.longitude
-                                  ? `https://www.google.com/maps/dir/?api=1&destination=${order.customerLocation.latitude},${order.customerLocation.longitude}`
-                                  : order.customerLocationUrl
-                              }
-                              target="_blank"
-                              rel="noreferrer"
-                              className="ml-2 inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-bold underline"
-                            >
-                              (Open Maps Navigation 🗺️)
-                            </a>
+                            <div className="inline-flex items-center gap-1.5 ml-1">
+                              {order.customerLocation?.latitude && order.customerLocation?.longitude && (
+                                <button
+                                  type="button"
+                                  onClick={() => openOrganicMapsNavigation(order.customerLocation!.latitude, order.customerLocation!.longitude, `Order #${order.id}`)}
+                                  className="px-2 py-0.5 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white font-bold text-[10px] uppercase tracking-wider transition-colors shadow-xs"
+                                  title="Open in Organic Maps (offline turn-by-turn navigation)"
+                                >
+                                  📱 Organic Maps
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setViewingMapOrder(order)}
+                                className="px-2 py-0.5 rounded-lg bg-blue-700/80 hover:bg-blue-600 text-white font-bold text-[10px] uppercase tracking-wider transition-colors shadow-xs"
+                                title="Inspect 10 KM delivery radius and location pin"
+                              >
+                                🗺️ 10 KM Map
+                              </button>
+                              <a
+                                href={
+                                  order.customerLocation?.latitude && order.customerLocation?.longitude
+                                    ? `https://www.google.com/maps/dir/?api=1&destination=${order.customerLocation.latitude},${order.customerLocation.longitude}`
+                                    : order.customerLocationUrl
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-slate-400 hover:text-slate-300 font-bold underline text-[10px]"
+                              >
+                                Google Maps
+                              </a>
+                            </div>
                           ) : (
-                            <span className="ml-2 text-amber-400 font-normal">
+                            <span className="text-amber-400 font-normal">
                               (Coordinates not recorded)
                             </span>
                           )}
@@ -336,18 +359,38 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
                         })()}
                         <button onClick={() => onPrint(order)} className="rounded-xl border border-slate-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:bg-white/10 transition-premium">Print</button>
                         {order.orderType === 'delivery' && ((order.customerLocation?.latitude && order.customerLocation?.longitude) || (order.customerLocationUrl && order.customerLocationUrl.startsWith('http'))) && (
-                          <a
-                            href={
-                              order.customerLocation?.latitude && order.customerLocation?.longitude
-                                ? `https://www.google.com/maps/dir/?api=1&destination=${order.customerLocation.latitude},${order.customerLocation.longitude}`
-                                : order.customerLocationUrl
-                            }
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium flex items-center justify-center font-bold gap-1 shadow-sm"
-                          >
-                            🗺️ Navigate
-                          </a>
+                          <>
+                            {order.customerLocation?.latitude && order.customerLocation?.longitude && (
+                              <button
+                                type="button"
+                                onClick={() => openOrganicMapsNavigation(order.customerLocation!.latitude, order.customerLocation!.longitude, `Order #${order.id}`)}
+                                className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium flex items-center justify-center font-bold gap-1 shadow-sm"
+                                title="Open Organic Maps Navigation"
+                              >
+                                📱 Organic Maps
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setViewingMapOrder(order)}
+                              className="rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium flex items-center justify-center font-bold gap-1 shadow-sm"
+                              title="Inspect 10 KM delivery radius route"
+                            >
+                              🗺️ 10 KM Zone
+                            </button>
+                            <a
+                              href={
+                                order.customerLocation?.latitude && order.customerLocation?.longitude
+                                  ? `https://www.google.com/maps/dir/?api=1&destination=${order.customerLocation.latitude},${order.customerLocation.longitude}`
+                                  : order.customerLocationUrl
+                              }
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-premium flex items-center justify-center font-bold gap-1 shadow-sm"
+                            >
+                              Google Maps
+                            </a>
+                          </>
                         )}
                         {session.role !== 'staff' && order.customerPhone && (
                           <a
@@ -381,6 +424,69 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
         })}
         {!visibleOrders.length && <div className="text-sm text-slate-500 mt-2">No active orders assigned.</div>}
       </div>
+
+      {viewingMapOrder && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setViewingMapOrder(null)} />
+          <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl overflow-hidden flex flex-col z-10 text-white animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🗺️</span>
+                <div>
+                  <h4 className="font-bold text-sm text-white">Order #{viewingMapOrder.id} Delivery Route</h4>
+                  <p className="text-[11px] text-slate-400">Organic Maps 10 KM Outlet Radius Inspection</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingMapOrder(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="my-4">
+              <OrganicDeliveryMap
+                initialLat={viewingMapOrder.customerLocation?.latitude}
+                initialLon={viewingMapOrder.customerLocation?.longitude}
+                readOnly={true}
+                height="320px"
+              />
+            </div>
+
+            <div className="bg-slate-800/80 border border-slate-700 p-3 rounded-2xl text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Customer:</span>
+                <span className="font-bold text-white">{viewingMapOrder.customerName} ({viewingMapOrder.customerPhone})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Address:</span>
+                <span className="font-bold text-white truncate max-w-xs">{viewingMapOrder.customerLocation?.address || 'GPS Coordinates'}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2.5">
+              {viewingMapOrder.customerLocation?.latitude && viewingMapOrder.customerLocation?.longitude && (
+                <button
+                  type="button"
+                  onClick={() => openOrganicMapsNavigation(viewingMapOrder.customerLocation!.latitude, viewingMapOrder.customerLocation!.longitude, `Order #${viewingMapOrder.id}`)}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs uppercase tracking-wider text-white shadow-md transition-all flex items-center justify-center gap-1.5"
+                >
+                  📱 Navigate in Organic Maps
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setViewingMapOrder(null)}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

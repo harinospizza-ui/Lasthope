@@ -22,6 +22,51 @@ const ROAD_DISTANCE_API_URL = (
 export const buildCustomerMapUrl = (latitude: number, longitude: number): string =>
   `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
 
+/**
+ * Generates Organic Maps native app link (om:// scheme).
+ * Opens Organic Maps app directly on Android / iOS devices with customer pin.
+ */
+export const buildOrganicMapsAppUrl = (latitude: number, longitude: number, label = "Harino's Delivery"): string =>
+  `om://map?v=1&ll=${latitude},${longitude}&n=${encodeURIComponent(label)}`;
+
+/**
+ * Generates standard Geo intent URI.
+ * Prompts user to open with installed navigation apps (Organic Maps, OSM, Google Maps).
+ */
+export const buildGeoIntentUrl = (latitude: number, longitude: number, label = "Harino's Delivery"): string =>
+  `geo:${latitude},${longitude}?q=${latitude},${longitude}(${encodeURIComponent(label)})`;
+
+/**
+ * Generates OpenStreetMap web link (underlying map dataset used by Organic Maps).
+ */
+export const buildOpenStreetMapUrl = (latitude: number, longitude: number, zoom = 16): string =>
+  `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=${zoom}/${latitude}/${longitude}`;
+
+/**
+ * Launches Organic Maps navigation, falling back to Geo intent or OpenStreetMap web.
+ */
+export const openOrganicMapsNavigation = (latitude: number, longitude: number, label = "Harino's Delivery"): void => {
+  const omUrl = buildOrganicMapsAppUrl(latitude, longitude, label);
+  const geoUrl = buildGeoIntentUrl(latitude, longitude, label);
+  const osmUrl = buildOpenStreetMapUrl(latitude, longitude);
+
+  // Try opening native om:// protocol first, then fallback
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    // Attempt launching Organic Maps protocol
+    const timeout = setTimeout(() => {
+      // If om:// didn't catch within 600ms, open geo: or OSM web
+      window.location.href = geoUrl;
+    }, 600);
+
+    window.location.href = omUrl;
+    window.addEventListener('pagehide', () => clearTimeout(timeout), { once: true });
+  } else {
+    // Desktop: Open OpenStreetMap directly
+    window.open(osmUrl, '_blank', 'noopener,noreferrer');
+  }
+};
+
 export const sanitizePhoneNumber = (phone: string): string => phone.replace(/\D/g, '');
 
 /**

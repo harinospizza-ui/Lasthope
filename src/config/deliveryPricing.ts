@@ -14,14 +14,14 @@ export const DELIVERY_CHARGE_PER_KM = 15;
 export const getDistanceBandKm = (distanceKm: number, outlet?: OutletConfig | null): number => {
   const roundedDistanceKm = Math.ceil(Math.max(distanceKm, 0.1));
   const freeRadius = outlet?.freeDeliveryRadiusKm ?? 3;
-  const maxRadius = outlet?.deliveryRadiusKm ?? 7;
+  const maxRadius = outlet?.deliveryRadiusKm ?? 10;
   return Math.min(maxRadius, Math.max(freeRadius, roundedDistanceKm));
 };
 
 /**
  * Calculates the required minimum order amount for free delivery based on actual road travel distance:
  * - Up to 3 KM: Rs. 150
- * - Every additional KM (> 3 KM up to 7 KM): +Rs. 100 per additional KM
+ * - Every additional KM (> 3 KM up to 10 KM): +Rs. 100 per additional KM
  */
 export const getRequiredMinimumOrderForDistance = (
   outlet: OutletConfig | null,
@@ -59,8 +59,8 @@ export const getDeliveryPricingSummary = (
     };
   }
 
-  const maxRadiusKm = outlet.deliveryRadiusKm || 7.0;
-  // Strict 7 KM road travel limit
+  const maxRadiusKm = outlet.deliveryRadiusKm || 10.0;
+  // Strict 10 KM road travel limit
   if (distanceKm > maxRadiusKm + 0.05) {
     return {
       fee: -1,
@@ -72,7 +72,7 @@ export const getDeliveryPricingSummary = (
     };
   }
 
-  const distanceBandKm = Math.min(7, Math.max(1, Math.ceil(distanceKm)));
+  const distanceBandKm = Math.min(maxRadiusKm, Math.max(1, Math.ceil(distanceKm)));
   const requiredMinimumOrder = getRequiredMinimumOrderForDistance(outlet, distanceKm);
   const isFreeDelivery = subtotal >= requiredMinimumOrder;
 

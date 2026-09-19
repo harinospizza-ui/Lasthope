@@ -54,6 +54,11 @@ import { FestivalOfferCard } from './components/menu/FestivalOfferCard';
 import { getActiveFestivalCampaign, calculateFestivalDiscount, isCampaignOfferActive } from './services/festivalEngine';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
+import HarinosStories from './components/customer/HarinosStories';
+import MoodFilterBar, { MoodFilterType } from './components/menu/MoodFilterBar';
+import QuickReorderBar from './components/customer/QuickReorderBar';
+import HotUpdateToast from './components/common/HotUpdateToast';
+import { HapticsService } from './services/hapticsService';
 
 interface InAppNotification {
   id: string;
@@ -567,6 +572,7 @@ export const extendMenuItemsWithGeneratedSeries = (items: MenuItem[]): MenuItem[
 
 const App: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
+  const [activeMoodFilter, setActiveMoodFilter] = useState<MoodFilterType>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -1701,6 +1707,7 @@ const App: React.FC = () => {
         ];
       });
 
+      HapticsService.medium();
       showNotification(`${item.name} added to basket.`);
     },
     [orderType, showNotification],
@@ -1777,6 +1784,7 @@ const App: React.FC = () => {
   ]);
 
   const updateQuantity = (cartItemId: string, delta: number) => {
+    HapticsService.light();
     setCart((currentCart) =>
       currentCart.map((item) => {
         if (getCartItemId(item) !== cartItemId) {
@@ -1837,8 +1845,46 @@ const App: React.FC = () => {
           item.description.toLowerCase().includes(q)
       );
     }
+    if (activeMoodFilter !== 'all') {
+      result = result.filter((item) => {
+        if (activeMoodFilter === 'trending') return Boolean(item.popular);
+        if (activeMoodFilter === 'cheesy') {
+          return (
+            item.series === 'Cheese series' ||
+            item.name.toLowerCase().includes('cheese') ||
+            item.description.toLowerCase().includes('cheese') ||
+            item.description.toLowerCase().includes('mozzarella')
+          );
+        }
+        if (activeMoodFilter === 'spicy') {
+          return (
+            Boolean(item.spicy) ||
+            item.series === 'Tanduri series' ||
+            item.name.toLowerCase().includes('spicy') ||
+            item.name.toLowerCase().includes('peri peri') ||
+            item.name.toLowerCase().includes('schezwan') ||
+            item.description.toLowerCase().includes('spicy')
+          );
+        }
+        if (activeMoodFilter === 'under199') {
+          const effectivePrice = item.sizes && item.sizes.length > 0 ? item.sizes[0].price : item.price;
+          return effectivePrice <= 199;
+        }
+        if (activeMoodFilter === 'sides_quick') {
+          return (
+            item.category === Category.SIDES ||
+            item.category === Category.MOMOS ||
+            item.category === Category.FRIES ||
+            item.name.toLowerCase().includes('fries') ||
+            item.name.toLowerCase().includes('garlic bread') ||
+            item.name.toLowerCase().includes('calzone')
+          );
+        }
+        return true;
+      });
+    }
     return result;
-  }, [menuItems, searchQuery]);
+  }, [menuItems, searchQuery, activeMoodFilter]);
 
   const baseSubtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.basePrice * item.quantity, 0),
@@ -2089,6 +2135,7 @@ const App: React.FC = () => {
     setDismissedOrderId(null);
     localStorage.removeItem('dismissed_tracker_order_id');
     setShowOrderSuccess(true);
+    HapticsService.success();
     replaceAppScreen('success');
     setCart([]);
 
@@ -2220,6 +2267,18 @@ const App: React.FC = () => {
         {view === 'menu' ? (
           <>
             <Hero onShare={handleShare} onExploreMenu={openCategoryView} campaign={activeCampaign} />
+
+            {/* Gen-Z Interactive Stories & Bites Highlights */}
+            <HarinosStories
+              customerProfile={customerProfile}
+              onOpenWallet={() => setIsWalletModalOpen(true)}
+              onSelectMoodFilter={(moodId) => {
+                setActiveMoodFilter(moodId as MoodFilterType);
+                menuRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              onScrollToMenu={() => menuRef.current?.scrollIntoView({ behavior: 'smooth' })}
+            />
+
             {activeCampaign && (
               <FestivalOfferCard campaign={activeCampaign} onExploreMenu={openCategoryView} />
             )}
@@ -2397,7 +2456,20 @@ const App: React.FC = () => {
             )}
 
             <div ref={menuRef} className="max-w-7xl mx-auto px-4 mt-8 md:mt-12 pb-24 scroll-mt-24">
+              {/* 1-Tap Quick Reorder Bar for Returning Users */}
+              <QuickReorderBar
+                pastOrders={pastOrders}
+                menuItems={menuItems}
+                onAddToCart={(item) => {
+                  addToCart(item);
+                }}
+              />
 
+              {/* Gen-Z Cravings & Mood Filters */}
+              <MoodFilterBar
+                activeMood={activeMoodFilter}
+                onSelectMood={(mood) => setActiveMoodFilter(mood)}
+              />
 
               {!isStoreOpen && (
                 <div className="bg-amber-50 border border-amber-200 p-6 rounded-[2rem] text-center mb-10">
@@ -2776,6 +2848,9 @@ const App: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Dynamic PWA Hot Update Detection Toast */}
+      <HotUpdateToast />
     </div>
   );
 };

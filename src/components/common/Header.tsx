@@ -5,6 +5,7 @@ import { getNotificationPermission } from '../../services/browserSupport';
 
 import { FestivalCampaign } from '../../config/festivalCampaigns';
 import { isCampaignOfferActive } from '../../services/festivalEngine';
+import DynamicAnnouncementRibbon from './DynamicAnnouncementRibbon';
 
 interface HeaderProps {
   cartCount: number;
@@ -137,6 +138,9 @@ const Header: React.FC<HeaderProps> = ({
         isScrolledOrLight ? 'bg-white shadow-xl py-2' : 'bg-transparent py-6'
       }`}
     >
+      {/* Remote Dynamic Flash Promo & Offline Resilience Alert Ribbon */}
+      <DynamicAnnouncementRibbon onExploreMenu={onViewMenu} />
+
       {/* Festive Top Announcement Bar */}
       {campaign && (
         <div

@@ -1287,7 +1287,7 @@ const App: React.FC = () => {
         return;
       }
 
-      setIsStoreOpen(true);
+      setIsStoreOpen(false);
       setStatusMessage('Store is under maintenance.');
     };
 
